@@ -1,0 +1,16 @@
+.assessmentForm {
+  :global {
+    .ant-pro-card {
+      margin-bottom: 24px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    .ant-pro-form-group-title {
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.85);
+    }
+  }
+}
