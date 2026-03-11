@@ -86,11 +86,15 @@ class KnowledgeItem(BaseModel):
     """检索到的知识条目"""
     content: str
     source_book: str
-    brain_regions: List[str] = []
-    benefits: List[str] = []
+    chapter_title: Optional[str] = None
+    page_label: Optional[str] = None
+    topics: List[str] = Field(default_factory=list)
+    brain_regions: List[str] = Field(default_factory=list)
+    benefits: List[str] = Field(default_factory=list)
     risk_level: RiskLevel = "Low"
     target_age_min: int = 0
     target_age_max: int = 18
+    activity_type: Optional[str] = None
     relevance_score: float = 0.0
 
 class EvaluationResult(BaseModel):

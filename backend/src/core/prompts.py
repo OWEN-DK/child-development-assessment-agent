@@ -32,6 +32,27 @@ MOCK_KNOWLEDGE_ITEMS = [
 ]
 
 # --------------------------
+# Metadata Extraction Prompts
+# --------------------------
+METADATA_EXTRACTION_PROMPT = """
+You are an expert in child development and sensory integration.
+Your task is to extract structured metadata from the following text chunk.
+
+Text Chunk:
+{text}
+
+Please extract the following information in JSON format:
+1. summary: A brief summary of the content (max 50 words).
+2. topics: A list of key topics (e.g., "Vestibular System", "Proprioception", "Attention").
+3. brain_regions: A list of brain regions mentioned or implied (e.g., "Cerebellum", "Frontal Lobe").
+4. target_age_min: The minimum applicable age (integer). If not specified, infer from context or return 0.
+5. target_age_max: The maximum applicable age (integer). If not specified, infer from context or return 18.
+6. activity_type: The type of content (e.g., "Theory", "Assessment", "Game/Activity", "Advice").
+
+Return ONLY the JSON object.
+"""
+
+# --------------------------
 # System Prompts (Placeholders)
 # --------------------------
 

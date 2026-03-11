@@ -63,3 +63,22 @@ async def get_rag_status():
         "index_ready": rag_service.index is not None,
         "storage_dir": os.path.abspath("./storage")
     }
+
+@router.delete("/documents/{filename}")
+async def delete_document(filename: str):
+    """
+    删除指定文档及其索引
+    """
+    success = rag_service.delete_document(filename)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found or deletion failed.")
+    return {"status": "success", "message": f"Document {filename} deleted."}
+
+@router.get("/documents")
+async def list_documents():
+    """
+    列出所有已索引文档
+    """
+    from src.service.document_manager import document_manager
+    docs = document_manager.list_documents()
+    return {"documents": docs}
