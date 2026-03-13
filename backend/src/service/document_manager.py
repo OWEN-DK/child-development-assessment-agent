@@ -9,6 +9,7 @@ from src.utils.logger import logger
 
 DOCUMENT_STORE_PATH = "./storage/document_store.json"
 
+
 class DocumentManager:
     _instance = None
     _lock = threading.Lock()
@@ -24,7 +25,7 @@ class DocumentManager:
     def __init__(self):
         if self._initialized:
             return
-            
+
         self.store_path = DOCUMENT_STORE_PATH
         self.store = DocumentStore()
         self._load_store()
@@ -49,7 +50,7 @@ class DocumentManager:
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(self.store_path), exist_ok=True)
-            
+
             with open(self.store_path, "w", encoding="utf-8") as f:
                 f.write(self.store.model_dump_json(indent=2))
             logger.info(f"Saved document store to {self.store_path}")
@@ -89,5 +90,6 @@ class DocumentManager:
     def list_documents(self) -> List[DocumentRecord]:
         """List all documents."""
         return list(self.store.docs.values())
+
 
 document_manager = DocumentManager()

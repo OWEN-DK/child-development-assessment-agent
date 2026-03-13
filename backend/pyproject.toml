@@ -3,7 +3,7 @@ name = "child-development-assessment-agent"
 version = "0.1.0"
 description = "Child Development Assessment Agent"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi==0.115.11",
     "uvicorn>=0.29.0",
@@ -22,11 +22,30 @@ dependencies = [
     "pymupdf>=1.27.2",
     "beautifulsoup4>=4.14.3",
     "pytest-asyncio>=1.3.0",
+    "llama-index-retrievers-bm25>=0.2.3",
+    "llama-index-llms-dashscope>=0.2.1",
+    "llama-index-embeddings-dashscope>=0.2.1",
+    "jieba>=0.42.1",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[project.scripts]
+start = "src.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[dependency-groups]
+dev = [
     "pytest>=8.1.1",
     "black>=24.2.0",
     "flake8>=7.0.0",
+    "hatchling>=1.27.0",
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true

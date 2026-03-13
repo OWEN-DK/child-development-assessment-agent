@@ -7,12 +7,13 @@ from src.core.nodes import (
     AssessmentNode,
     RetrievalNode,
     ScoringNode,
-    ReportingNode
+    ReportingNode,
 )
+
 
 def create_agent_graph():
     """创建并编译 LangGraph 工作流"""
-    
+
     # 初始化 StateGraph
     workflow = StateGraph(AgentState)
 
@@ -35,9 +36,9 @@ def create_agent_graph():
 
     # 定义边 (Edges)
     # 流程: Preprocessing -> Validation -> Assessment -> Retrieval -> Scoring -> Reporting -> END
-    
+
     workflow.set_entry_point("preprocessing")
-    
+
     workflow.add_edge("preprocessing", "validation")
     workflow.add_edge("validation", "assessment")
     workflow.add_edge("assessment", "retrieval")
@@ -48,6 +49,7 @@ def create_agent_graph():
     # 编译图
     app = workflow.compile()
     return app
+
 
 # 全局单例
 agent_app = create_agent_graph()

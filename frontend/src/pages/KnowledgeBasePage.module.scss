@@ -1,0 +1,22 @@
+.container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.headerCard {
+  margin-bottom: 24px;
+}
+
+.statusBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.listCard {
+  .ant-list-item {
+    padding: 16px 0;
+  }
+}

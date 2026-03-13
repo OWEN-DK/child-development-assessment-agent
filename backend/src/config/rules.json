@@ -1,0 +1,48 @@
+{
+  "validation": {
+    "default_intensity": "medium",
+    "default_category": "gross_motor",
+    "activity_intensity_map": {
+      "画画": "low", "绘画": "low", "串珠": "low", "积木": "low", "阅读": "low",
+      "drawing": "low", "painting": "low", "reading": "low",
+      "快走": "medium", "拍球": "medium", "平衡木": "medium", "骑车": "medium",
+      "walking": "medium", "balance": "medium", "cycling": "medium",
+      "跳绳": "high", "跑步": "high", "游泳": "high", "蹦床": "high", "篮球": "high",
+      "running": "high", "jumping": "high", "swimming": "high", "basketball": "high"
+    },
+    "activity_category_map": {
+      "画画": "fine_motor", "绘画": "fine_motor", "串珠": "fine_motor", "积木": "fine_motor",
+      "drawing": "fine_motor", "painting": "fine_motor",
+      "平衡木": "vestibular", "balance": "vestibular", "旋转": "vestibular", "秋千": "vestibular",
+      "快走": "cardio", "跑步": "cardio", "游泳": "cardio", "跳绳": "cardio",
+      "running": "cardio", "swimming": "cardio", "cycling": "cardio",
+      "拍球": "proprioception", "ball": "proprioception", "推球": "proprioception",
+      "蹦床": "vestibular", "trampoline": "vestibular"
+    }
+  },
+  "assessment": {
+    "age_milestones": {
+      "0-3": "- 能双脚跳离地面\n- 能走直线\n- 开始尝试单脚站立",
+      "3-5": "- 能单脚站立 5-10 秒\n- 能接住反弹球\n- 能交替上下楼梯\n- 前庭系统对旋转刺激开始整合",
+      "5-7": "- 能熟练跳绳\n- 能闭眼单脚站立\n- 左右手分化完成\n- 注意力能集中 15-20 分钟",
+      "7+": "- 具备复杂的动作规划能力\n- 团队运动规则理解\n- 情绪控制能力显著增强"
+    }
+  },
+  "scoring": {
+    "weight_scientific": 0.4,
+    "weight_age": 0.3,
+    "weight_safety": 0.3,
+    "max_weekly_duration_preschool": 300,
+    "max_single_duration_preschool": 30,
+    "penalty_duration_overlimit": 20,
+    "penalty_single_duration_overlimit": 10,
+    "penalty_high_intensity_preschool": 30,
+    "penalty_risk_high": 20,
+    "penalty_vestibular_mismatch": 10
+  },
+  "preprocessing": {
+    "trend_threshold": 0.5,
+    "min_records_for_trend": 3,
+    "recent_feedback_limit": 3
+  }
+}

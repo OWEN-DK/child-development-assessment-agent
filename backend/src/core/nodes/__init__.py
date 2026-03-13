@@ -13,5 +13,5 @@ __all__ = [
     "AssessmentNode",
     "RetrievalNode",
     "ScoringNode",
-    "ReportingNode"
+    "ReportingNode",
 ]

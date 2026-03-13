@@ -1,0 +1,37 @@
+.container {
+  padding: 24px;
+  background-color: #f0f2f5;
+  min-height: 100vh;
+}
+
+.headerCard {
+  margin-bottom: 24px;
+  
+  :global(.ant-card-body) {
+    padding: 24px;
+  }
+}
+
+.contentCard {
+  :global(.ant-card-body) {
+    padding: 0;
+  }
+  
+  :global(.ant-tabs) {
+    .ant-tabs-nav {
+      padding: 0 24px;
+      margin: 0;
+    }
+    
+    .ant-tabs-content-holder {
+      padding: 24px;
+    }
+  }
+}
+
+.statusBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}

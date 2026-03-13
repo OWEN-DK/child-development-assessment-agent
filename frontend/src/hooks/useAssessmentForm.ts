@@ -18,14 +18,14 @@ export const useAssessmentForm = () => {
     }
   };
 
-  const handleFinish = async (values: UserInput, onSubmit: (data: UserInput) => void) => {
+  const handleFinish = async (values: UserInput, onSubmit: (data: UserInput) => Promise<void>) => {
     // 简单的数据清洗，确保数组存在
     const cleanValues = { ...values };
     if (!cleanValues.child_profile.issues) cleanValues.child_profile.issues = [];
     if (!cleanValues.child_profile.interests) cleanValues.child_profile.interests = [];
     if (!cleanValues.proposed_plan.goals) cleanValues.proposed_plan.goals = [];
     
-    onSubmit(cleanValues);
+    await onSubmit(cleanValues);
     return true;
   };
 

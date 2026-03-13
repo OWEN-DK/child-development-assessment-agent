@@ -1,6 +1,6 @@
 import { ConfigProvider, App as AntdApp } from 'antd';
 import { PageContainer, ProLayout } from '@ant-design/pro-components';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 
@@ -27,8 +27,16 @@ function App() {
             }}
             menuDataRender={() => [
               { path: '/', name: '首页' },
+              { path: '/knowledge-base', name: '知识库' },
+              { path: '/knowledge-search', name: '内容搜索' },
+              { path: '/rag-test', name: '回撤测试' },
               // { path: '/history', name: '历史记录' },
             ]}
+            menuItemRender={(item, dom) => (
+              <Link to={item.path || '/'} key={item.path}>
+                {dom}
+              </Link>
+            )}
           >
             <PageContainer
               subTitle="基于 AI 的个性化发展评估与训练计划分析"

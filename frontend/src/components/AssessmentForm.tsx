@@ -7,13 +7,14 @@ import {
   ProFormList,
   ProFormGroup,
   ProCard,
+  ProFormDatePicker,
 } from '@ant-design/pro-components';
 import { UserInput } from '../models';
 import { useAssessmentForm } from '../hooks/useAssessmentForm';
 import styles from './AssessmentForm.module.scss';
 
 interface AssessmentFormProps {
-  onSubmit: (data: UserInput) => void;
+  onSubmit: (data: UserInput) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -40,7 +41,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, isLoad
         initialValues={initialValues}
         layout="vertical"
       >
-        <ProCard title="1. 儿童基本画像" headerBordered bordered className="ant-pro-card">
+        <ProCard title="1. 儿童基本画像" headerBordered className="ant-pro-card">
           <ProFormGroup>
             <ProFormText
               name={['child_profile', 'name']}
@@ -93,7 +94,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, isLoad
           />
         </ProCard>
 
-        <ProCard title="2. 拟定训练计划" headerBordered bordered className="ant-pro-card">
+        <ProCard title="2. 拟定训练计划" headerBordered className="ant-pro-card">
           <ProFormText
             name={['proposed_plan', 'plan_name']}
             label="计划名称"
@@ -122,7 +123,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, isLoad
             itemRender={({ listDom, action }, { record }) => {
               return (
                 <ProCard
-                  bordered
                   extra={action}
                   title={record?.name || '新活动'}
                   style={{ marginBottom: 8 }}
@@ -170,6 +170,91 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, isLoad
               label="描述/备注"
               placeholder="具体的动作要求..."
             />
+          </ProFormList>
+        </ProCard>
+        <ProCard title="3. 历史运动记录 (可选)" headerBordered className="ant-pro-card" collapsible defaultCollapsed>
+          <ProFormList
+            name={['history_context']}
+            label="历史记录列表"
+            creatorButtonProps={{
+              position: 'bottom',
+              creatorButtonText: '添加日期记录',
+            }}
+            itemRender={({ listDom, action }, { record }) => {
+              return (
+                <ProCard
+                  extra={action}
+                  title={record?.date || '新记录'}
+                  style={{ marginBottom: 8 }}
+                >
+                  {listDom}
+                </ProCard>
+              );
+            }}
+          >
+            <ProFormGroup>
+              <ProFormDatePicker
+                name="date"
+                label="日期"
+                width="md"
+                rules={[{ required: true, message: '请选择日期' }]}
+              />
+              <ProFormText
+                name="notes"
+                label="当日备注"
+                placeholder="整体感受..."
+                width="md"
+              />
+            </ProFormGroup>
+            
+            <ProFormList
+              name="activities"
+              label="当日活动"
+              creatorButtonProps={{
+                creatorButtonText: '添加活动',
+              }}
+              itemRender={({ listDom, action }, {}) => {
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                    <div style={{ flex: 1 }}>{listDom}</div>
+                    {action}
+                  </div>
+                );
+              }}
+            >
+              <ProFormGroup>
+                <ProFormText
+                  name="name"
+                  label="活动名称"
+                  placeholder="例如：跑步"
+                  width="sm"
+                  rules={[{ required: true, message: '请输入名称' }]}
+                />
+                <ProFormDigit
+                  name="duration_minutes"
+                  label="时长(分)"
+                  width="xs"
+                  min={1}
+                  rules={[{ required: true, message: '请输入时长' }]}
+                />
+                <ProFormSelect
+                  name="intensity"
+                  label="强度"
+                  width="xs"
+                  options={[
+                    { label: '低', value: 'low' },
+                    { label: '中', value: 'medium' },
+                    { label: '高', value: 'high' },
+                  ]}
+                />
+                <ProFormText
+                  name="feedback"
+                  label="反馈/感受"
+                  placeholder="例如：很累"
+                  width="sm"
+                />
+              </ProFormGroup>
+            </ProFormList>
           </ProFormList>
         </ProCard>
       </ProForm>

@@ -116,6 +116,8 @@
 - **错误处理**: 使用自定义异常。
 - **状态**: 保持 `AgentState` 整洁。
 - **导入**: 优先使用绝对导入。
+- **提示词管理**: 所有LLM相关的提示词必须统一存放在 `src/core/prompts.py` 文件中，禁止在业务代码中硬编码提示词。
+- **注释规范**: 所有代码注释必须使用中文，禁止使用英文注释，确保代码可读性和团队协作一致性。
 
 ## 核心概念
 - **StandardizedInput**: 校验后的标准数据格式。
@@ -127,3 +129,9 @@
 ## Backend Development
 
 - **Dependency Management**: All backend dependencies must be explicitly configured in `backend/pyproject.toml`. Do not rely on implicit dependencies or manual installation without updating the configuration file.
+- **Configuration Management**: 
+  - 所有可配置参数必须在 `backend/src/config/settings.py` 中定义，并支持通过 `.env.dev` 环境变量覆盖
+  - 禁止在业务代码中硬编码任何配置值，必须从 settings 对象读取
+  - 新增配置项时必须同时添加到 `.env.dev.example` 作为示例
+- **代码规范**:
+  - 所有配置相关的修改必须同步更新配置文件，不得直接在代码中写死数值

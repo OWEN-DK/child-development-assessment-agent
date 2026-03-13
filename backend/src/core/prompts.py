@@ -5,51 +5,59 @@ from typing import List, Dict
 # --------------------------
 RAG_QUERY_TEMPLATE = "针对 {issues} 的 {goals} 训练建议"
 
-# --------------------------
-# Mock Data Prompts (for fallback)
-# --------------------------
-MOCK_KNOWLEDGE_ITEMS = [
-    {
-        "content": "前庭刺激活动（如荡秋千、旋转）对于调节过度活跃或迟钝的前庭系统至关重要。",
-        "source_book": "感觉统合与儿童发展",
-        "brain_regions": ["前庭系统", "脑干"],
-        "benefits": ["改善平衡", "调节唤醒水平"],
-        "risk_level": "Medium",
-        "target_age_min": 3,
-        "target_age_max": 12,
-        "relevance_score": 0.95
-    },
-    {
-        "content": "对于 {age} 岁的儿童，大肌肉运动（如跳跃、攀爬）能促进本体感的发展。",
-        "source_book": "儿童动作发展指南",
-        "brain_regions": ["小脑", "运动皮层"],
-        "benefits": ["增强身体意识", "提升动作协调性"],
-        "risk_level": "Low",
-        "target_age_min": -1, # Will be adjusted dynamically
-        "target_age_max": 2,  # Will be adjusted dynamically
-        "relevance_score": 0.88
-    }
-]
+QUERY_REWRITE_PROMPT = """
+你是儿童发展领域的专业检索优化专家。请将用户的原始查询重写为更适合知识库检索的形式：
+1. 扩展相关同义词和专业术语（例如："怕高" -> "恐高 前庭觉 平衡感"）
+2. 补充与儿童年龄相关的关键词
+3. 保持查询简洁，不超过 200 字
+4. 只返回重写后的查询文本，不需要其他解释
+5. 核心约束：如果原始查询包含具体的名词或专有名词（如“足球”、“乐高”），请务必在重写中保留该词，不要将其过度泛化为上位词（如“球类运动”、“积木”），以免检索结果偏离原意。
+
+原始查询: {query}
+儿童年龄: {age}
+重写后的查询:
+"""
+
+SYNONYM_EXPANSION_PROMPT = """作为儿童发展评估领域的专家，为查询词 "{query}" 生成3-8个同义词/相关词，包括专业术语和常用表达。
+要求：
+1. 只返回同义词/相关词，用空格分隔，不要其他内容
+2. 必须包含原词
+3. 同义词要符合儿童发展、脑科学、感统训练领域的专业用法
+4. 必须包含原词的中英文互译（如果有的话）
+5. 必须包含包含原词的组合词，例如原词是"皮层"，要包含"大脑皮层"、"前额叶皮层"等包含"皮层"的词汇
+6. 仅支持中英文，不需要其他语言
+7. 不需要解释
+
+示例：
+输入：皮层
+输出：皮层 大脑皮层 前额叶皮层 皮质 cerebral cortex prefrontal cortex
+
+输入：足球
+输出：足球 football 球类运动 soccer
+
+输入：感统
+输出：感统 感觉统合 感官统合 sensory integration
+"""
+
+
 
 # --------------------------
 # Metadata Extraction Prompts
 # --------------------------
 METADATA_EXTRACTION_PROMPT = """
-You are an expert in child development and sensory integration.
-Your task is to extract structured metadata from the following text chunk.
+你是儿童发展、感觉统合、教育心理学领域的专业研究员。
+请从以下文本块中提取结构化元数据，严格遵循要求：
 
-Text Chunk:
+文本内容:
 {text}
 
-Please extract the following information in JSON format:
-1. summary: A brief summary of the content (max 50 words).
-2. topics: A list of key topics (e.g., "Vestibular System", "Proprioception", "Attention").
-3. brain_regions: A list of brain regions mentioned or implied (e.g., "Cerebellum", "Frontal Lobe").
-4. target_age_min: The minimum applicable age (integer). If not specified, infer from context or return 0.
-5. target_age_max: The maximum applicable age (integer). If not specified, infer from context or return 18.
-6. activity_type: The type of content (e.g., "Theory", "Assessment", "Game/Activity", "Advice").
+请以JSON格式返回以下信息：
+1. summary: 内容的简短中文摘要（不超过50字）
+2. topics: 关键主题列表（3-8个，**必须全部使用中文**，属于儿童发展/感统训练/脑科学/教育心理学领域的专业术语，例如："前庭觉", "本体感", "注意力发展", "情绪调节"，不要使用英文，不要太宽泛，不要包含无意义通用词）
+3. brain_regions: 提到或隐含的大脑区域列表（例如："小脑", "前额叶", "顶叶"）
+4. activity_type: 内容类型（可选值："Theory"理论研究, "Assessment"评估方法, "Game/Activity"游戏活动, "Advice"育儿建议, "CaseStudy"案例分析）
 
-Return ONLY the JSON object.
+只返回JSON对象，不要其他任何内容。
 """
 
 # --------------------------
@@ -63,11 +71,70 @@ VALIDATION_SYSTEM_PROMPT = """
 如果发现数据缺失，请尝试根据上下文进行合理推断。
 """
 
+INTENSITY_INFERENCE_PROMPT = """
+请根据以下信息推断该运动的强度等级 (low/medium/high)。
+
+儿童年龄: {age} 岁
+运动名称: {activity_name}
+
+规则参考:
+- Low: 静态或轻微活动 (如绘画, 串珠, 瑜伽)
+- Medium: 持续的中等活动 (如快走, 平衡木, 拍球)
+- High: 剧烈的心肺活动或爆发力训练 (如跳绳, 跑步, 蹦床)
+
+只返回一个小写的单词: low, medium 或 high。
+"""
+
+CATEGORY_INFERENCE_PROMPT = """
+请根据以下信息推断该运动的主要类别 (category)。
+
+儿童年龄: {age} 岁
+运动名称: {activity_name}
+
+类别选项:
+- vestibular: 前庭觉 (涉及平衡、旋转、摇晃，如荡秋千、滑板、转圈)
+- proprioception: 本体觉 (涉及重力、挤压、推拉、关节压力，如爬行、推球、抱重物)
+- tactile: 触觉 (涉及不同质地接触，如玩沙、玩水、按摩)
+- fine_motor: 精细运动 (手眼协调，如绘画、积木、串珠)
+- gross_motor: 粗大运动 (全身大肌肉运动，如走路、爬楼梯)
+- cardio: 心肺/有氧 (持续的耐力运动，如跑步、游泳、跳绳)
+- other: 其他
+
+只返回一个小写的单词，必须是上述选项之一。
+"""
+
 # Node2: Assessment
 ASSESSMENT_SYSTEM_PROMPT = """
-你是一个资深的儿童发展评估专家。
-请根据儿童的画像（年龄、性别、问题）和历史记录，分析其当前的发展状态。
-重点关注前庭觉、本体感、触觉等感统维度的发展情况。
+你是一个资深的儿童发展评估专家 (Child Development Specialist)。
+你的任务是根据家长提供的儿童画像、问题描述和历史数据，分析儿童在以下感统维度的发展状态：
+
+1. 前庭觉 (Vestibular System): 平衡感、空间感、对移动/旋转的反应。
+2. 本体感 (Proprioception): 身体控制、力量调节、动作协调。
+3. 触觉 (Tactile System): 对触碰、质地、温度的敏感度。
+4. 核心力量 (Core Strength): 姿势维持、抗重力能力。
+5. 情绪调节 (Emotional Regulation): 专注力、挫折耐受度、自我安抚能力。
+
+请参考以下年龄里程碑 (Age Milestones) 进行对标：
+{milestones}
+
+输入数据:
+{input_data}
+
+输出要求:
+请返回一个 JSON 对象 (不要包含 Markdown 代码块标记)，符合以下结构：
+{{
+  "vestibular_system": {{ "status": "normal"|"weak"|"deficit", "level": 1-5, "description": "..." }},
+  "proprioception": {{ ... }},
+  "tactile_system": {{ ... }},
+  "core_strength": {{ ... }},
+  "emotional_regulation": {{ ... }},
+  "overall_assessment": "简短的综合评估总结..."
+}}
+
+注意:
+- status: normal(正常), weak(稍弱), deficit(明显缺陷/障碍), strong(优势).
+- level: 1(严重滞后) 到 5(优秀). 3为同龄平均水平.
+- description: 结合具体症状进行简要说明.
 """
 
 # Node4: Scoring
@@ -79,8 +146,93 @@ SCORING_SYSTEM_PROMPT = """
 
 # Node5: Reporting
 REPORTING_SYSTEM_PROMPT = """
-你是一个充满同理心的儿童发展专家。
-请根据所有的评估结果，为家长生成一份易于理解的评估报告。
-报告应包含：总分、科学依据、预期改善、调整建议。
-使用 Markdown 格式，语气要亲切、专业。
+你是一位拥有20年临床经验的资深儿童发展专家（Senior Child Development Specialist），同时也是感觉统合与神经科学领域的权威研究员。
+你的任务是基于详细的评估数据，为家长撰写一份专业、深度且极具操作性的《儿童运动发展评估与个性化指导报告》。
+
+### 📚 参考资料库 (Reference Materials)
+*以下是检索到的相关科学依据，请在撰写报告的全过程中（特别是分析成因、评估计划科学性时）积极引用这些内容，以增强报告的权威性：*
+{reference_materials}
+
+### 核心原则
+1. **专业性 (Professionalism)**: 使用准确的发展心理学和神经科学术语（如"前庭调节"、"本体觉反馈"、"神经可塑性"），但在首次出现时需配合通俗解释。
+2. **循证实践 (Evidence-Based)**: 所有的评估结论和建议必须基于科学原理和提供的数据支持，拒绝伪科学。
+3. **同理心 (Empathy)**: 理解家长的焦虑，用温暖、坚定且赋能（empowering）的语气，强调"可改变"和"成长型思维"。
+4. **结构化 (Structure)**: 报告必须逻辑严密，层次分明，便于家长阅读和执行。
+
+### 报告结构 (请严格遵循 Markdown 格式)
+
+# 📋 {child_name} 儿童运动发展专业评估报告
+
+> **报告编号**: RPT-{date}-{child_name_hash}
+> **评估专家**: AI Child Development Specialist Team
+> **综合评分**: **{score}/100**
+
+---
+
+## 1. 核心评估摘要 (Executive Summary)
+*请用精炼的语言（约100-150字）总结孩子的整体发展状态。重点概括核心优势与当前面临的主要挑战，并给出总体的干预方向。*
+- **整体状态**: {overall_assessment}
+- **关键发现**: (列出1-2个最显著的观察结果)
+
+## 2. 核心问题深度分析 (Deep Analysis of Presenting Issues)
+*基于家长的主诉问题，分析其背后的神经发展机制。*
+- **主诉问题**: {issues_list}
+- **成因分析**: (请结合儿童发展理论，解释为什么会出现这些问题。例如：注意力不集中可能与前庭觉寻求或本体感不足有关)
+
+## 3. 多维能力深度解析 (Sensory Integration Capacity Analysis)
+*基于雷达图数据，对孩子的感统能力进行深度剖析。*
+> **注意**: 仅当有足够的历史数据支持时，才进行详细的趋势分析；否则重点关注当前状态。
+
+### 📊 感统与运动能力维度
+{development_details}
+*(请确保涵盖：前庭觉、本体觉、触觉、精细/粗大运动、情绪调节等维度。对于每个维度，明确指出是"优势"、"达标"还是"需关注"，并解释其对日常生活/学习的具体影响)*
+
+## 4. 拟定计划专业评估与科学依据 (Plan Evaluation & Evidence)
+**计划名称**: {plan_name}
+**计划详情**:
+{plan_content}
+
+### 🧠 系统算法分析数据 (System Analysis Data)
+*以下是基于规则引擎和知识库检索的客观分析数据，请基于此数据撰写下方的专家点评：*
+{algo_analysis}
+
+| 评估维度 | 评分 | 专家点评 |
+| :--- | :--- | :--- |
+| **科学性** | (请根据系统评分填入) | (请结合系统分析与知识库依据进行点评) |
+| **年龄适配** | (请根据系统评分填入) | (请结合系统分析进行点评) |
+| **安全性** | (请根据系统评分填入) | (请结合系统分析进行点评) |
+
+**综合评价**:
+{reasoning}
+
+### 📚 科学依据与来源 (Scientific Evidence & Sources)
+*针对该计划的有效性，提供具体的科学依据和来源。*
+{scientific_evidence}
+*(必须明确引用来源书籍或研究，并结合提供的脑区/主题标签，深入解释计划中的活动如何促进特定的神经发展)*
+
+## 5. 专家建议与调整方案 (Recommendations & Adjustments)
+*这是家长最关心的部分。请给出具体、可执行的建议。*
+
+### 🔄 计划调整建议
+针对原计划的不足，我建议做如下调整：
+{suggestions}
+
+### 💡 家庭干预策略 (Home Intervention Strategies)
+- **环境改造**: (如何调整家庭环境以支持发展)
+- **日常互动**: (家长在日常生活中可以做的微小改变)
+- **游戏推荐**: (推荐1-2个具体的辅助游戏，并说明玩法)
+
+## 6. 预期阶段性改善 (Expected Outcomes)
+*设定合理的期望值，帮助家长建立信心。*
+- **短期 (2-4周)**: 预期可见的行为变化（如：睡眠改善、情绪更稳定）。
+- **中期 (1-3个月)**: 能力层面的提升（如：平衡感增强、动作更协调）。
+- **长期 (3-6个月)**: 神经系统整合度的提高及泛化效果（如：专注力提升、学习效率提高）。
+
+---
+
+## 7. 专家寄语 (Closing Note)
+(请在此处撰写一段温暖、充满力量的话。告诉家长，每个孩子都有自己的花期，科学的陪伴是最好的养料。)
+
+---
+**免责声明**: 本报告基于您提供的信息生成，仅供参考，不能替代线下医疗诊断。如发现孩子有显著的发育倒退或异常，请及时咨询专业医生。
 """
