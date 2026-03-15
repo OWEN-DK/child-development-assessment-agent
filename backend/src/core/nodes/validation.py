@@ -63,11 +63,11 @@ class ValidationNode(BaseNode):
                     logger.info(
                         f"Imputed intensity for '{activity.name}': {inferred_intensity}"
                     )
-            
+
             # 2. 智能填补类别 (Category Imputation)
             inferred_category = activity.category
             if not inferred_category:
-                inferred_category = rules.validation.default_category # Default
+                inferred_category = rules.validation.default_category  # Default
 
                 # Try simple rules first
                 activity_name_lower = activity.name.lower()
@@ -91,7 +91,15 @@ class ValidationNode(BaseNode):
                         response = await llm.acomplete(prompt)
                         llm_category = response.text.strip().lower()
                         # Simple validation
-                        if llm_category in ["vestibular", "proprioception", "tactile", "fine_motor", "gross_motor", "cardio", "other"]:
+                        if llm_category in [
+                            "vestibular",
+                            "proprioception",
+                            "tactile",
+                            "fine_motor",
+                            "gross_motor",
+                            "cardio",
+                            "other",
+                        ]:
                             inferred_category = llm_category
                             logger.info(
                                 f"LLM inferred category for '{activity.name}': {inferred_category}"

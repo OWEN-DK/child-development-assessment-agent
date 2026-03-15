@@ -38,15 +38,17 @@ class PDFParser:
         toc = doc.get_toc()
         # 过滤无效的TOC条目（页码不在有效范围内）
         valid_toc = [item for item in toc if 1 <= item[2] <= total_pages]
-        
+
         if valid_toc:
-            logger.info(f"PDF has {len(valid_toc)} bookmarks, splitting by bookmark structure")
-            
+            logger.info(
+                f"PDF has {len(valid_toc)} bookmarks, splitting by bookmark structure"
+            )
+
             # 处理TOC，为每个书签计算结束页码并构建完整层级标题
             processed_toc = []
             # 记录各级别的父标题路径，用于拼接完整标题
             level_path = []
-            
+
             for i, (level, title, start_page) in enumerate(valid_toc):
                 # 查找下一个同级或更高级别的书签，作为当前书签的结束边界
                 end_page = total_pages
@@ -55,10 +57,10 @@ class PDFParser:
                     if next_level <= level:
                         end_page = next_start_page - 1
                         break
-                
+
                 # 确保结束页码不小于开始页码且不超过总页数
                 end_page = max(start_page, min(end_page, total_pages))
-                
+
                 # 构建完整层级标题路径
                 # 先截断到当前层级的父级
                 while len(level_path) >= level:
@@ -67,15 +69,17 @@ class PDFParser:
                 level_path.append(title)
                 # 拼接完整标题
                 full_chapter_title = "-".join(level_path)
-                
-                processed_toc.append({
-                    "level": level,
-                    "title": title,
-                    "full_chapter_title": full_chapter_title,
-                    "start_page": start_page,
-                    "end_page": end_page
-                })
-            
+
+                processed_toc.append(
+                    {
+                        "level": level,
+                        "title": title,
+                        "full_chapter_title": full_chapter_title,
+                        "start_page": start_page,
+                        "end_page": end_page,
+                    }
+                )
+
             # 按书签分割文档
             for toc_item in processed_toc:
                 # 合并当前书签范围内的所有页面文本
@@ -85,10 +89,10 @@ class PDFParser:
                     text = page.get_text()
                     if text.strip():
                         combined_text += text + "\n\n"
-                
+
                 if len(combined_text.strip()) < 10:
                     continue
-                
+
                 metadata = {
                     "file_name": file_name,
                     "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
@@ -97,11 +101,13 @@ class PDFParser:
                     "total_pages": total_pages,
                     "toc_level": toc_item["level"],
                     "start_page": toc_item["start_page"],
-                    "end_page": toc_item["end_page"]
+                    "end_page": toc_item["end_page"],
                 }
-                
-                documents.append(Document(text=combined_text.strip(), metadata=metadata))
-            
+
+                documents.append(
+                    Document(text=combined_text.strip(), metadata=metadata)
+                )
+
             logger.info(f"Split PDF into {len(documents)} sections based on bookmarks")
         else:
             # 没有书签，按原有逻辑逐页分割
@@ -135,7 +141,7 @@ class PDFVLParser:
         # Matrix(1.0, 1.0) 最快速度，满足OCR基础需求
         mat = fitz.Matrix(1.0, 1.0)
         pix = page.get_pixmap(matrix=mat)
-        
+
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_img:
             pix.save(tmp_img.name)
@@ -148,29 +154,35 @@ class PDFVLParser:
                     "role": "user",
                     "content": [
                         {"image": f"file://{tmp_img_path}"},
-                        {"text": "请提取这张图片中的所有文字内容，保持原有的段落结构。只输出提取的文字，不要输出任何其他解释或描述。"}
-                    ]
+                        {
+                            "text": "请提取这张图片中的所有文字内容，保持原有的段落结构。只输出提取的文字，不要输出任何其他解释或描述。"
+                        },
+                    ],
                 }
             ]
-            
+
             response = dashscope.MultiModalConversation.call(
                 model=settings.model_vl_parsing,
                 messages=messages,
-                api_key=settings.dashscope_api_key
+                api_key=settings.dashscope_api_key,
             )
-            
+
             text = ""
             if response.status_code == HTTPStatus.OK:
                 if response.output and response.output.choices:
                     content_list = response.output.choices[0].message.content
                     # content can be a list or string depending on model version, usually list for multimodal
                     if isinstance(content_list, list):
-                        text = "".join([item["text"] for item in content_list if "text" in item])
+                        text = "".join(
+                            [item["text"] for item in content_list if "text" in item]
+                        )
                     elif isinstance(content_list, str):
                         text = content_list
             else:
-                logger.error(f"VL Parsing failed for page {page_num}: {response.message}")
-                
+                logger.error(
+                    f"VL Parsing failed for page {page_num}: {response.message}"
+                )
+
             if not text.strip():
                 logger.warning(f"Page {page_num} yielded empty text via VL.")
                 return None
@@ -179,12 +191,12 @@ class PDFVLParser:
                 "file_name": file_name,
                 "page_label": str(page_num + 1),
                 "total_pages": total_pages,
-                "parsing_method": "qwen-vl"
+                "parsing_method": "qwen-vl",
             }
-            
+
             logger.info(f"Parsed page {page_num + 1}/{total_pages} via VL.")
             return Document(text=text, metadata=metadata)
-            
+
         except Exception as e:
             logger.error(f"Error parsing page {page_num} with VL: {e}")
             return None
@@ -213,27 +225,35 @@ class PDFVLParser:
         # 如果没有指定线程数，使用配置文件中的值
         if max_workers is None:
             max_workers = settings.rag_vl_max_workers
-            
-        logger.info(f"Starting VL parsing for {file_name} with {total_pages} pages using {settings.model_vl_parsing}, {max_workers} threads")
+
+        logger.info(
+            f"Starting VL parsing for {file_name} with {total_pages} pages using {settings.model_vl_parsing}, {max_workers} threads"
+        )
 
         # 准备页面参数列表
-        page_args = [(doc[page_num], page_num, total_pages, file_name) for page_num in range(total_pages)]
-        
+        page_args = [
+            (doc[page_num], page_num, total_pages, file_name)
+            for page_num in range(total_pages)
+        ]
+
         # 多线程并行处理
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(PDFVLParser._parse_single_page, args) for args in page_args]
-            
+            futures = [
+                executor.submit(PDFVLParser._parse_single_page, args)
+                for args in page_args
+            ]
+
             for future in as_completed(futures):
                 result = future.result()
                 if result:
                     documents.append(result)
-                    
+
         doc.close()
-        
+
         # 按页码排序，保证输出顺序正确
         documents.sort(key=lambda x: int(x.metadata["page_label"]))
         logger.info(f"VL parsing completed, {len(documents)} pages parsed successfully")
-        
+
         return documents
 
 
@@ -242,54 +262,70 @@ class EPUBParser:
     def _get_item_content(book, item_href: str) -> Optional[str]:
         """根据href获取item的文本内容"""
         for item in book.get_items():
-            if item.get_type() == ebooklib.ITEM_DOCUMENT and item.get_name() == item_href:
+            if (
+                item.get_type() == ebooklib.ITEM_DOCUMENT
+                and item.get_name() == item_href
+            ):
                 content = item.get_content()
                 soup = BeautifulSoup(content, "html.parser")
                 return soup.get_text(separator="\n")
         return None
 
     @staticmethod
-    def _traverse_toc(toc_node, level: int, level_path: list, processed_toc: list, book, total_pages: int):
+    def _traverse_toc(
+        toc_node,
+        level: int,
+        level_path: list,
+        processed_toc: list,
+        book,
+        total_pages: int,
+    ):
         """递归遍历TOC节点，构建层级结构"""
         if isinstance(toc_node, epub.Link):
             # 叶子节点（章节链接）
             title = toc_node.title.strip()
-            href = toc_node.href.split('#')[0]  # 去除锚点部分
-            
+            href = toc_node.href.split("#")[0]  # 去除锚点部分
+
             # 构建完整层级标题
             while len(level_path) >= level:
                 level_path.pop()
             level_path.append(title)
             full_chapter_title = "-".join(level_path)
-            
-            processed_toc.append({
-                "level": level,
-                "title": title,
-                "full_chapter_title": full_chapter_title,
-                "href": href
-            })
+
+            processed_toc.append(
+                {
+                    "level": level,
+                    "title": title,
+                    "full_chapter_title": full_chapter_title,
+                    "href": href,
+                }
+            )
         elif isinstance(toc_node, tuple) and len(toc_node) == 2:
             # 父节点（包含子节点的章节）: (Link, [children])
             link, children = toc_node
             title = link.title.strip()
-            href = link.href.split('#')[0]
-            
+            href = link.href.split("#")[0]
+
             # 构建完整层级标题
             while len(level_path) >= level:
                 level_path.pop()
             level_path.append(title)
             full_chapter_title = "-".join(level_path)
-            
-            processed_toc.append({
-                "level": level,
-                "title": title,
-                "full_chapter_title": full_chapter_title,
-                "href": href
-            })
-            
+
+            processed_toc.append(
+                {
+                    "level": level,
+                    "title": title,
+                    "full_chapter_title": full_chapter_title,
+                    "href": href,
+                }
+            )
+
             # 递归处理子节点
             for child in children:
-                EPUBParser._traverse_toc(child, level + 1, level_path, processed_toc, book, total_pages)
+                EPUBParser._traverse_toc(
+                    child, level + 1, level_path, processed_toc, book, total_pages
+                )
 
     @staticmethod
     def parse(file_path: str) -> List[Document]:
@@ -304,36 +340,44 @@ class EPUBParser:
         book = epub.read_epub(file_path)
         documents = []
         file_name = os.path.basename(file_path)
-        total_pages = len([item for item in book.get_items() if item.get_type() == ebooklib.ITEM_DOCUMENT])
+        total_pages = len(
+            [
+                item
+                for item in book.get_items()
+                if item.get_type() == ebooklib.ITEM_DOCUMENT
+            ]
+        )
 
         # 首先尝试获取EPUB的TOC
-        toc = book.get_toc()
+        toc = book.toc
         processed_toc = []
-        
+
         if toc:
             logger.info(f"EPUB has TOC, processing with hierarchical structure")
             level_path = []
             # 递归遍历TOC构建层级结构
             for node in toc:
-                EPUBParser._traverse_toc(node, 1, level_path, processed_toc, book, total_pages)
-            
+                EPUBParser._traverse_toc(
+                    node, 1, level_path, processed_toc, book, total_pages
+                )
+
             # 为每个TOC条目获取内容并创建Document
             for toc_item in processed_toc:
                 text = EPUBParser._get_item_content(book, toc_item["href"])
                 if not text or not text.strip():
                     continue
-                
+
                 metadata = {
                     "file_name": file_name,
                     "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
                     "section_title": toc_item["title"],  # 当前小节标题
                     "page_label": toc_item["href"],
                     "toc_level": toc_item["level"],
-                    "total_pages": total_pages
+                    "total_pages": total_pages,
                 }
-                
+
                 documents.append(Document(text=text.strip(), metadata=metadata))
-            
+
             logger.info(f"Processed {len(documents)} chapters from EPUB TOC")
         else:
             # 没有TOC，按原有逻辑处理每个document item
@@ -360,7 +404,7 @@ class EPUBParser:
                         "file_name": file_name,
                         "chapter_title": title if title else item.get_name(),
                         "page_label": item.get_name(),
-                        "total_pages": total_pages
+                        "total_pages": total_pages,
                     }
 
                     documents.append(Document(text=text, metadata=metadata))

@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import json
 from llama_index.llms.dashscope import DashScope
 from src.config.settings import settings
@@ -41,7 +41,7 @@ class AssessmentNode(BaseNode):
         ]
         if condensed:
             input_lines.append(f"- 历史运动特征: {history_summary}")
-        
+
         input_data = "\n".join(input_lines)
         prompt = ASSESSMENT_SYSTEM_PROMPT.format(
             milestones=milestones,
@@ -64,10 +64,10 @@ class AssessmentNode(BaseNode):
                     response_text = response_text[7:]
                 if response_text.endswith("```"):
                     response_text = response_text[:-3]
-                
+
                 # 清理多余的空白字符和转义字符
                 response_text = response_text.strip()
-                
+
                 # 尝试修复常见的JSON格式问题
                 try:
                     data = json.loads(response_text)
@@ -76,20 +76,20 @@ class AssessmentNode(BaseNode):
                     # 修复未闭合的字符串
                     response_text = response_text.rstrip()
                     # 检查并补充缺失的闭合引号、括号等
-                    open_braces = response_text.count('{')
-                    close_braces = response_text.count('}')
-                    open_brackets = response_text.count('[')
-                    close_brackets = response_text.count(']')
+                    open_braces = response_text.count("{")
+                    close_braces = response_text.count("}")
+                    open_brackets = response_text.count("[")
+                    close_brackets = response_text.count("]")
                     open_quotes = response_text.count('"') % 2 == 1
-                    
+
                     # 补充缺失的闭合符号
                     if open_quotes:
                         response_text += '"'
                     for _ in range(open_brackets - close_brackets):
-                        response_text += ']'
+                        response_text += "]"
                     for _ in range(open_braces - close_braces):
-                        response_text += '}'
-                    
+                        response_text += "}"
+
                     # 再次尝试解析
                     try:
                         data = json.loads(response_text)
@@ -98,32 +98,49 @@ class AssessmentNode(BaseNode):
                         logger.error(f"JSON修复失败: {e2}，使用默认评估结果")
                         raise
 
-                # 转换为 Pydantic 模型
+                # 转换为 Pydantic 模型，添加状态值容错处理
+                def safe_create_development_status(
+                    status_data: dict,
+                ) -> Optional[DevelopmentStatus]:
+                    """安全创建DevelopmentStatus对象，处理无效状态值"""
+                    if not status_data:
+                        return None
+                    try:
+                        # 验证status值是否在允许的枚举中
+                        status = status_data.get("status", "")
+                        allowed_statuses = [
+                            "normal",
+                            "weak",
+                            "deficit",
+                            "unstable",
+                            "strong",
+                            "unknown",
+                        ]
+                        if status not in allowed_statuses:
+                            logger.warning(
+                                f"无效的状态值 '{status}'，已自动修正为 'unknown'"
+                            )
+                            status_data["status"] = "unknown"
+                        return DevelopmentStatus(**status_data)
+                    except Exception as e:
+                        logger.warning(f"创建DevelopmentStatus失败: {e}，返回None")
+                        return None
+
                 child_state = ChildState(
-                    vestibular_system=(
-                        DevelopmentStatus(**data.get("vestibular_system"))
-                        if data.get("vestibular_system")
-                        else None
+                    vestibular_system=safe_create_development_status(
+                        data.get("vestibular_system")
                     ),
-                    proprioception=(
-                        DevelopmentStatus(**data.get("proprioception"))
-                        if data.get("proprioception")
-                        else None
+                    proprioception=safe_create_development_status(
+                        data.get("proprioception")
                     ),
-                    tactile_system=(
-                        DevelopmentStatus(**data.get("tactile_system"))
-                        if data.get("tactile_system")
-                        else None
+                    tactile_system=safe_create_development_status(
+                        data.get("tactile_system")
                     ),
-                    core_strength=(
-                        DevelopmentStatus(**data.get("core_strength"))
-                        if data.get("core_strength")
-                        else None
+                    core_strength=safe_create_development_status(
+                        data.get("core_strength")
                     ),
-                    emotional_regulation=(
-                        DevelopmentStatus(**data.get("emotional_regulation"))
-                        if data.get("emotional_regulation")
-                        else None
+                    emotional_regulation=safe_create_development_status(
+                        data.get("emotional_regulation")
                     ),
                     overall_assessment=data.get("overall_assessment", "评估完成"),
                 )
@@ -134,8 +151,16 @@ class AssessmentNode(BaseNode):
                 logger.error(f"评估失败: {e}")
 
         logger.warning("LLM不可用或调用失败，返回默认评估结果。")
-        # 返回空的子项状态，避免误导
+        # 返回默认评估结果，保持所有字段存在
+        default_status = DevelopmentStatus(
+            status="unknown", level=3, description="暂无法评估"
+        )
         child_state = ChildState(
+            vestibular_system=default_status,
+            proprioception=default_status,
+            tactile_system=default_status,
+            core_strength=default_status,
+            emotional_regulation=default_status,
             overall_assessment="系统暂时无法生成详细评估，请检查服务连接或API配置。",
         )
         return {"child_state": child_state}

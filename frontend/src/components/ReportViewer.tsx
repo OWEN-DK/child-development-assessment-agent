@@ -1,6 +1,6 @@
 import React from 'react';
 import Markdown from 'react-markdown';
-import { Card, Button, Typography, Space, Collapse } from 'antd';
+import { Card, Button, Typography, Space, Collapse, Spin } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { FinalReport } from '../models';
 
@@ -10,16 +10,24 @@ const { Panel } = Collapse;
 interface ReportViewerProps {
   report: FinalReport;
   onBack: () => void;
+  isStreaming?: boolean;
 }
 
-export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onBack }) => {
+export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onBack, isStreaming = false }) => {
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
         返回编辑
       </Button>
 
-      <Card title={<Title level={3} style={{ margin: 0 }}>评估报告</Title>}>
+      <Card 
+        title={
+          <Title level={3} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+            评估报告
+            {isStreaming && <Spin size="small" />}
+          </Title>
+        }
+      >
         <Typography>
           <div className="markdown-body">
             {/* 使用 react-markdown 渲染，可以通过 CSS 自定义样式，或者使用 Ant Design 的 Typography 样式 */}
@@ -33,8 +41,22 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onBack }) =>
                 li: ({children}) => <li><Paragraph>{children}</Paragraph></li>,
               }}
             >
-              {report.markdown_content}
+              {report.markdown_content || ''}
             </Markdown>
+            {/* 流式生成中的光标效果 */}
+            {isStreaming && (
+              <span 
+                style={{ 
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '1em',
+                  background: '#1890ff',
+                  marginLeft: '2px',
+                  animation: 'blink 1s infinite',
+                  verticalAlign: 'text-bottom'
+                }} 
+              />
+            )}
           </div>
         </Typography>
       </Card>
@@ -49,6 +71,14 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onBack }) =>
           </Panel>
         </Collapse>
       )}
+
+      {/* 添加光标闪烁动画 */}
+      <style>{`
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+      `}</style>
     </Space>
   );
 };

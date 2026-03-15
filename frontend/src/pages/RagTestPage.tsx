@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
   Card, Typography, Button, Table, Space, Modal, Form, Input, 
-  InputNumber, Tag, message, Tabs, List, Descriptions,
-  Popconfirm, Statistic, Row, Col
+  InputNumber, Tag, Tabs, List, Descriptions,
+  Popconfirm, Statistic, Row, Col, App
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined,
@@ -31,6 +31,7 @@ interface TestCaseFormData {
 }
 
 const RagTestPage = () => {
+  const { modal, message } = App.useApp();
   const [activeTab, setActiveTab] = useState('cases');
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [testRuns, setTestRuns] = useState<TestRun[]>([]);
@@ -144,7 +145,7 @@ const RagTestPage = () => {
       const result = await runSingleTest(record.id);
       message.success('测试执行完成');
       // 显示结果弹窗
-      Modal.info({
+      modal.info({
         title: '测试结果',
         width: 800,
         content: (
@@ -210,7 +211,7 @@ const RagTestPage = () => {
 
   // 快照相关操作
   const handleCreateSnapshot = async () => {
-    Modal.confirm({
+    modal.confirm({
       title: '创建快照',
       content: '确定要创建当前知识库的快照吗？快照将保存当前索引和所有文档状态。',
       onOk: async () => {
@@ -229,7 +230,7 @@ const RagTestPage = () => {
   };
 
   const handleRestoreSnapshot = async (snapshotId: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: '恢复快照',
       content: '确定要恢复到该快照吗？当前知识库的所有改动将会丢失。',
       okText: '确定恢复',
@@ -391,7 +392,7 @@ const RagTestPage = () => {
           size="small" 
           icon={<BarChartOutlined />}
           onClick={() => {
-            Modal.info({
+            modal.info({
               title: '测试运行详情',
               width: 900,
               content: (
@@ -494,7 +495,7 @@ const RagTestPage = () => {
   return (
     <div className={styles.container}>
       <Card className={styles.headerCard}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <div>
             <Title level={2}>知识库回撤测试</Title>
             <Text type="secondary">

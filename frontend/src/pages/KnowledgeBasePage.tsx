@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Upload, Button, List, Card, Typography, Space, message, Modal, Progress } from 'antd';
-import { UploadOutlined, DeleteOutlined, CloudSyncOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Upload, Button, Card, Typography, Space, Progress, List, App } from 'antd';
+import { UploadOutlined, DeleteOutlined, CloudSyncOutlined, LoadingOutlined, StopOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
-import { uploadDocument, getDocuments, deleteDocument, getRagStatus, getUploadTaskStatus, DocumentRecord, UploadTaskStatus } from '../api/client';
+import { uploadDocument, getDocuments, deleteDocument, getRagStatus, getUploadTasks, cancelUploadTask, DocumentRecord, UploadTaskStatus } from '../api/client';
 import styles from './KnowledgeBasePage.module.scss';
 
 const { Title, Text } = Typography;
 
 const KnowledgeBasePage = () => {
+  const { modal, message } = App.useApp();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [_uploading, setUploading] = useState(false);
   const [ragReady, setRagReady] = useState(false);
   const [processingTasks, setProcessingTasks] = useState<UploadTaskStatus[]>([]);
   const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
@@ -21,7 +22,8 @@ const KnowledgeBasePage = () => {
       const res = await getDocuments();
       setDocuments(res.documents);
     } catch (e) {
-      message.error('加载文档列表失败');
+      console.error('Failed to load documents:', e);
+      // message.error('加载文档列表失败'); // Don't show error immediately to avoid spamming if server is busy
     } finally {
       setLoading(false);
     }
@@ -36,70 +38,89 @@ const KnowledgeBasePage = () => {
     }
   };
 
+  const loadTasks = async () => {
+    try {
+      const res = await getUploadTasks();
+      const activeTasks = res.tasks.filter(t => 
+        t.status === 'pending' || 
+        t.status === 'processing' || 
+        (t.status === 'cancelled' && (Date.now()/1000 - t.created_at < 300)) ||
+        (t.status === 'failed' && (Date.now()/1000 - t.created_at < 3600)) || 
+        (t.status === 'success' && (Date.now()/1000 - t.created_at < 300))
+      );
+      setProcessingTasks(activeTasks);
+    } catch (e) {
+      console.error('Failed to load tasks:', e);
+    }
+  };
+
   // 轮询查询任务状态
   const pollTaskStatus = async () => {
-    if (processingTasks.length === 0) {
-      if (pollingTimer) {
-        clearInterval(pollingTimer);
-        setPollingTimer(null);
-      }
-      return;
+    try {
+        const res = await getUploadTasks();
+        const activeTasks = res.tasks.filter(t => 
+            t.status === 'pending' || 
+            t.status === 'processing' || 
+            (t.status === 'cancelled' && (Date.now()/1000 - t.created_at < 300)) ||
+            (t.status === 'failed' && (Date.now()/1000 - t.created_at < 3600)) || 
+            (t.status === 'success' && (Date.now()/1000 - t.created_at < 300))
+        );
+        
+        // Check for newly completed tasks compared to previous state
+        activeTasks.forEach(newTask => {
+            const oldTask = processingTasks.find(t => t.task_id === newTask.task_id);
+            if (oldTask && oldTask.status !== 'success' && newTask.status === 'success') {
+                 message.success(`${newTask.filename} 上传并索引成功`);
+                 loadDocuments(); // Refresh doc list
+                 loadRagStatus();
+            } else if (oldTask && oldTask.status !== 'failed' && newTask.status === 'failed') {
+                 message.error(`${newTask.filename} 处理失败: ${newTask.error || '未知错误'}`);
+            } else if (oldTask && oldTask.status !== 'cancelled' && newTask.status === 'cancelled') {
+                 message.info(`${newTask.filename} 已取消`);
+                 loadDocuments(); // Refresh doc list to ensure it's removed
+            }
+        });
+        
+        setProcessingTasks(activeTasks);
+        
+        // If no active tasks, stop polling
+        const hasActive = activeTasks.some(t => t.status === 'pending' || t.status === 'processing' || t.status === 'cancelled');
+        if (!hasActive && pollingTimer) {
+            clearInterval(pollingTimer);
+            setPollingTimer(null);
+        }
+    } catch (e) {
+        console.error('Polling failed:', e);
     }
-
-    const updatedTasks = await Promise.all(
-      processingTasks.map(async (task) => {
-        if (task.status === 'success' || task.status === 'failed') {
-          return task;
-        }
-        try {
-          const updated = await getUploadTaskStatus(task.task_id);
-          return updated;
-        } catch (e) {
-          return task;
-        }
-      })
-    );
-
-    // 检查是否有任务完成
-    const completedTasks = updatedTasks.filter(t => t.status === 'success' || t.status === 'failed');
-    if (completedTasks.length > 0) {
-      // 重新加载文档列表
-      await loadDocuments();
-      await loadRagStatus();
-      
-      // 显示完成消息
-      completedTasks.forEach(task => {
-        if (task.status === 'success') {
-          message.success(`${task.filename} 上传并索引成功`);
-        } else {
-          message.error(`${task.filename} 处理失败: ${task.error || '未知错误'}`);
-        }
-      });
-    }
-
-    // 更新任务列表，移除已完成的任务
-    const remainingTasks = updatedTasks.filter(t => t.status !== 'success' && t.status !== 'failed');
-    setProcessingTasks(remainingTasks);
   };
 
   useEffect(() => {
     loadDocuments();
     loadRagStatus();
+    loadTasks(); // Initial load of tasks
   }, []);
 
   // 当有处理中的任务时启动轮询
   useEffect(() => {
-    if (processingTasks.length > 0 && !pollingTimer) {
+    const hasActiveTasks = processingTasks.some(t => t.status === 'pending' || t.status === 'processing' || t.status === 'cancelled');
+    if (hasActiveTasks && !pollingTimer) {
       const timer = setInterval(pollTaskStatus, 2000); // 每2秒查询一次
       setPollingTimer(timer);
     }
 
     return () => {
-      if (pollingTimer) {
-        clearInterval(pollingTimer);
+      if (pollingTimer && !hasActiveTasks) {
+        // Don't clear here, let the effect cleanup handle it or the poll function handle stopping
       }
     };
-  }, [processingTasks, pollingTimer]);
+  }, [processingTasks]); // Depend on processingTasks to start/stop
+
+  // Cleanup on unmount
+  useEffect(() => {
+      return () => {
+          if (pollingTimer) clearInterval(pollingTimer);
+      }
+  }, [pollingTimer]);
 
   const handleUpload: UploadProps['beforeUpload'] = async (file) => {
     const isPdfOrEpub = file.type === 'application/pdf' || file.name.endsWith('.epub');
@@ -146,7 +167,7 @@ const KnowledgeBasePage = () => {
   };
 
   const handleDelete = (doc: DocumentRecord) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除文档 "${doc.file_name}" 吗？删除后无法恢复。`,
       onOk: async () => {
@@ -162,10 +183,23 @@ const KnowledgeBasePage = () => {
     });
   };
 
+  const handleCancel = async (taskId: string) => {
+    try {
+      await cancelUploadTask(taskId);
+      message.info('已请求取消任务...');
+      // 乐观更新状态
+      setProcessingTasks(prev => prev.map(t => 
+        t.task_id === taskId ? { ...t, status: 'cancelled', message: '正在取消...' } : t
+      ));
+    } catch (e: any) {
+      message.error(`取消失败: ${e.response?.data?.detail || e.message}`);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <Card className={styles.headerCard}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <div>
             <Title level={2}>知识库管理</Title>
             <Text type="secondary">
@@ -206,16 +240,36 @@ const KnowledgeBasePage = () => {
               <List
                 dataSource={processingTasks}
                 renderItem={(task) => (
-                  <List.Item>
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                  <List.Item
+                    actions={[
+                        (task.status === 'pending' || task.status === 'processing') && (
+                            <Button 
+                                type="text" 
+                                danger 
+                                icon={<StopOutlined />} 
+                                onClick={() => handleCancel(task.task_id)}
+                            >
+                                中断
+                            </Button>
+                        )
+                    ]}
+                  >
+                    <Space orientation="vertical" style={{ width: '100%' }}>
                       <Space>
-                        <LoadingOutlined spin />
+                        {(task.status === 'processing' || task.status === 'pending') && <LoadingOutlined spin />}
                         <Text strong>{task.filename}</Text>
                         <Text type="secondary">
-                          {task.status === 'pending' ? '排队中' : '处理中'}
+                          {task.status === 'pending' ? '排队中' : 
+                           task.status === 'processing' ? '处理中' :
+                           task.status === 'cancelled' ? '已取消' :
+                           task.status === 'success' ? '完成' : '失败'}
                         </Text>
                       </Space>
-                      <Progress percent={Math.round(task.progress || (task.status === 'pending' ? 10 : 50))} status="active" showInfo={false} />
+                      <Progress 
+                        percent={Math.round(task.progress || (task.status === 'pending' ? 10 : 50))} 
+                        status={task.status === 'failed' || task.status === 'cancelled' ? 'exception' : 'active'} 
+                        showInfo={false} 
+                      />
                        <Text type="secondary" style={{ fontSize: '12px' }}>{task.message}</Text>
                     </Space>
                   </List.Item>
@@ -241,7 +295,12 @@ const KnowledgeBasePage = () => {
       >
         <List
           loading={loading}
-          dataSource={documents}
+          dataSource={documents.filter(doc => 
+             !processingTasks.some(t => 
+                 t.filename === doc.file_name && 
+                 (t.status === 'pending' || t.status === 'processing' || t.status === 'cancelled')
+             )
+          )}
           renderItem={(doc) => (
             <List.Item
               actions={[

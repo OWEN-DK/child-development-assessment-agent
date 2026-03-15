@@ -108,7 +108,7 @@ class PreprocessingNode(BaseNode):
         recent_feedbacks = []
         # Get feedbacks from the last records
         sorted_history = sorted(history, key=lambda x: x.date, reverse=True)
-        for record in sorted_history[:rules.preprocessing.recent_feedback_limit]:
+        for record in sorted_history[: rules.preprocessing.recent_feedback_limit]:
             for activity in record.activities:
                 if activity.feedback:
                     recent_feedbacks.append(

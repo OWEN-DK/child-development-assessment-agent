@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { UserInput, FinalReport } from '../models';
+import { UserInput, FinalReport, StreamingReportData } from '../models';
 
 export interface DocumentRecord {
   file_hash: string;
@@ -22,8 +22,85 @@ const client = axios.create({
 });
 
 export const assessDevelopment = async (data: UserInput): Promise<FinalReport> => {
-  const response = await client.post<FinalReport>('/assess', data);
+  const response = await client.post<FinalReport>('/assess', { ...data, is_streaming: false });
   return response.data;
+};
+
+export const assessDevelopmentStream = async (
+  data: UserInput,
+  onData: (data: StreamingReportData) => void,
+  onMessage: (chunk: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void
+): Promise<void> => {
+  try {
+    const response = await fetch('/assess', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...data, is_streaming: true }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: '请求失败' }));
+      onError(errorData.detail || `请求失败: ${response.status}`);
+      return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      onError('无法读取响应流');
+      return;
+    }
+
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const block of lines) {
+        if (!block.trim()) continue;
+
+        const blockLines = block.split('\n');
+        let event = '';
+        let dataStr = '';
+
+        for (const line of blockLines) {
+          if (line.startsWith('event: ')) {
+            event = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            dataStr = line.substring(6);
+          }
+        }
+
+        if (!event || !dataStr) continue;
+
+        try {
+          if (event === 'data') {
+            const data = JSON.parse(dataStr) as StreamingReportData;
+            onData(data);
+          } else if (event === 'message') {
+            const chunk = JSON.parse(dataStr) as string;
+            onMessage(chunk);
+          } else if (event === 'done' && dataStr === '[DONE]') {
+            onDone();
+          }
+        } catch (e) {
+          console.error('解析SSE消息失败:', e, block);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('流式请求失败:', err);
+    onError(err.message || '网络请求失败');
+  }
 };
 
 export const uploadDocument = async (file: File): Promise<{ 
@@ -60,7 +137,7 @@ export const deleteDocument = async (filename: string): Promise<{ status: string
 
 export interface UploadTaskStatus {
   task_id: string;
-  status: 'pending' | 'processing' | 'success' | 'failed';
+  status: 'pending' | 'processing' | 'success' | 'failed' | 'cancelled';
   filename: string;
   created_at: number;
   message: string;
@@ -71,6 +148,16 @@ export interface UploadTaskStatus {
 
 export const getUploadTaskStatus = async (taskId: string): Promise<UploadTaskStatus> => {
   const response = await client.get<UploadTaskStatus>(`/rag/tasks/${taskId}`);
+  return response.data;
+};
+
+export const getUploadTasks = async (): Promise<{ tasks: UploadTaskStatus[] }> => {
+  const response = await client.get<{ tasks: UploadTaskStatus[] }>('/rag/tasks');
+  return response.data;
+};
+
+export const cancelUploadTask = async (taskId: string): Promise<{ status: string; message: string }> => {
+  const response = await client.post<{ status: string; message: string }>(`/rag/tasks/${taskId}/cancel`);
   return response.data;
 };
 

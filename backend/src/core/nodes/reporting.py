@@ -1,7 +1,15 @@
 from typing import Dict, Any, List
 from llama_index.llms.dashscope import DashScope
 from src.config.settings import settings
-from src.model.schemas import AgentState, FinalReport, ChildState, KnowledgeItem, ChildProfile, ProposedPlan, EvaluationResult
+from src.model.schemas import (
+    AgentState,
+    FinalReport,
+    ChildState,
+    KnowledgeItem,
+    ChildProfile,
+    ProposedPlan,
+    EvaluationResult,
+)
 from src.core.nodes.base import BaseNode
 from src.core.prompts import REPORTING_SYSTEM_PROMPT
 from src.utils.logger import logger
@@ -57,18 +65,20 @@ class ReportingNode(BaseNode):
                 source_info += f" - {doc.chapter_title}"
             if doc.page_label:
                 source_info += f" (第{doc.page_label}页)"
-            
+
             tags = []
             if doc.brain_regions:
                 tags.append(f"脑区: {', '.join(doc.brain_regions)}")
             if doc.topics:
                 tags.append(f"主题: {', '.join(doc.topics)}")
-            
+
             tag_str = f" [{ ' | '.join(tags) }]" if tags else ""
-            
+
             # 用于最终报告展示的 Markdown 格式
-            evidence_list.append(f"{i+1}. **【{source_info}】**{tag_str}\n   {doc.content}")
-            
+            evidence_list.append(
+                f"{i+1}. **【{source_info}】**{tag_str}\n   {doc.content}"
+            )
+
             # 用于 Prompt 上下文的纯文本格式
             reference_list.append(f"资料{i+1} [来源: {source_info}]: {doc.content}")
 
@@ -83,21 +93,21 @@ class ReportingNode(BaseNode):
         plan_content_parts = []
         if plan.goals:
             plan_content_parts.append(f"**目标**: {', '.join(plan.goals)}")
-        
+
         plan_content_parts.append("**活动列表**:")
         for act in plan.activities:
             desc = f" ({act.description})" if act.description else ""
             plan_content_parts.append(
                 f"- {act.name}: {act.duration_minutes}分钟, {act.frequency_weekly}次/周{desc}"
             )
-        
+
         plan_content_str = "\n".join(plan_content_parts)
 
         # 整理算法分析详情
         algo_analysis_parts = []
         if eval_result and eval_result.dimension_analysis:
             da = eval_result.dimension_analysis
-            
+
             # 科学性
             if "scientific_match" in da:
                 sci = da["scientific_match"]
@@ -105,7 +115,7 @@ class ReportingNode(BaseNode):
                 algo_analysis_parts.append(f"  - 分析: {sci.analysis}")
                 if sci.issues:
                     algo_analysis_parts.append(f"  - 发现问题: {'; '.join(sci.issues)}")
-            
+
             # 年龄适配度
             if "age_appropriateness" in da:
                 age = da["age_appropriateness"]
@@ -113,16 +123,22 @@ class ReportingNode(BaseNode):
                 algo_analysis_parts.append(f"  - 分析: {age.analysis}")
                 if age.issues:
                     algo_analysis_parts.append(f"  - 发现问题: {'; '.join(age.issues)}")
-            
+
             # 安全性
             if "safety" in da:
                 safe = da["safety"]
                 algo_analysis_parts.append(f"- **安全性评分**: {safe.score:.0f}/100")
                 algo_analysis_parts.append(f"  - 分析: {safe.analysis}")
                 if safe.issues:
-                    algo_analysis_parts.append(f"  - 发现问题: {'; '.join(safe.issues)}")
+                    algo_analysis_parts.append(
+                        f"  - 发现问题: {'; '.join(safe.issues)}"
+                    )
 
-        algo_analysis_str = "\n".join(algo_analysis_parts) if algo_analysis_parts else "暂无详细算法分析数据"
+        algo_analysis_str = (
+            "\n".join(algo_analysis_parts)
+            if algo_analysis_parts
+            else "暂无详细算法分析数据"
+        )
 
         # 2. 构建 Prompt
         try:
@@ -140,14 +156,22 @@ class ReportingNode(BaseNode):
                 "{child_name_hash}": name_hash,
                 "{issues_list}": issues_str,
                 "{score}": str(round(eval_result.score, 1)) if eval_result else "0",
-                "{overall_assessment}": child_state.overall_assessment if child_state else "暂无评估",
+                "{overall_assessment}": (
+                    child_state.overall_assessment if child_state else "暂无评估"
+                ),
                 "{development_details}": "\n".join(dev_details),
                 "{plan_name}": plan.plan_name,
                 "{plan_content}": plan_content_str,
                 "{reasoning}": eval_result.reasoning if eval_result else "",
                 "{algo_analysis}": algo_analysis_str,
-                "{scientific_evidence}": ("\n".join(evidence_list) if evidence_list else "暂无直接科学依据引用"),
-                "{reference_materials}": ("\n".join(reference_list) if reference_list else "暂无相关参考资料"),
+                "{scientific_evidence}": (
+                    "\n".join(evidence_list)
+                    if evidence_list
+                    else "暂无直接科学依据引用"
+                ),
+                "{reference_materials}": (
+                    "\n".join(reference_list) if reference_list else "暂无相关参考资料"
+                ),
                 "{suggestions}": suggestions_str,
             }
 
@@ -189,19 +213,25 @@ class ReportingNode(BaseNode):
                 llm = DashScope(
                     model=settings.llm_models["report_generation"],
                     api_key=settings.dashscope_api_key,
-                    max_tokens=4000,
+                    max_tokens=8000,
+                    temperature=0.7,
+                    top_p=0.8,
                 )
-                
+
                 logger.info("Starting report generation...")
                 response = await llm.acomplete(formatted_prompt_full)
                 markdown_content = response.text.strip()
                 logger.info("Report generation completed.")
-                
+
             except Exception as e:
                 logger.error(f"Reporting failed: {e}")
-                markdown_content = self._generate_fallback_report(child, plan, eval_result, child_state)
+                markdown_content = self._generate_fallback_report(
+                    child, plan, eval_result, child_state
+                )
         else:
-            markdown_content = self._generate_fallback_report(child, plan, eval_result, child_state)
+            markdown_content = self._generate_fallback_report(
+                child, plan, eval_result, child_state
+            )
 
         # 5. 构建最终结果 (非流式模式)
         report = FinalReport(
@@ -227,11 +257,13 @@ class ReportingNode(BaseNode):
         score = eval_result.score if eval_result else 0
         assessment = child_state.overall_assessment if child_state else "暂无评估数据"
         reasoning = eval_result.reasoning if eval_result else "暂无详细分析"
-        
+
         suggestions_list = []
         if eval_result and eval_result.suggestions:
             suggestions_list = [f"- {s}" for s in eval_result.suggestions]
-        suggestions_str = "\n".join(suggestions_list) if suggestions_list else "暂无特殊建议"
+        suggestions_str = (
+            "\n".join(suggestions_list) if suggestions_list else "暂无特殊建议"
+        )
 
         return f"""
 # 儿童运动发展评估报告 (基础版)

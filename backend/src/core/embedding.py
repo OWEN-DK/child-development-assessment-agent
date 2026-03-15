@@ -1,0 +1,103 @@
+from typing import List, Any, Optional
+from llama_index.embeddings.dashscope import DashScopeEmbedding
+from src.utils.logger import logger
+
+# 延迟导入settings以避免循环引用
+# from src.config.settings import settings
+
+
+class SafeDashScopeEmbedding(DashScopeEmbedding):
+    """
+    A wrapper around DashScopeEmbedding that safely handles:
+    1. Text too long (truncates to 2048 characters as a safe approximation for 2048 tokens)
+    2. Text empty (replaces with placeholder)
+    3. Logging of modifications
+    """
+
+    # Safe limit for text length (chars).
+    # DashScope limit is 2048 tokens.
+    # Conservative estimate: 1 token >= 0.5 chars (very conservative),
+    # but usually 1 token ~ 1 char for Chinese, ~3-4 chars for English.
+    # To be safe and avoid 400 errors, we use settings.embedding_max_text_length chars.
+
+    @property
+    def max_text_length(self) -> int:
+        from src.config.settings import settings
+
+        return settings.embedding_max_text_length
+
+    def get_text_embedding_batch(
+        self, texts: List[str], show_progress: bool = False, **kwargs: Any
+    ) -> List[List[float]]:
+        safe_texts = []
+        modified = False
+
+        for i, text in enumerate(texts):
+            # Handle empty or whitespace only
+            if not text or not text.strip():
+                logger.warning(
+                    f"Empty text encountered at index {i}, replacing with placeholder."
+                )
+                safe_texts.append("empty")
+                modified = True
+                continue
+
+            # Handle too long
+            if len(text) > self.max_text_length:
+                # Log only once per batch to avoid spam if many are long
+                if not modified:
+                    logger.warning(
+                        f"Text too long ({len(text)} chars) at index {i}, truncating to {self.max_text_length} chars."
+                    )
+                safe_texts.append(text[: self.max_text_length])
+                modified = True
+            else:
+                safe_texts.append(text)
+
+        return super().get_text_embedding_batch(safe_texts, show_progress, **kwargs)
+
+    def get_query_embedding(self, query: str) -> List[float]:
+        # Handle query similarly
+        if not query or not query.strip():
+            logger.warning("Empty query encountered, replacing with placeholder.")
+            return super().get_query_embedding("empty")
+
+        if len(query) > self.max_text_length:
+            logger.warning(f"Query too long ({len(query)} chars), truncating.")
+            query = query[: self.max_text_length]
+
+        return super().get_query_embedding(query)
+
+    async def aget_text_embedding_batch(
+        self, texts: List[str], show_progress: bool = False, **kwargs: Any
+    ) -> List[List[float]]:
+        # Async version
+        safe_texts = []
+        modified = False
+
+        for i, text in enumerate(texts):
+            if not text or not text.strip():
+                safe_texts.append("empty")
+                modified = True
+                continue
+
+            if len(text) > self.max_text_length:
+                if not modified:
+                    logger.warning(
+                        f"Text too long ({len(text)} chars) at index {i}, truncating to {self.max_text_length} chars."
+                    )
+                safe_texts.append(text[: self.max_text_length])
+                modified = True
+            else:
+                safe_texts.append(text)
+
+        return await super().aget_text_embedding_batch(
+            safe_texts, show_progress, **kwargs
+        )
+
+    async def aget_query_embedding(self, query: str) -> List[float]:
+        if not query or not query.strip():
+            return await super().aget_query_embedding("empty")
+        if len(query) > self.max_text_length:
+            query = query[: self.max_text_length]
+        return await super().aget_query_embedding(query)

@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 import jieba
 from src.config.rules import rules
+from src.config.settings import settings
 from src.model.schemas import (
     AgentState,
     EvaluationResult,
@@ -11,11 +12,21 @@ from src.model.schemas import (
     DimensionAnalysis,
 )
 from src.core.nodes.base import BaseNode
+from src.core.ml.qwen_scorer import QwenScorer
 from src.utils.logger import logger
 
 
 class ScoringNode(BaseNode):
     """评分"""
+
+    def __init__(self):
+        super().__init__()
+        self.qwen_scorer = (
+            QwenScorer()
+            if settings.ml_scoring_enabled and settings.ml_scoring_mode == "qwen"
+            else None
+        )
+        # TODO: 后续添加XGBoost scorer初始化
 
     async def __call__(self, state: AgentState) -> Dict[str, Any]:
         logger.info("Executing Scoring Node...")
@@ -30,16 +41,54 @@ class ScoringNode(BaseNode):
             child, plan, child_state, docs
         )
 
-        # Level 2 & 3: ML Prediction & Fusion (Placeholder for Phase 2)
-        # currently just use AHP score
+        ahp_scores = {
+            "scientific": dimension_analysis["scientific_match"].score,
+            "age": dimension_analysis["age_appropriateness"].score,
+            "safety": dimension_analysis["safety"].score,
+            "total": score,
+        }
+
+        # Level 2: ML Prediction
+        ml_score = score
+        ml_feature_importance = {}
+        ml_reasoning = ""
+        if settings.ml_scoring_enabled:
+            if settings.ml_scoring_mode == "qwen" and self.qwen_scorer:
+                ml_score, ml_feature_importance, ml_reasoning = (
+                    await self.qwen_scorer.predict(
+                        child, plan, child_state, docs, ahp_scores
+                    )
+                )
+            # TODO: 后续添加XGBoost模式支持
+
+        # Level 3: Fusion
+        final_score = (
+            score * settings.ml_scoring_weight_ahp
+            + ml_score * settings.ml_scoring_weight_ml
+        )
+        final_score = round(max(0, min(100, final_score)), 1)
+
+        # 合并解释
+        if settings.ml_scoring_enabled:
+            ml_explanation = f" ML模型预测得分{ml_score:.0f} (权重{settings.ml_scoring_weight_ml*100:.0f}%)。"
+            if ml_reasoning:
+                ml_explanation += f" ML分析: {ml_reasoning}"
+            explanation += ml_explanation
 
         result = EvaluationResult(
-            score=round(score, 1),
+            score=final_score,
             reasoning=f"综合评分基于科学性、年龄适配度和安全性分析。{explanation}",
             shap_explanation={
-                "scientific_match": 40,  # weight placeholder
-                "age_appropriateness": 30,
-                "safety": 30,
+                "scientific_match": 40 * settings.ml_scoring_weight_ahp
+                + ml_feature_importance.get("scientific_match", 0)
+                * settings.ml_scoring_weight_ml,
+                "age_appropriateness": 30 * settings.ml_scoring_weight_ahp
+                + ml_feature_importance.get("age_appropriateness", 0)
+                * settings.ml_scoring_weight_ml,
+                "safety": 30 * settings.ml_scoring_weight_ahp
+                + ml_feature_importance.get("safety", 0)
+                * settings.ml_scoring_weight_ml,
+                **ml_feature_importance,
             },
             dimension_analysis=dimension_analysis,
             suggestions=suggestions,
@@ -69,14 +118,16 @@ class ScoringNode(BaseNode):
         scientific_score = 0
         scientific_reasoning = []
         scientific_issues = []
-        
+
         doc_match_count = 0
         if docs:
             # 简单逻辑：如果有相关文档支持，且文档相关性高，则得分高
             avg_relevance = sum(d.relevance_score for d in docs) / len(docs)
             scientific_score = min(100, avg_relevance * 100)
             doc_match_count = len(docs)
-            scientific_reasoning.append(f"基于 {doc_match_count} 条专业文献支持，平均相关度 {avg_relevance:.0%}")
+            scientific_reasoning.append(
+                f"基于 {doc_match_count} 条专业文献支持，平均相关度 {avg_relevance:.0%}"
+            )
         else:
             scientific_score = 50  # 默认中等
             scientific_issues.append("缺乏明确的科学依据支持")
@@ -100,35 +151,42 @@ class ScoringNode(BaseNode):
                     if issue in goal or goal in issue:
                         matched = True
                         break
-                
+
                 if matched:
                     covered_issues += 1
 
             issue_coverage = covered_issues / len(child.issues)
             scientific_score = (scientific_score * 0.7) + (issue_coverage * 100 * 0.3)
-            scientific_reasoning.append(f"计划目标覆盖了 {covered_issues}/{len(child.issues)} 个家长主诉问题")
-        
+            scientific_reasoning.append(
+                f"计划目标覆盖了 {covered_issues}/{len(child.issues)} 个家长主诉问题"
+            )
+
         dimension_analysis["scientific_match"] = DimensionAnalysis(
             score=scientific_score,
             weight=rules.scoring.weight_scientific,
             analysis="; ".join(scientific_reasoning),
-            issues=scientific_issues
+            issues=scientific_issues,
         )
 
         # --- 2. Age Appropriateness (30%) ---
         age_score = 100
         age_reasoning = []
         age_issues = []
-        
+
         total_duration = sum(
             a.duration_minutes * a.frequency_weekly for a in plan.activities
         )
         age_reasoning.append(f"周总训练时长: {total_duration}分钟")
 
         # 规则示例：5岁以下每周不宜超过 300 分钟高强度结构化训练 (假设)
-        if child.age < 5 and total_duration > rules.scoring.max_weekly_duration_preschool:
+        if (
+            child.age < 5
+            and total_duration > rules.scoring.max_weekly_duration_preschool
+        ):
             age_score -= rules.scoring.penalty_duration_overlimit
-            age_issues.append(f"周总时长({total_duration}min)超过幼儿建议上限({rules.scoring.max_weekly_duration_preschool}min)")
+            age_issues.append(
+                f"周总时长({total_duration}min)超过幼儿建议上限({rules.scoring.max_weekly_duration_preschool}min)"
+            )
             suggestions.append(
                 f"对于 {child.age} 岁儿童，每周结构化训练时长过长 ({total_duration}分钟)，建议缩减。"
             )
@@ -136,25 +194,29 @@ class ScoringNode(BaseNode):
         # 检查单次时长
         long_activities = []
         for activity in plan.activities:
-            if child.age < 6 and activity.duration_minutes > rules.scoring.max_single_duration_preschool:
+            if (
+                child.age < 6
+                and activity.duration_minutes
+                > rules.scoring.max_single_duration_preschool
+            ):
                 age_score -= rules.scoring.penalty_single_duration_overlimit
                 long_activities.append(activity.name)
                 suggestions.append(
                     f"活动 '{activity.name}' 单次时长 ({activity.duration_minutes}分) 对幼儿过长，建议拆分。"
                 )
-        
+
         if long_activities:
             age_issues.append(f"部分活动单次时长过长: {', '.join(long_activities)}")
         else:
             age_reasoning.append("单次活动时长设置合理")
 
         age_score = max(0, age_score)
-        
+
         dimension_analysis["age_appropriateness"] = DimensionAnalysis(
             score=age_score,
             weight=rules.scoring.weight_age,
             analysis="; ".join(age_reasoning),
-            issues=age_issues
+            issues=age_issues,
         )
 
         # --- 3. Safety (30%) ---
@@ -166,7 +228,9 @@ class ScoringNode(BaseNode):
         high_risk_activities = [a for a in plan.activities if a.intensity == "high"]
         if child.age < 4 and high_risk_activities:
             safety_score -= rules.scoring.penalty_high_intensity_preschool
-            safety_issues.append(f"低龄儿童包含 {len(high_risk_activities)} 项高强度活动")
+            safety_issues.append(
+                f"低龄儿童包含 {len(high_risk_activities)} 项高强度活动"
+            )
             suggestions.append("低龄儿童应避免过多高强度活动。")
         else:
             safety_reasoning.append("活动强度与年龄基本匹配")
@@ -187,20 +251,25 @@ class ScoringNode(BaseNode):
             ):
                 for activity in plan.activities:
                     # 使用 category 进行更精准的判断
-                    if activity.category == "vestibular" and activity.intensity == "high":
+                    if (
+                        activity.category == "vestibular"
+                        and activity.intensity == "high"
+                    ):
                         safety_score -= rules.scoring.penalty_vestibular_mismatch
-                        safety_issues.append(f"前庭觉敏感儿童不宜进行高强度前庭活动: {activity.name}")
+                        safety_issues.append(
+                            f"前庭觉敏感儿童不宜进行高强度前庭活动: {activity.name}"
+                        )
                         suggestions.append(
                             f"鉴于前庭觉敏感，活动 '{activity.name}' 建议降低强度或改为温和的前庭活动。"
                         )
 
         safety_score = max(0, safety_score)
-        
+
         dimension_analysis["safety"] = DimensionAnalysis(
             score=safety_score,
             weight=rules.scoring.weight_safety,
             analysis="; ".join(safety_reasoning) if not safety_issues else "",
-            issues=safety_issues
+            issues=safety_issues,
         )
 
         # 结合 RAG 资料丰富解释
@@ -214,7 +283,9 @@ class ScoringNode(BaseNode):
 
         # --- Final Calculation ---
         final_score = (
-            (scientific_score * rules.scoring.weight_scientific) + (age_score * rules.scoring.weight_age) + (safety_score * rules.scoring.weight_safety)
+            (scientific_score * rules.scoring.weight_scientific)
+            + (age_score * rules.scoring.weight_age)
+            + (safety_score * rules.scoring.weight_safety)
         )
 
         explanation = (

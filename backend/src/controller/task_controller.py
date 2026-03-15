@@ -4,6 +4,7 @@ from src.model.schemas import UserInput, AgentState
 from src.core.graph import agent_app
 from llama_index.llms.dashscope import DashScope
 from src.config.settings import settings
+from src.utils.logger import logger
 import json
 import asyncio
 
@@ -70,42 +71,58 @@ async def stream_report_generation(result: dict):
     yield f"event: data\ndata: {json.dumps(metadata, ensure_ascii=False)}\n\n"
 
     # 2. 流式生成 Markdown 内容
+    logger.info(f"Starting streaming report generation, prompts count: {len(prompts)}, prompt length: {len(prompts[0]) if prompts else 0}")
     if settings.dashscope_api_key and prompts:
+        try:
             llm = DashScope(
                 model=settings.llm_models["report_generation"],
                 api_key=settings.dashscope_api_key,
-                max_tokens=4000,
+                max_tokens=8000,
+                temperature=0.7,
+                top_p=0.8,
             )
+            logger.info("LLM initialized successfully for streaming")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM: {e}")
+            error_msg = f"\n[LLM Initialization Error: {str(e)}]\n"
+            yield f"event: message\ndata: {json.dumps(error_msg, ensure_ascii=False)}\n\n"
 
-            # 顺序生成两部分 (Part 1 -> Part 2) 以保证流的顺序
-            for i, prompt in enumerate(prompts):
-                try:
-                    # 使用 stream_complete 方法进行流式生成
-                    # Note: LlamaIndex stream_complete returns a generator
-                    response_gen = await llm.astream_complete(prompt)
-                    async for chunk in response_gen:
-                        # 获取当前 delta 内容
-                        delta = chunk.delta
-                        if delta:
-                            # 替换换行符以适应 SSE 格式
-                            # SSE format requires "data: <content>\n\n"
-                            # We send JSON string to preserve newlines
-                            safe_delta = json.dumps(delta, ensure_ascii=False)
-                            yield f"event: message\ndata: {safe_delta}\n\n"
-                    
-                    # 两部分之间添加分隔符
-                    if i < len(prompts) - 1:
-                        sep = "\n\n"
-                        yield f"event: message\ndata: {json.dumps(sep)}\n\n"
+        # 顺序生成所有部分以保证流的顺序
+        for i, prompt in enumerate(prompts):
+            try:
+                # 使用 stream_complete 方法进行流式生成
+                # Note: LlamaIndex stream_complete returns a generator
+                logger.info(f"Starting LLM stream for prompt {i+1}/{len(prompts)}")
+                response_gen = await llm.astream_complete(prompt)
+                chunk_count = 0
+                async for chunk in response_gen:
+                    # 获取当前 delta 内容
+                    delta = chunk.delta
+                    if delta:
+                        chunk_count += 1
+                        if chunk_count % 10 == 0:  # 每10个chunk打一次日志
+                            logger.debug(f"Received chunk {chunk_count}, delta length: {len(delta)}")
+                        # 替换换行符以适应 SSE 格式
+                        # SSE format requires "data: <content>\n\n"
+                        # We send JSON string to preserve newlines
+                        safe_delta = json.dumps(delta, ensure_ascii=False)
+                        yield f"event: message\ndata: {safe_delta}\n\n"
+                logger.info(f"Completed LLM stream for prompt {i+1}, total chunks: {chunk_count}")
 
-                except Exception as e:
-                    error_msg = f"\n[Generation Error: {str(e)}]\n"
-                    yield f"event: message\ndata: {json.dumps(error_msg)}\n\n"
+                # 多部分之间添加分隔符
+                if i < len(prompts) - 1:
+                    sep = "\n\n"
+                    yield f"event: message\ndata: {json.dumps(sep, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                logger.error(f"Error during prompt {i+1} generation: {e}")
+                error_msg = f"\n[Generation Error: {str(e)}]\n"
+                yield f"event: message\ndata: {json.dumps(error_msg, ensure_ascii=False)}\n\n"
     else:
         # Fallback if no API key
         fallback_msg = "AI Service Unavailable. Showing fallback data.\n\n"
         yield f"event: message\ndata: {json.dumps(fallback_msg)}\n\n"
 
     # 3. 发送完成信号
+    logger.info("Streaming report generation completed successfully")
     yield "event: done\ndata: [DONE]\n\n"
-

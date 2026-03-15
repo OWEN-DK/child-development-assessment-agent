@@ -13,7 +13,7 @@ export const HomePage = () => {
         </div>
       )}
       {report ? (
-        <ReportViewer report={report} onBack={resetAssessment} />
+        <ReportViewer report={report} onBack={resetAssessment} isStreaming={loading} />
       ) : (
         <AssessmentForm onSubmit={submitAssessment} isLoading={loading} />
       )}

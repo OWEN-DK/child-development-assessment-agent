@@ -16,7 +16,7 @@ ActivityCategory = Literal[
     "other",
 ]
 RiskLevel = Literal["Low", "Medium", "High"]
-StatusType = Literal["normal", "weak", "deficit", "unstable", "strong"]
+StatusType = Literal["normal", "weak", "deficit", "unstable", "strong", "unknown"]
 
 # --------------------------
 # 输入数据模型 (Input Models)
@@ -142,7 +142,7 @@ class KnowledgeItem(BaseModel):
 
 class DimensionAnalysis(BaseModel):
     """单项维度分析详情"""
-    
+
     score: float
     weight: float
     analysis: str
@@ -192,5 +192,7 @@ class AgentState(BaseModel):
     evaluation_result: Optional[EvaluationResult] = None
     final_report: Optional[FinalReport] = None
     messages: List[Dict[str, str]] = Field(default_factory=list, description="对话历史")
-    report_prompts: Optional[List[str]] = Field(None, description="用于流式生成的 Prompt 列表")
+    report_prompts: Optional[List[str]] = Field(
+        None, description="用于流式生成的 Prompt 列表"
+    )
     is_streaming: bool = Field(False, description="是否启用流式输出")

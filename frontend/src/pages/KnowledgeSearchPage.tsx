@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  Card, Typography, Input, Button, List, Tag, Space, message, 
-  Empty, Spin, Pagination, Divider, Descriptions, Modal
+  Card, Typography, Input, Button, List, Tag, Space, 
+  Empty, Spin, Pagination, Divider, Descriptions, Modal, App
 } from 'antd';
 import type { InputRef } from 'antd/es/input';
 import { SearchOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons';
@@ -14,6 +14,7 @@ const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
 
 const KnowledgeSearchPage = () => {
+  const { message } = App.useApp();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,7 +104,7 @@ const KnowledgeSearchPage = () => {
   return (
     <div className={styles.container}>
       <Card className={styles.headerCard}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <div>
             <Title level={2}>知识库搜索</Title>
             <Text type="secondary">
@@ -162,7 +163,7 @@ const KnowledgeSearchPage = () => {
                     <List.Item.Meta
                       avatar={<FileTextOutlined style={{ fontSize: '24px', color: '#1890ff' }} />}
                       title={
-                        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                           <div className={styles.resultTitle}>
                             {highlightKeywords(item.content.slice(0, 100) + (item.content.length > 100 ? '...' : ''), query)}
                           </div>
