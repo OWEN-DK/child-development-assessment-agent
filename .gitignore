@@ -103,3 +103,4 @@ storage/
 # Chroma DB
 chroma/
 .chroma/
+.worktrees/
