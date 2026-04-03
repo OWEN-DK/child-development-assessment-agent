@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Tuple
 from pydantic import BaseModel
 from llama_index.llms.dashscope import DashScope
-from backend.src.config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,14 @@ class QueryRouter:
     def __init__(self):
         self.llm = None
         if settings.query_router_llm_enabled:
-            self.llm = DashScope(model=settings.model_query_classification)
+            try:
+                self.llm = DashScope(
+                    model=settings.model_query_classification,
+                    api_key=settings.dashscope_api_key
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize DashScope for QueryRouter: {e}")
+                self.llm = None
     
     def classify(self, query: str) -> QueryClassification:
         """

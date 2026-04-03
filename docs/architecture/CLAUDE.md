@@ -124,6 +124,77 @@
 - **AgentState**: 通过 LangGraph 传递的全局状态对象。
 - **MCP Server**: 用于检索结构化知识的模型上下文协议服务器。
 - **AHP**: 用于基准评分逻辑的层次分析法 (Analytic Hierarchy Process)。
+
+## RAG 系统架构
+
+RAG 系统是本项目知识库检索的核心，采用分层架构，包含文档导入和知识检索两条流水线。完整技术文档见 [RAG_SYSTEM_COMPLETE_DOCUMENTATION.md](./RAG_SYSTEM_COMPLETE_DOCUMENTATION.md)。
+
+### 核心模块
+
+| 模块 | 文件路径 | 职责 |
+|------|----------|------|
+| RAG 门面服务 | `backend/src/service/rag_service.py` | 统一入口，聚合所有子服务 |
+| 检索服务 | `backend/src/service/retrieval_service.py` | 核心检索逻辑，含缓存/重写/同义词扩展 |
+| 文档导入服务 | `backend/src/service/document_ingestion_service.py` | 文档解析→分块→元数据→索引，支持断点续传 |
+| 索引管理服务 | `backend/src/service/index_manager_service.py` | 向量索引生命周期管理，自动持久化 |
+| 混合检索融合器 | `backend/src/core/hybrid_retrieval.py` | BM25 + 向量结果融合，动态权重 |
+| Cross-Encoder 重排序器 | `backend/src/core/reranker.py` | BAAI/bge-reranker-v2-m3 重排序 |
+| 查询路由器 | `backend/src/core/query_router.py` | 简单/复杂查询分类 |
+| 动态年龄过滤器 | `backend/src/core/age_filter.py` | 根据儿童发展阶段动态调整过滤 |
+| 分层内容生成器 | `backend/src/core/layered_content_generator.py` | L0摘要/L1概览/L2详情三层生成 |
+| 上下文压缩器 | `backend/src/core/context_compressor.py` | 检索后上下文压缩，Token预算控制 |
+| PageIndex 包装器 | `backend/src/core/pageindex_wrapper.py` | 外部知识图谱检索，含熔断/重试/降级 |
+| 结果融合器 | `backend/src/core/result_fusion.py` | PageIndex 与混合检索结果融合 |
+| 向量存储工厂 | `backend/src/core/vector_store_factory.py` | 向量存储抽象层，支持多种向量库 |
+| Embedding 封装 | `backend/src/core/embedding.py` | DashScope Embedding 安全包装器 |
+| 元数据处理器 | `backend/src/core/metadata_processor.py` | 分块策略与元数据提取 |
+| 文档解析器 | `backend/src/core/parsers.py` | PDF/EPUB 解析，支持三级降级 |
+
+### 技术栈
+
+| 组件 | 技术选型 |
+|------|----------|
+| RAG 框架 | LlamaIndex |
+| 向量存储 | Chroma (本地持久化) |
+| Embedding | DashScope text-embedding-v4 |
+| BM25 检索 | llama_index.retrievers.bm25 + jieba |
+| 重排序 | Cross-Encoder (BAAI/bge-reranker-v2-m3) |
+| PDF 解析 | PyMuPDF + Qwen-VL (扫描版) |
+| EPUB 解析 | EbookLib + BeautifulSoup |
+| 语义分块 | SemanticSplitterNodeParser |
+| 本地摘要 | summa (TextRank) |
+
+### 关键配置
+
+所有 RAG 配置在 `backend/src/config/settings.py` 中定义，支持环境变量覆盖。主要配置分类：
+
+- **混合检索**: BM25/Vector 权重、合并模式、TopK、动态权重
+- **缓存**: 启用状态、最大容量 (1000)、TTL (3600秒)
+- **分块**: chunk_size (1024/1536)、overlap (200)、语义分块参数
+- **重排序**: 模型名称、initial_k (30)、final_k (5)
+- **年龄过滤**: 严格程度、容忍范围、适配度权重
+- **PageIndex**: 启用状态、熔断/重试/降级配置
+- **自动持久化**: 启用状态、间隔 (300秒)
+- **Embedding**: 模型名称、最大文本长度 (1536)、批处理大小 (10)
+
+### API 端点
+
+路由前缀: `/rag`
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/rag/upload` | POST | 上传 PDF/EPUB 并后台索引 |
+| `/rag/tasks/{task_id}/cancel` | POST | 取消上传任务 |
+| `/rag/tasks` | GET | 列出所有上传任务 |
+| `/rag/tasks/{task_id}` | GET | 查询任务状态 |
+| `/rag/status` | GET | RAG 服务状态 |
+| `/rag/documents/{filename}` | DELETE | 删除文档 |
+| `/rag/documents` | GET | 列出已索引文档 |
+| `/rag/search` | GET | 搜索知识库内容 |
+| `/rag/documents/{file_hash}/chunks` | GET | 获取文档分块列表 |
+| `/rag/chunks/{chunk_id}` | GET | 获取分块详情 |
+| `/rag/layered-progress/{task_id}` | GET | 分层内容生成进度 |
+
 # Claude/Agent Rules
 
 ## Backend Development
@@ -135,3 +206,7 @@
   - 新增配置项时必须同时添加到 `.env.dev.example` 作为示例
 - **代码规范**:
   - 所有配置相关的修改必须同步更新配置文件，不得直接在代码中写死数值
+- **RAG 系统修改规范**:
+  - 修改 RAG 相关逻辑后，必须同步更新 `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` 文档
+  - 新增的 RAG 模块必须在本文档的"RAG 系统架构"章节中注册
+  - 配置变更必须更新配置表格，包括环境变量名、默认值、说明

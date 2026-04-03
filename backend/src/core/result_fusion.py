@@ -4,7 +4,7 @@
 import hashlib
 import re
 from typing import List, Dict, Any
-from backend.src.config.settings import settings
+from src.config.settings import settings
 
 
 class ResultFusion:

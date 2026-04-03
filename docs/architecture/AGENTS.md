@@ -53,16 +53,113 @@
 - **职责**: 检索与计划和儿童画像相关的科学依据及知识库条目。
 - **输入**: `child_profile` (Issues), `proposed_plan` (Goals)。
 - **输出**: `retrieved_docs` (结构化知识条目列表)。
-- **核心架构**: 采用 **BM25关键词检索 + 向量语义检索** 混合架构。
-- **文档导入流程**:
-  1. **去重校验**: 基于文件MD5哈希自动去重。
-  2. **智能解析**: 支持 PDF/EPUB，自动识别扫描版 PDF 并调用 OCR。
-  3. **语义分块**: 1024 字符分块，20 字符重叠。
-  4. **元数据提取**: LLM 自动提取脑区、主题、益处、年龄范围等。
-- **检索逻辑**:
-  - 根据 `issues` 和 `goals` 构造查询。
-  - 调用 `rag_service` 执行混合检索 (BM25 + Vector)。
-  - 返回 Top K 相关文档。
+- **核心架构**: 采用 **BM25关键词检索 + 向量语义检索 + Cross-Encoder重排序** 混合架构，详见 [RAG系统完整技术文档](../RAG_SYSTEM_COMPLETE_DOCUMENTATION.md)。
+
+#### 2.3.1 文档导入流水线 (Ingestion Pipeline)
+
+```
+用户上传 PDF/EPUB → 文档解析 → 智能分块 → 元数据提取 → 向量Embedding → 索引插入 → 持久化存储
+```
+
+**阶段 1: 文档解析**
+- **解析器工厂**: `get_parser()` 根据文件扩展名自动选择解析器
+- **PDFParser**: PyMuPDF 传统文本提取，支持书签(TOC)分割为章节级 Document
+- **PDFVLParser**: Qwen-VL 多模态 OCR，扫描版 PDF 专用，ThreadPoolExecutor 并行解析
+- **PDFParserV2**: 三级降级解析器 (VLM → 传统文本提取)，含内容质量校验
+- **EPUBParser**: EbookLib + BeautifulSoup，支持 TOC 层级结构
+- **扫描版检测**: 文本提取率 < 50% 或平均文本长度 < 100 → 触发 VL 解析
+
+**阶段 2: 智能分块**
+- **章节级分块** (`split_chapters_into_chunks`): EPUB/带书签 PDF 使用
+  - 预切分超长章节 (>3000 字符) → 语义分块 → 合并相邻小块 → 二次细分
+- **页面级分块** (`split_pages_into_chunks`): 普通 PDF 使用
+  - 语义分块 → 降级为 SentenceSplitter (chunk_size=1536, overlap=200)
+- **父子块分块** (`hierarchical_chunking`): 父块提供上下文，子块用于精确检索
+- **语义分块器**: 自动语言检测 (中/英文字母占比 > 70%)，中文 buffer_size=5/threshold=90，英文 buffer_size=3/threshold=75
+- **分隔符优先级**: 标题边界 → 段落边界 → 句子结束符
+
+**阶段 3: 元数据提取**
+- **标准模式**: 每个节点调用 LLM 提取 (topics, brain_regions, target_age_min/max, developmental_domains, difficulty_level)，并发数=20
+- **分层模式** (性能提升约80倍):
+  - 文档级元数据: 从第一个节点提取一次，复用给所有节点
+  - 关键块识别: 章节开头 + 内容突变处 (>50%变化) + 均匀采样 (每10选1)
+  - 关键块: LLM 提取；普通块: 规则提取 (正则匹配年龄、领域标签映射)
+- **内容去重**: MD5 content_hash 去重，跳过已存在的块
+
+**阶段 4: 索引插入**
+- **分批插入**: batch_size=100，每批报告进度
+- **向量存储**: Chroma (本地持久化)，支持扩展到 Pinecone/Milvus/Weaviate
+- **Embedding**: DashScope text-embedding-v4，最大文本长度 1536 字符，批处理大小 10
+- **自动持久化**: 后台线程，间隔 300 秒，原子写入 + 备份恢复
+
+**阶段 5: 分层内容生成 (可选)**
+- **L0 摘要** (~100字): LLM → summa TextRank → 直接截断
+- **L1 概览** (~500字): LLM → summa TextRank → 直接截断
+- **L2 详情**: 原始内容
+- **批量生成**: 动态批次大小 (20/10)，并发限制 8
+
+#### 2.3.2 知识检索流水线 (Retrieval Pipeline)
+
+```
+用户查询 → 查询路由 → 缓存检查 → 查询重写 → 同义词扩展 → 年龄过滤 → 混合检索 → 重排序 → 内容去重 → 返回 KnowledgeItem
+```
+
+**步骤 1: 查询路由 (QueryRouter)**
+- LLM 分类: 简单查询 (事实性/定义性) vs 复杂查询 (比较分析/多步骤)
+- 模型: qwen3-omni-flash，置信度阈值 0.8，最多重试 2 次
+- 降级: 解析失败 → 默认复杂查询
+
+**步骤 2: 缓存检查 (CacheService)**
+- 缓存键: md5(query + age + limit)
+- 容量: 1000 条目，TTL: 3600 秒，LRU 淘汰
+
+**步骤 3: 查询重写 (可选)**
+- 触发条件: rag_query_rewrite_enabled = True
+- 将自然语言转为更适合检索的关键词短语
+
+**步骤 4: 同义词扩展**
+- LLM 生成 JSON 格式同义词列表
+- 质量验证: 过滤单字、过长词 (>10)、非中文字符
+
+**步骤 5: 动态年龄过滤**
+- 根据儿童发展阶段调整过滤参数:
+  - 婴儿期 (0-1岁): tolerance=1, strictness=0.9, weight=0.5
+  - 幼儿期 (1-3岁): tolerance=2, strictness=0.8, weight=0.4
+  - 学龄前 (3-6岁): tolerance=2, strictness=0.7, weight=0.3
+  - 学龄期 (6-12岁): tolerance=3, strictness=0.6, weight=0.25
+- 构建 MetadataFilter: target_age_min/max 范围过滤
+
+**步骤 6: 混合检索执行 (并行)**
+- **BM25 检索**: BM25Retriever + jieba 分词，Top-K=10
+- **向量检索**: VectorRetriever (Chroma) + DashScope Embedding，Top-K=10
+- **结果融合** (HybridRetrievalMerger):
+  - BM25 分数校准: Sigmoid 校准到 [0,1] (scale_factor=5)
+  - 向量分数校准: 分段校准 (>=0.5 映射到 [0.5,1.0]，<0.5 映射到 [0,0.25])
+  - 动态权重: 关键词密度 >0.5 → BM25权重0.7；<0.2 → BM25权重0.3；默认0.5
+  - 加权融合 + 全局归一化 + 按 node_id 去重
+
+**步骤 7: Cross-Encoder 重排序**
+- 模型: BAAI/bge-reranker-v2-m3 (懒加载)
+- 初始候选 30 个 → Cross-Encoder 评分 → 返回 Top 5
+
+**步骤 8: 转换为 KnowledgeItem**
+- 年龄适配度计算 (child_development_engine)
+- 内容去重: 精确匹配 + 包含关系 + difflib 相似度 (>0.85)
+- 阈值过滤
+
+**步骤 9: 复杂查询增强 (可选)**
+- 触发条件: query_type == "complex" 且 pageindex_enabled = True
+- PageIndex 检索: 外部知识图谱，熔断机制 (失败5次→熔断60秒)，重试 (3次指数退避)
+- 结果融合: 去重 + 分数提升 (1.2x) + 混合补充 (最多5个) + 重新归一化
+
+#### 2.3.3 搜索页面专用检索
+
+与知识检索的区别:
+- 初始候选: rag_reranker_initial_k (30)
+- 无年龄过滤
+- 搜索专用融合策略: 纯向量惩罚 (no_match_vector_penalty=0.5)
+- 搜索专用阈值: hybrid/vector 均为 0.35
+- 相对截断: 保留 Top 50% 结果
 
 ### 2.4 Node4: 评分 Agent (Value Assessment)
 - **角色**: 裁判 / 评估员

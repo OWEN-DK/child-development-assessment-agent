@@ -109,6 +109,8 @@ class DocumentIngestionService:
         self.index_manager = index_manager
         self.metadata_processor = MetadataProcessor()
         self.task_manager = import_task_manager
+        from src.core.pageindex_wrapper import PageIndexWrapper
+        self.pageindex_wrapper = PageIndexWrapper()
 
     async def ingest_book_resumable(
         self,
@@ -542,6 +544,10 @@ class DocumentIngestionService:
                 progress=100.0,
             )
             document_manager.add_document(doc_record)
+            
+            # 推送到 PageIndex
+            if settings.pageindex_enabled:
+                asyncio.create_task(self.pageindex_wrapper.index_document(file_path, file_hash))
 
             logger.info(f"Successfully ingested {file_path}")
             if progress_callback:

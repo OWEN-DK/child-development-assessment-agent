@@ -20,7 +20,18 @@ class RagService:
         self.cache_service = self.injector.get(ICacheService)
         self.retrieval_service = self.injector.get(IRetrievalService)
         self.document_ingestion_service = self.injector.get(IDocumentIngestionService)
-        logger.info("RagService initialized with dependency injection")
+        
+        # Initialize PageIndex hybrid architecture components
+        from src.core.query_router import QueryRouter, QueryType
+        from src.core.pageindex_wrapper import PageIndexWrapper
+        from src.core.result_fusion import ResultFusion
+        
+        self.query_router = QueryRouter()
+        self.pageindex_wrapper = PageIndexWrapper()
+        self.result_fusion = ResultFusion()
+        self.QueryType = QueryType
+        
+        logger.info("RagService initialized with dependency injection and PageIndex components")
 
     @property
     def index(self):
@@ -28,8 +39,32 @@ class RagService:
         return self.index_manager.get_index()
 
     async def retrieve_knowledge(self, query: str, age: int, limit: int = 3, user_id: str = None):
-        """检索知识点（原有接口）"""
-        return await self.retrieval_service.retrieve_knowledge(query, age, limit, user_id)
+        """检索知识点（增强：支持 PageIndex 混合架构）"""
+        # 1. 意图分类
+        classification = self.query_router.classify(query)
+        logger.info(f"Query classified as {classification.query_type.value}, confidence: {classification.confidence:.2f}")
+
+        # 2. 并行获取检索结果
+        import asyncio
+        
+        hybrid_task = self.retrieval_service.retrieve_knowledge(query, age, limit, user_id)
+        
+        if classification.query_type == self.QueryType.COMPLEX and settings.pageindex_enabled:
+            # 复杂查询：并行执行混合检索和 PageIndex
+            pageindex_task = self.pageindex_wrapper.query(query)
+            hybrid_results, pageindex_results = await asyncio.gather(hybrid_task, pageindex_task)
+            
+            # 融合结果
+            fused_results = self.result_fusion.fuse(
+                hybrid_results=hybrid_results,
+                pageindex_results=pageindex_results,
+                query_type="complex",
+                limit=limit
+            )
+            return fused_results
+        else:
+            # 简单查询：仅使用现有的混合检索
+            return await hybrid_task
 
     async def ingest_book(
         self, file_path: str, original_filename: str = None, progress_callback=None
