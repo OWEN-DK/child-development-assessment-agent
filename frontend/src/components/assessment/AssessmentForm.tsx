@@ -9,8 +9,8 @@ import {
   ProCard,
   ProFormDatePicker,
 } from '@ant-design/pro-components';
-import { UserInput } from '../models';
-import { useAssessmentForm } from '../hooks/useAssessmentForm';
+import { UserInput } from '../../models/assessment';
+import { useAssessmentForm } from '../../features/assessment/hooks/useAssessmentForm';
 import styles from './AssessmentForm.module.scss';
 
 interface AssessmentFormProps {

@@ -1,5 +1,6 @@
 from typing import List, Any, Optional
 import time
+import asyncio
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 from src.utils.logger import logger
 
@@ -66,6 +67,12 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(f"Embedding API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}")
+                
+                # 非瞬时错误不重试：无效API密钥、权限错误等
+                non_transient_errors = ["InvalidApiKey", "401", "403", "AccessDenied", "Unauthorized", "Forbidden"]
+                if any(err in error_msg for err in non_transient_errors):
+                    logger.error(f"Non-transient error detected, aborting retries: {error_msg}")
+                    raise
                 
                 # 如果是最后一次尝试，抛出异常
                 if attempt == max_retries - 1:
@@ -167,9 +174,34 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
             else:
                 safe_texts.append(text)
 
-        return await super().aget_text_embedding_batch(
-            safe_texts, show_progress, **kwargs
-        )
+        # 添加重试机制以应对网络波动
+        max_retries = 3
+        retry_delay = 2.0  # 秒
+        
+        for attempt in range(max_retries):
+            try:
+                return await super().aget_text_embedding_batch(
+                    safe_texts, show_progress, **kwargs
+                )
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Async embedding API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}")
+                
+                # 非瞬时错误不重试：无效API密钥、权限错误等
+                non_transient_errors = ["InvalidApiKey", "401", "403", "AccessDenied", "Unauthorized", "Forbidden"]
+                if any(err in error_msg for err in non_transient_errors):
+                    logger.error(f"Non-transient error detected, aborting retries: {error_msg}")
+                    raise
+                
+                # 如果是最后一次尝试，抛出异常
+                if attempt == max_retries - 1:
+                    logger.error(f"Async embedding API call failed after {max_retries} retries")
+                    raise
+                
+                # 指数退避
+                wait_time = retry_delay * (2 ** attempt)
+                logger.info(f"Retrying in {wait_time:.1f} seconds...")
+                await asyncio.sleep(wait_time)
 
     async def aget_query_embedding(self, query: str) -> List[float]:
         if not query or not query.strip():

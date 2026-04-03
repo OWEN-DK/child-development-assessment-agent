@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Typography, List, Button, Space, Tag, Input, Descriptions, Modal, App } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
-import { getDocumentChunks, getChunkDetail, DocumentChunk, ChunkDetail } from '../api/client';
+import { getDocumentChunks, getChunkDetail } from '../api/documents';
+import type { DocumentChunk, ChunkDetail } from '../api/documents/types';
 import styles from './BookChunksPage.module.scss';
 
 const { Title, Text, Paragraph } = Typography;

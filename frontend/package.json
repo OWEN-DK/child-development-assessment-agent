@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,scss,css}\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",

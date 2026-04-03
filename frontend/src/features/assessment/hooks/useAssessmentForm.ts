@@ -1,6 +1,11 @@
-import { UserInput } from '../models';
+import type { UserInput } from '../../../models/assessment';
 
-export const useAssessmentForm = () => {
+interface UseAssessmentFormReturn {
+  initialValues: UserInput;
+  handleFinish: (values: UserInput, onSubmit: (data: UserInput) => Promise<void>) => Promise<boolean>;
+}
+
+export const useAssessmentForm = (): UseAssessmentFormReturn => {
   const initialValues: UserInput = {
     child_profile: {
       name: '',
@@ -19,7 +24,6 @@ export const useAssessmentForm = () => {
   };
 
   const handleFinish = async (values: UserInput, onSubmit: (data: UserInput) => Promise<void>) => {
-    // 简单的数据清洗，确保数组存在
     const cleanValues = { ...values };
     if (!cleanValues.child_profile.issues) cleanValues.child_profile.issues = [];
     if (!cleanValues.child_profile.interests) cleanValues.child_profile.interests = [];

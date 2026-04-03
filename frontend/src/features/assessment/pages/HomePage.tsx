@@ -1,8 +1,9 @@
+import React from 'react';
 import { useAssessment } from '../hooks/useAssessment';
-import { AssessmentForm } from '../components/AssessmentForm';
-import { ReportViewer } from '../components/ReportViewer';
+import { AssessmentForm } from '../../../components/assessment/AssessmentForm';
+import { ReportViewer } from '../../../components/assessment/ReportViewer';
 
-export const HomePage = () => {
+export const HomePage: React.FC = () => {
   const { report, loading, error, submitAssessment, resetAssessment } = useAssessment();
 
   return (

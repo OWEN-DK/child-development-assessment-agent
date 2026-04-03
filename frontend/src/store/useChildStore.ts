@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ChildProfile } from '../models';
+import type { ChildProfile } from '../models/assessment';
 
 interface ChildStore {
   currentProfile: ChildProfile | null;

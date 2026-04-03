@@ -636,7 +636,7 @@ class IndexManagerService(IIndexManager):
         if hasattr(self, "_stop_persist_thread"):
             self._stop_persist_thread.set()
 
-        if hasattr(self, "_persist_thread") and self._persist_thread.is_alive():
+        if hasattr(self, "_persist_thread") and self._persist_thread is not None and self._persist_thread.is_alive():
             self._persist_thread.join(timeout=5)
 
         # 退出前持久化脏数据

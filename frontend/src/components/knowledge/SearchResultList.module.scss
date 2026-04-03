@@ -1,0 +1,36 @@
+.resultItem {
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.resultTitle {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.highlight {
+  background-color: #fff566;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.resultMeta {
+  margin-top: 8px;
+}
+
+.topicRow {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}

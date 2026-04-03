@@ -1,8 +1,18 @@
 import { useState, useCallback, useRef } from 'react';
-import { UserInput, FinalReport, StreamingReportData } from '../models';
-import { assessDevelopment, assessDevelopmentStream } from '../api/client';
+import { assessDevelopment, assessDevelopmentStream } from '../../../api/assessment';
+import type { UserInput, FinalReport, StreamingReportData } from '../../../models/assessment';
 
-export const useAssessment = () => {
+interface UseAssessmentReturn {
+  report: FinalReport | null;
+  loading: boolean;
+  error: string | null;
+  streamingContent: string;
+  streamingData: StreamingReportData | null;
+  submitAssessment: (data: UserInput, useStreaming?: boolean) => Promise<void>;
+  resetAssessment: () => void;
+}
+
+export const useAssessment = (): UseAssessmentReturn => {
   const [report, setReport] = useState<FinalReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,13 +27,11 @@ export const useAssessment = () => {
     setStreamingData(null);
     setReport(null);
 
-    // 取消之前的流式请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
     if (!useStreaming) {
-      // 非流式模式
       try {
         const result = await assessDevelopment(data);
         if (typeof result === 'string') {
@@ -40,14 +48,12 @@ export const useAssessment = () => {
       return;
     }
 
-    // 流式模式
     try {
       abortControllerRef.current = new AbortController();
 
       await assessDevelopmentStream(
         data,
         (data) => {
-          // 收到结构化数据
           setStreamingData(data);
           setReport({
             markdown_content: '',
@@ -55,7 +61,6 @@ export const useAssessment = () => {
           });
         },
         (chunk) => {
-          // 收到内容片段，逐字追加
           setStreamingContent((prev) => prev + chunk);
           setReport((prev) => prev ? {
             ...prev,
@@ -66,12 +71,10 @@ export const useAssessment = () => {
           });
         },
         () => {
-          // 流式生成完成
           setLoading(false);
           abortControllerRef.current = null;
         },
         (errorMsg) => {
-          // 发生错误
           setError(errorMsg);
           setLoading(false);
           abortControllerRef.current = null;
@@ -86,7 +89,6 @@ export const useAssessment = () => {
   }, []);
 
   const resetAssessment = useCallback(() => {
-    // 取消正在进行的流式请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;

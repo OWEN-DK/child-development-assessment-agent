@@ -2,7 +2,7 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import { Card, Button, Typography, Space, Collapse, Spin } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
-import { FinalReport } from '../models';
+import { FinalReport } from '../../models/assessment';
 
 const { Title, Paragraph } = Typography;
 const { Panel } = Collapse;
