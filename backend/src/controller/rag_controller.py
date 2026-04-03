@@ -270,7 +270,7 @@ async def get_rag_status():
 
     # 索引就绪需要同时满足：索引存在且至少有一个已索引文档
     has_documents = len(document_manager.list_documents()) > 0
-    index_ready = rag_service.index is not None and has_documents
+    index_ready = rag_service.index_manager.is_index_available() and has_documents
 
     return {
         "index_ready": index_ready,
@@ -284,7 +284,30 @@ async def delete_document(filename: str):
     """
     删除指定文档及其索引
     """
+    from src.service.document_ingestion_service import import_task_manager
+    
+    # 先删除文档记录
     success = rag_service.delete_document(filename)
+    
+    # 清理相关的任务状态
+    try:
+        # 查找并删除所有与该文件相关的任务
+        for task_file in os.listdir(import_task_manager.task_dir):
+            if not task_file.endswith(".json"):
+                continue
+            task_path = os.path.join(import_task_manager.task_dir, task_file)
+            try:
+                import json
+                with open(task_path, "r", encoding="utf-8") as f:
+                    task_state = json.load(f)
+                if task_state.get("file_name") == filename:
+                    os.remove(task_path)
+                    logger.info(f"Deleted task state: {task_file}")
+            except Exception as e:
+                logger.warning(f"Failed to process task state {task_file}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to cleanup task states: {e}")
+    
     if not success:
         raise HTTPException(
             status_code=404, detail="Document not found or deletion failed."
@@ -329,3 +352,73 @@ async def search_knowledge_content(query: str, limit: int = Query(20, ge=1, le=1
         return {"status": "success", "total": len(results), "results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
+
+
+# 分层内容生成进度查询接口
+@router.get("/layered-progress/{task_id}")
+async def get_layered_content_progress(task_id: str):
+    """
+    查询分层内容生成任务进度
+    """
+    from src.core.layered_content_generator import get_task_progress
+    
+    progress = get_task_progress(task_id)
+    if not progress:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    return {
+        "task_id": task_id,
+        **progress
+    }
+
+
+@router.get("/layered-progress")
+async def list_all_layered_tasks():
+    """
+    获取所有分层内容生成任务进度
+    """
+    from src.core.layered_content_generator import list_all_tasks
+    
+    tasks = list_all_tasks()
+    return {"tasks": tasks}
+
+
+@router.get("/documents/{file_hash}/chunks")
+async def get_document_chunks(file_hash: str, page: int = 1, page_size: int = 20):
+    """
+    获取指定文档的分块列表（支持分页）
+    
+    Args:
+        file_hash: 文档哈希值
+        page: 页码（从 1 开始，默认 1）
+        page_size: 每页数量（默认 20，最大 100）
+    """
+    # 限制 page_size 范围
+    page_size = min(max(1, page_size), 100)
+    
+    logger.info(f"Getting chunks for file_hash: {file_hash}, page: {page}, page_size: {page_size}")
+    result = rag_service.get_document_chunks(file_hash, page, page_size)
+    logger.info(f"Found {result['total']} chunks for file_hash: {file_hash}")
+    return {
+        "status": "success",
+        "file_hash": file_hash,
+        "total": result["total"],
+        "page": result["page"],
+        "page_size": result["page_size"],
+        "total_pages": result["total_pages"],
+        "chunks": result["chunks"]
+    }
+
+
+@router.get("/chunks/{chunk_id}")
+async def get_chunk_detail(chunk_id: str):
+    """
+    获取指定分块的详细信息
+    """
+    chunk = rag_service.get_chunk_detail(chunk_id)
+    if not chunk:
+        raise HTTPException(status_code=404, detail="分块不存在")
+    return {
+        "status": "success",
+        "chunk": chunk
+    }

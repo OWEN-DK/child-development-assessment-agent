@@ -1,19 +1,11 @@
-from typing import List, Any
+from typing import List, Any, Optional
 from src.config.settings import settings
-from src.service.index_manager_service import IndexManagerService
-from src.service.cache_service import CacheService
-from src.service.retrieval_service import RetrievalService
-from src.service.document_ingestion_service import DocumentIngestionService
+from src.core.di_container import injector
+from src.core.interfaces import IIndexManager, ICacheService, IRetrievalService, IDocumentIngestionService
 from src.utils.logger import logger
 
 # 兼容原有导出
 STORAGE_DIR = settings.rag_storage_dir
-
-# 单例实例
-index_manager = IndexManagerService()
-cache_service = CacheService()
-retrieval_service = RetrievalService(index_manager, cache_service)
-document_ingestion_service = DocumentIngestionService(index_manager, retrieval_service)
 
 
 class RagService:
@@ -22,21 +14,22 @@ class RagService:
     用于向后兼容，新代码建议直接使用各个子服务
     """
 
-    def __init__(self):
-        self.index_manager = index_manager
-        self.cache_service = cache_service
-        self.retrieval_service = retrieval_service
-        self.document_ingestion_service = document_ingestion_service
-        logger.info("RagService initialized with split architecture")
+    def __init__(self, injector_instance=None):
+        self.injector = injector_instance or injector
+        self.index_manager = self.injector.get(IIndexManager)
+        self.cache_service = self.injector.get(ICacheService)
+        self.retrieval_service = self.injector.get(IRetrievalService)
+        self.document_ingestion_service = self.injector.get(IDocumentIngestionService)
+        logger.info("RagService initialized with dependency injection")
 
     @property
     def index(self):
         """兼容原有代码对index的直接访问"""
         return self.index_manager.get_index()
 
-    async def retrieve_knowledge(self, query: str, age: int, limit: int = 3):
+    async def retrieve_knowledge(self, query: str, age: int, limit: int = 3, user_id: str = None):
         """检索知识点（原有接口）"""
-        return await self.retrieval_service.retrieve_knowledge(query, age, limit)
+        return await self.retrieval_service.retrieve_knowledge(query, age, limit, user_id)
 
     async def ingest_book(
         self, file_path: str, original_filename: str = None, progress_callback=None
@@ -56,6 +49,24 @@ class RagService:
     async def search_content(self, query: str, limit: int = 20) -> List[dict]:
         """搜索内容（原有接口）"""
         return await self.retrieval_service.search_content(query, limit)
+    
+    def get_document_chunks(self, file_hash: str, page: int = 1, page_size: int = 20) -> dict:
+        """获取指定文档的分块列表（支持分页）"""
+        return self.index_manager.get_document_chunks(file_hash, page, page_size)
+    
+    def get_chunk_detail(self, chunk_id: str) -> Optional[dict]:
+        """获取指定分块的详细信息"""
+        return self.index_manager.get_chunk_detail(chunk_id)
+
+
+# 兼容层：废弃接口迁移到这里
+class LegacyRagService(RagService):
+    """已废弃的兼容接口，仅用于旧系统过渡"""
+    @property
+    def index(self):
+        """兼容原有代码对index的直接访问"""
+        logger.warning("直接访问index属性已废弃，建议通过IndexManagerService操作")
+        return self.index_manager.get_index()
 
     def _initialize_index(self):
         """兼容原有初始化方法"""
@@ -107,5 +118,8 @@ class RagService:
         self.cache_service.set(key, value)
 
 
-# 保持原有单例接口不变
-rag_service = RagService()
+# 保持原有单例接口不变，默认返回Legacy兼容实例保证向后兼容
+rag_service = LegacyRagService()
+
+# 对外暴露接口
+__all__ = ["RagService", "LegacyRagService", "rag_service"]

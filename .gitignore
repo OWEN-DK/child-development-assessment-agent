@@ -103,4 +103,17 @@ storage/
 # Chroma DB
 chroma/
 .chroma/
+/chroma_data/
+/backend/chroma_data/
+/backend/test_chroma/
+/test_chroma/
+
+# Data and Documents
+/data/
+/backend/data/
+/book/
+*.sqlite3
+*.pdf
+*.epub
+*.bin
 .worktrees/

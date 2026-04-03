@@ -38,7 +38,7 @@ async def test_query_rewrite():
     age = 5
 
     # Test rewrite method
-    rewritten = await rag_service._rewrite_query(original_query, age)
+    rewritten = await rag_service.retrieval_service._rewrite_query(original_query, age)
 
     # Verify rewrite returns something
     assert rewritten is not None
@@ -79,14 +79,14 @@ async def test_cache_clear_on_index_update():
     assert len(result1) > 0
 
     # Verify cache has the entry
-    cache_key = rag_service._get_cache_key(query, age, 3)
-    assert rag_service._get_from_cache(cache_key) is not None
+    cache_key = rag_service.retrieval_service._get_cache_key(query, age, 3)
+    assert rag_service.cache_service.get(cache_key) is not None
 
     # Clear cache (simulate index update)
-    rag_service._clear_cache()
+    rag_service.cache_service.clear()
 
     # Verify cache is empty
-    assert rag_service._get_from_cache(cache_key) is None
+    assert rag_service.cache_service.get(cache_key) is None
 
     print("✅ 索引更新时缓存清理测试通过")
 

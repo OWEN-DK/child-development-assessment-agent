@@ -1,11 +1,11 @@
 from src.service.rag_service import rag_service
 from src.service.document_manager import document_manager
 
-print(f"索引是否存在: {rag_service.index is not None}")
-if rag_service.index:
-    print(f"文档数量: {len(rag_service.index.docstore.docs)}")
+print(f"索引是否存在: {rag_service.index_manager.is_index_available()}")
+if rag_service.index_manager.is_index_available():
+    print(f"文档数量: {len(rag_service.index_manager.get_index().docstore.docs)}")
 
-docs = document_manager.get_all_documents()
+docs = document_manager.list_documents()
 print(f"已注册文档: {[d.file_name for d in docs]}")
 print(f"文档状态: {[(d.file_name, d.status) for d in docs]}")
 

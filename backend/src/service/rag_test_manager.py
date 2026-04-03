@@ -375,10 +375,12 @@ class RagTestManager:
 
         try:
             # 停止当前服务
-            if rag_service.index:
-                rag_service.index = None
-                rag_service.bm25_retriever = None
-                rag_service.vector_retriever = None
+            if rag_service.index_manager.is_index_available():
+                rag_service.index_manager.index = None
+                if hasattr(rag_service.retrieval_service, 'bm25_retriever'):
+                    rag_service.retrieval_service.bm25_retriever = None
+                if hasattr(rag_service.retrieval_service, 'vector_retriever'):
+                    rag_service.retrieval_service.vector_retriever = None
 
             # 备份当前状态
             backup_dir = (
@@ -402,7 +404,7 @@ class RagTestManager:
                 document_manager._load_store()
 
             # 重新初始化索引
-            rag_service._initialize_index()
+            rag_service.index_manager._initialize_index()
 
             logger.info(f"Successfully restored snapshot {snapshot_id}")
             return True
@@ -414,7 +416,7 @@ class RagTestManager:
                 if os.path.exists(STORAGE_DIR):
                     shutil.rmtree(STORAGE_DIR)
                 shutil.move(backup_dir, STORAGE_DIR)
-                rag_service._initialize_index()
+                rag_service.index_manager._initialize_index()
                 document_manager._load_store()
             return False
 

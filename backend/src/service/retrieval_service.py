@@ -1,17 +1,30 @@
 import jieba
 import re
 import difflib
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.llms.dashscope import DashScope
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import PromptTemplate
 from src.config.settings import settings
 from src.utils.logger import logger
 from src.core.hybrid_retrieval import HybridRetrievalMerger
+from src.core.reranker import CrossEncoderReranker
 from src.model.schemas import KnowledgeItem
 from src.core.prompts import QUERY_REWRITE_PROMPT, SYNONYM_EXPANSION_PROMPT
 from src.service.index_manager_service import IndexManagerService
 from src.service.cache_service import CacheService
+from src.core.child_development_engine import child_development_engine
+from src.service.content_audit_service import content_audit_service
+from src.core.ab_test_framework import ab_test_framework
+from src.core.prompt_injection_guard import prompt_injection_guard
+
+
+# Define Pydantic model for structured synonym output
+class SynonymExpansionResult(BaseModel):
+    synonyms: List[str] = Field(description="List of synonyms/related terms for the query")
 
 
 class RetrievalService:
@@ -25,8 +38,15 @@ class RetrievalService:
         self.bm25_weight = 0.5
         self.vector_weight = 0.5
         self.merge_mode = "OR"
+        
+        # 初始化 Cross-Encoder 重排序器
+        self.reranker = CrossEncoderReranker(
+            model_name=settings.rag_reranker_model,
+            initial_k=settings.rag_reranker_initial_k,
+            final_k=settings.rag_reranker_final_k
+        )
 
-        # 加载jieba自定义词典
+        # 加载 jieba 自定义词典
         import os
         from src.config.settings import BASE_DIR
 
@@ -59,20 +79,43 @@ class RetrievalService:
         bm25_top_k = min(rag_config["bm25_top_k"], max(1, corpus_size))
         vector_top_k = min(rag_config["vector_top_k"], max(1, corpus_size))
 
+        # 初始化向量检索器（优先初始化，作为回退）
+        try:
+            self.vector_retriever = index.as_retriever(similarity_top_k=vector_top_k)
+            logger.info(f"Vector retriever initialized: top_k={vector_top_k}")
+        except Exception as e:
+            logger.error(f"Failed to initialize vector retriever: {e}")
+            self.vector_retriever = None
+            return
+
+        # 检查 docstore 是否有内容（BM25 需要 docstore，而不仅仅是向量存储）
+        has_docstore_docs = False
+        if hasattr(index, 'docstore') and index.docstore:
+            has_docstore_docs = len(index.docstore.docs) > 0
+            logger.info(f"Docstore contains {len(index.docstore.docs)} documents")
+        
+        if not has_docstore_docs:
+            logger.warning("Docstore is empty. BM25 retriever cannot be initialized. Using vector-only retrieval.")
+            self.bm25_retriever = None
+            return
+
         # 初始化BM25检索器（使用jieba分词）
-        self.bm25_retriever = BM25Retriever.from_defaults(
-            index=index, similarity_top_k=bm25_top_k, tokenizer=jieba.lcut
-        )
+        try:
+            self.bm25_retriever = BM25Retriever.from_defaults(
+                index=index, similarity_top_k=bm25_top_k, tokenizer=jieba.lcut
+            )
+            logger.info(f"BM25 retriever initialized: top_k={bm25_top_k}")
+        except Exception as e:
+            logger.error(f"Failed to initialize BM25 retriever: {e}. Falling back to vector-only retrieval.")
+            self.bm25_retriever = None
+            return
 
-        # 初始化向量检索器
-        self.vector_retriever = index.as_retriever(similarity_top_k=vector_top_k)
-
+        # 设置混合检索权重
         self.bm25_weight = rag_config["bm25_weight"]
         self.vector_weight = rag_config["vector_weight"]
         self.merge_mode = rag_config["merge_mode"]
-
         logger.info(
-            f"Retrievers initialized: BM25 top_k={bm25_top_k}, Vector top_k={vector_top_k}"
+            f"Hybrid retrieval enabled: BM25 weight={self.bm25_weight}, Vector weight={self.vector_weight}"
         )
 
     def reload_retrievers(self):
@@ -82,19 +125,29 @@ class RetrievalService:
         logger.info("Retrievers reloaded")
 
     async def retrieve_knowledge(
-        self, query: str, age: int, limit: int = 3
+        self, query: str, age: int, limit: int = 3, user_id: str = None
     ) -> List[KnowledgeItem]:
         """
         根据查询和年龄检索相关知识点
+        :param user_id: 用户 ID，用于 A/B 测试分配
         """
-        logger.info(f"Retrieving knowledge for query: '{query}', age: {age}")
+        import time
+        
+        logger.info(f"Retrieving knowledge for query: '{query}', age: {age}, user_id: {user_id}")
+        start_time = time.time()
 
         # 检查缓存
         cache_key = self._get_cache_key(query, age, limit)
-        cached_result = self.cache_service.get(cache_key)
+        cached_result = await self.cache_service.get(cache_key)
         if cached_result:
             return cached_result
 
+        # A/B 测试：根据变体选择不同的检索策略
+        retrieval_variant = "control"
+        if user_id:
+            retrieval_variant = ab_test_framework.get_variant(user_id, "retrieval_strategy")
+            logger.info(f"A/B test variant for retrieval: {retrieval_variant}")
+        
         # 查询重写和同义词扩展
         rewritten_query = await self._rewrite_query(query, age)
         expanded_query = await self._expand_synonyms(rewritten_query)
@@ -113,13 +166,50 @@ class RetrievalService:
                 limit=limit,
                 use_hybrid=self.bm25_retriever is not None
                 and self.vector_retriever is not None,
+                age=age,
+                retrieval_variant=retrieval_variant,
+                user_id=user_id,
             )
 
-            # 转换为KnowledgeItem，传入用户年龄计算适配度并排序
+            # # 内容审核：在检索后审核每个结果（暂时禁用）
+            # audited_results = []
+            # for node_with_score in results:
+            #     content = node_with_score.node.get_content()
+            #     audit_passed, audit_reason = await content_audit_service.audit_content(
+            #         content, stage="retrieval"
+            #     )
+            #     if audit_passed:
+            #         audited_results.append(node_with_score)
+            #     else:
+            #         logger.info(f"Filtered content during retrieval: {audit_reason}")
+            
+            # logger.info(f"Content audit filtered {len(results) - len(audited_results)} items")
+
+            # 转换为 KnowledgeItem，传入用户年龄计算适配度并排序
             knowledge_items = self._convert_to_knowledge_items(results, user_age=age)
 
             # 保存到缓存
-            self.cache_service.set(cache_key, knowledge_items)
+            await self.cache_service.set(cache_key, knowledge_items)
+
+            # A/B 测试：记录指标
+            if user_id:
+                latency = time.time() - start_time
+                ab_test_framework.track_metric(
+                    "retrieval_strategy", 
+                    retrieval_variant, 
+                    "latency", 
+                    latency
+                )
+                ab_test_framework.track_metric(
+                    "retrieval_strategy", 
+                    retrieval_variant, 
+                    "result_count", 
+                    len(knowledge_items)
+                )
+                logger.info(
+                    f"A/B test metrics recorded: variant={retrieval_variant}, "
+                    f"latency={latency:.3f}s, results={len(knowledge_items)}"
+                )
 
             return knowledge_items
 
@@ -135,10 +225,13 @@ class RetrievalService:
             logger.warning("Index not available, returning empty results.")
             return []
 
+        bm25_nodes = []
+        vector_nodes = []
+        
         try:
             # 同义词扩展
             expanded_query = await self._expand_synonyms(query)
-
+            
             # 执行检索
             if self.bm25_retriever and self.vector_retriever:
                 # 并行检索
@@ -163,11 +256,18 @@ class RetrievalService:
                 )
                 nodes = await retriever.aretrieve(expanded_query)
 
+            logger.info(f"Raw retrieval results: {len(nodes)} nodes found before filtering")
+            if nodes:
+                logger.info(f"Top raw score: {nodes[0].score or 0.0:.3f}")
+            
             # 处理和过滤结果
             processed_results = self._process_search_results(
-                nodes, query, expanded_query
+                nodes, query, expanded_query, bm25_nodes
             )
 
+            logger.info(f"Search completed: query='{query}', found {len(processed_results)} results")
+            if processed_results:
+                logger.debug(f"Top result score: {processed_results[0]['score']:.3f}, source: {processed_results[0]['source_book']}")
             return processed_results
 
         except Exception as e:
@@ -222,27 +322,55 @@ class RetrievalService:
         return base_score
 
     async def _execute_retrieval(
-        self, query: str, filters, limit: int, use_hybrid: bool
+        self, 
+        query: str, 
+        filters, 
+        limit: int, 
+        use_hybrid: bool, 
+        age: int = None,
+        retrieval_variant: str = "control",
+        user_id: str = None
     ):
         """执行检索逻辑"""
+        import time
+        
+        start_time = time.time()
+        
         if use_hybrid:
             # 设置过滤器
             self.bm25_retriever.filters = filters
             self.vector_retriever.filters = filters
 
+            # 根据 A/B 测试变体选择权重
+            if retrieval_variant == "variant1":
+                bm25_weight, vector_weight = 0.6, 0.4
+                logger.info(f"Using A/B test variant1 weights: BM25={bm25_weight}, Vector={vector_weight}")
+            elif retrieval_variant == "variant2":
+                bm25_weight, vector_weight = 0.4, 0.6
+                logger.info(f"Using A/B test variant2 weights: BM25={bm25_weight}, Vector={vector_weight}")
+            else:
+                # control 或默认：使用动态权重
+                bm25_weight, vector_weight = HybridRetrievalMerger.get_dynamic_weights(
+                    query, age
+                )
+
             # 并行检索
             bm25_nodes = await self.bm25_retriever.aretrieve(query)
             vector_nodes = await self.vector_retriever.aretrieve(query)
 
-            # 合并结果
+            # 合并结果（先不限制数量，留给重排序器处理）
             nodes = HybridRetrievalMerger.merge_results(
                 bm25_nodes,
                 vector_nodes,
-                bm25_weight=self.bm25_weight,
-                vector_weight=self.vector_weight,
+                bm25_weight=bm25_weight,
+                vector_weight=vector_weight,
                 merge_mode=self.merge_mode,
-                limit=limit,
+                limit=self.reranker.initial_k if self.reranker.model else limit,
             )
+            
+            # 应用 Cross-Encoder 重排序
+            if self.reranker.model and nodes:
+                nodes = self.reranker.rerank(query, nodes)
         else:
             # 回退到单一向量检索
             corpus_size = self.index_manager.get_corpus_size()
@@ -268,9 +396,18 @@ class RetrievalService:
                 not content
                 or content.startswith("[General Information]")
                 or "书名=" in content
-                or "SS号=" in content
+                or "SS 号=" in content
             ):
                 continue
+            
+            # 使用儿童发展引擎过滤不适宜内容
+            if user_age is not None:
+                is_suitable, reason = child_development_engine.filter_unsuitable_content(
+                    content, user_age
+                )
+                if not is_suitable:
+                    logger.info(f"Filtered unsuitable content for age {user_age}: {reason}")
+                    continue
 
             # 最低相似度阈值过滤
             base_score = node_with_score.score or 0.0
@@ -281,8 +418,19 @@ class RetrievalService:
             source = metadata.get("file_name", "Unknown Source")
 
             # 提取元数据字段
-            brain_regions = metadata.get("brain_regions", [])
-            topics = metadata.get("topics", [])
+            import json
+            brain_regions = metadata.get("brain_regions", "[]")
+            if isinstance(brain_regions, str):
+                try:
+                    brain_regions = json.loads(brain_regions)
+                except:
+                    brain_regions = []
+            topics = metadata.get("topics", "[]")
+            if isinstance(topics, str):
+                try:
+                    topics = json.loads(topics)
+                except:
+                    topics = []
             benefits = metadata.get("benefits", topics)  # 兼容旧数据
             target_age_min = metadata.get("target_age_min", 0)
             target_age_max = metadata.get("target_age_max", 18)
@@ -294,9 +442,17 @@ class RetrievalService:
             final_score = base_score
             age_fit_score = 1.0
             if user_age is not None:
-                age_fit_score = self._calculate_age_fit_score(
+                # 使用儿童发展引擎计算更精准的年龄适配度
+                age_fit_score = child_development_engine.calculate_age_appropriateness(
+                    content, user_age
+                )
+                # 同时考虑元数据中的年龄范围
+                metadata_age_fit = self._calculate_age_fit_score(
                     user_age, target_age_min, target_age_max
                 )
+                # 综合两种评分，儿童发展引擎权重更高
+                age_fit_score = 0.7 * age_fit_score + 0.3 * metadata_age_fit
+                
                 age_weight = settings.rag_age_fit_weight
                 final_score = base_score * (1 - age_weight) + age_fit_score * age_weight
 
@@ -378,32 +534,43 @@ class RetrievalService:
         return False
 
     def _process_search_results(
-        self, nodes, original_query: str, expanded_query: str
+        self, nodes, original_query: str, expanded_query: str, bm25_nodes: List = None
     ) -> List[dict]:
         """处理搜索结果，包括过滤、评分调整等"""
         if not nodes:
+            logger.debug("_process_search_results: 无搜索结果，返回空列表")
             return []
 
         # 阈值设置
         is_hybrid = (
             self.bm25_retriever is not None and self.vector_retriever is not None
         )
-        threshold = (
-            settings.rag_search_score_threshold_hybrid
-            if is_hybrid
-            else settings.rag_search_score_threshold_vector
-        )
+        # 当 BM25 无结果时，即使是混合模式也使用向量阈值（说明语义匹配优先）
+        has_bm25_results = len(bm25_nodes) > 0 if is_hybrid else False
+        if is_hybrid and has_bm25_results:
+            threshold = settings.rag_search_score_threshold_hybrid
+            logger.info(f"_process_search_results: 混合检索模式，阈值={threshold}, BM25 结果数={len(bm25_nodes)}")
+        else:
+            threshold = settings.rag_search_score_threshold_vector
+            logger.info(f"_process_search_results: 向量检索模式，阈值={threshold}")
 
         # 动态截断：如果最高分低于阈值，直接返回空
         top_score = nodes[0].score or 0.0
+        logger.info(f"_process_search_results: 最高分={top_score:.4f}, 阈值={threshold}, 相对截断比例={settings.rag_search_relative_cutoff_ratio}")
         if top_score < threshold:
-            logger.debug(
-                f"Top result score {top_score} below threshold {threshold}, returning empty"
+            logger.warning(
+                f"_process_search_results: 最高分 {top_score:.4f} 低于阈值 {threshold}, 返回空结果"
             )
             return []
 
-        # 相对分数截断
-        relative_cutoff = top_score * settings.rag_search_relative_cutoff_ratio
+        # 相对分数截断：当只有向量结果时使用更宽松的相对截断比例
+        if is_hybrid and not has_bm25_results:
+            # 纯向量结果使用 0.3 的相对截断（与语义检索保持一致）
+            relative_cutoff = top_score * 0.3
+            logger.debug(f"_process_search_results: 纯向量结果，相对截断={relative_cutoff:.4f}")
+        else:
+            relative_cutoff = top_score * settings.rag_search_relative_cutoff_ratio
+            logger.debug(f"_process_search_results: 混合结果，相对截断={relative_cutoff:.4f}")
 
         # 关键词匹配检查
         original_keywords = set(jieba.lcut(original_query.lower()))
@@ -436,24 +603,28 @@ class RetrievalService:
         results = []
         from src.service.document_manager import document_manager
 
-        for node_with_score in nodes:
+        logger.info(f"_process_search_results: 开始处理 {len(nodes)} 个搜索结果")
+        for i, node_with_score in enumerate(nodes):
             node = node_with_score.node
             metadata = node.metadata or {}
             content = node.get_content()
+            raw_score = float(node_with_score.score or 0.0)
+            logger.debug(f"Processing result {i}: 原始分数={raw_score:.4f}, 内容长度={len(content)}, 来源={metadata.get('file_name', 'Unknown')}")
 
             # 过滤无效内容
             if (
                 not content
                 or content.startswith("[General Information]")
                 or "书名=" in content
-                or "SS号=" in content
-                or "参考文献" in content
+                or "SS 号=" in content
+                or ("参考文献" in content and len(content) < 100)  # 只有短内容的参考文献才过滤，避免误杀正文
             ):
+                logger.debug(f"Filtered result {i}: 无效内容，分数={raw_score:.4f}")
                 continue
 
             # 阈值过滤
-            raw_score = float(node_with_score.score or 0.0)
             if raw_score < threshold or raw_score < relative_cutoff:
+                logger.debug(f"Filtered result {i}: 分数 {raw_score:.4f} 低于阈值 {threshold} 或相对截断 {relative_cutoff:.4f}")
                 continue
 
             # 关键词匹配检查 (改为加分项，而非硬过滤)
@@ -476,8 +647,10 @@ class RetrievalService:
                     else 0
                 )
                 keyword_bonus = original_match_ratio * 0.2
+                logger.debug(f"Processing result {i}: 关键词匹配={matched_original}/{len(original_keywords)}, 加成={keyword_bonus:.4f}")
 
             final_score = min(raw_score + keyword_bonus, 1.0)
+            logger.debug(f"Processing result {i}: 最终分数={final_score:.4f} (原始={raw_score:.4f} + 加成={keyword_bonus:.4f})")
 
             # 获取源书名
             file_hash = metadata.get("file_hash")
@@ -507,6 +680,7 @@ class RetrievalService:
                     break
 
             if is_duplicate:
+                logger.debug(f"Filtered result {i}: 重复内容，分数={final_score:.4f}")
                 continue
 
             results.append(
@@ -524,70 +698,196 @@ class RetrievalService:
                     "file_hash": metadata.get("file_hash"),
                 }
             )
+            logger.debug(f"Added result {i}: 分数={final_score:.4f}, 来源={source_book}, 章节={metadata.get('chapter_title', 'N/A')}")
 
+        logger.info(f"_process_search_results: 处理完成，返回 {len(results)} 个结果")
+        if results:
+            top_scores = [f'{r["score"]:.4f}' for r in results[:3]]
+            logger.info(f"_process_search_results: Top 3 结果分数：{top_scores}")
         return results
 
     async def _rewrite_query(self, query: str, age: int) -> str:
         """重写查询以提高检索准确率"""
-        if (
-            not settings.rag_config["query_rewrite"]["enabled"]
-            or not self.dashscope_available
-        ):
+        if not settings.rag_config["query_rewrite"]["enabled"]:
             return query
 
+        if not self.dashscope_available:
+            return self._local_rewrite_query(query, age)
+
         try:
+            # Prompt 注入检测
+            injected, reason = prompt_injection_guard.detect_injection(query)
+            if injected:
+                logger.warning(f"Prompt injection detected in query rewrite: {reason}")
+                query = prompt_injection_guard.sanitize_content(query)
+            
             llm = DashScope(
                 model=settings.llm_models["query_rewrite"],
                 api_key=settings.dashscope_api_key,
             )
-            prompt = QUERY_REWRITE_PROMPT.format(query=query, age=age)
-            response = await llm.acomplete(prompt)
+            # 使用安全包装的提示词
+            safe_prompt = QUERY_REWRITE_PROMPT.format(age=age, query=query)
+            response = await llm.acomplete(safe_prompt)
             rewritten_query = response.text.strip()
             logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
             return rewritten_query if rewritten_query else query
         except Exception as e:
-            logger.warning(f"Query rewrite failed: {e}, using original query")
-            return query
+            logger.warning(f"Query rewrite failed: {e}, using local fallback")
+            return self._local_rewrite_query(query, age)
+
+    def _local_rewrite_query(self, query: str, age: int) -> str:
+        """本地查询重写兜底逻辑"""
+        # 移除常见无意义词和标点
+        query = re.sub(r"[?？!！.。，,]", " ", query)
+        # 针对年龄添加关键词
+        if age > 0:
+            if age < 3:
+                query += " 婴幼儿 早期教育"
+            elif age < 6:
+                query += " 幼儿园 学前教育"
+            else:
+                query += " 学龄儿童"
+        return query.strip()
+
+    def _validate_expansion(self, expansion_text: str, original_query: str) -> bool:
+        """
+        验证同义词扩展质量
+        
+        验证规则：
+        1. 长度检查：不应超过 200 字符
+        2. 格式检查：不应包含完整句子（句号、感叹号、问号、冒号）
+        3. 必须包含原查询
+        4. 不应包含敏感词或无关内容
+        
+        Args:
+            expansion_text: 扩展后的文本
+            original_query: 原始查询
+            
+        Returns:
+            是否通过验证
+        """
+        # 长度检查
+        if len(expansion_text) > 200:
+            return False
+        
+        # 格式检查（不应包含完整句子）
+        if any(punct in expansion_text for punct in ['。', '！', '？', '：', '\n']):
+            return False
+        
+        # 必须包含原查询
+        if original_query not in expansion_text:
+            return False
+        
+        # 检查是否包含明显的无关内容
+        irrelevant_patterns = ['抱歉', '无法', '不知道', '请提供', '问题']
+        if any(pattern in expansion_text for pattern in irrelevant_patterns):
+            return False
+        
+        return True
 
     async def _expand_synonyms(self, query: str) -> str:
-        """同义词扩展以提高召回率"""
+        """同义词扩展以提高召回率，增加质量验证"""
         if not self.dashscope_available:
-            return query
+            return self._local_expand_synonyms(query)
 
         try:
+            # Prompt 注入检测
+            injected, reason = prompt_injection_guard.detect_injection(query)
+            if injected:
+                logger.warning(f"Prompt injection detected in synonym expansion: {reason}")
+                query = prompt_injection_guard.sanitize_content(query)
+            
+            # Use LangChain structured output parser to enforce JSON format
+            parser = PydanticOutputParser(pydantic_object=SynonymExpansionResult)
+            
+            # Create prompt template with format instructions
+            prompt = PromptTemplate(
+                template=SYNONYM_EXPANSION_PROMPT + "\n{format_instructions}\n",
+                input_variables=["query"],
+                partial_variables={"format_instructions": parser.get_format_instructions()}
+            )
+            
+            # Format prompt with query
+            formatted_prompt = prompt.format(query=query)
+            
+            # 使用安全包装的提示词
+            safe_prompt = formatted_prompt
+            
+            # Call LLM
             llm = DashScope(
                 model=settings.llm_models["query_rewrite"],
                 api_key=settings.dashscope_api_key,
             )
-            prompt = SYNONYM_EXPANSION_PROMPT.format(query=query)
-            response = await llm.acomplete(prompt)
-            synonyms = response.text.strip()
+            response = await llm.acomplete(safe_prompt)
+            result_text = response.text.strip()
+            
+            # Clean response to remove markdown code block markers
+            result_text = re.sub(r"^```(?:json)?\s*", "", result_text, flags=re.IGNORECASE)
+            result_text = re.sub(r"\s*```$", "", result_text)
+            result_text = result_text.strip()
 
-            # 清理返回结果，移除多余的标签和说明
-            synonyms = re.sub(r"^同义词[:：]\s*", "", synonyms)
-            synonyms = re.sub(r"^Synonyms[:：]\s*", "", synonyms)
-            synonyms = synonyms.strip("\"'`")
+            # Parse using structured parser
+            try:
+                result = parser.parse(result_text)
+                synonym_list = [str(s).strip() for s in result.synonyms if str(s).strip()]
+            except Exception as e:
+                logger.warning(f"同义词扩展JSON解析失败: {e}, 原始内容: {result_text[:100]}")
+                # JSON解析失败时尝试兼容旧格式
+                synonyms = re.sub(r"^同义词[:：]\s*", "", result_text)
+                synonyms = re.sub(r"^Synonyms[:：]\s*", "", synonyms)
+                synonyms = synonyms.strip("\"'`{}[]")
+                if len(synonyms) > 100 or "。" in synonyms or "？" in synonyms or "！" in synonyms or "：" in synonyms:
+                    logger.warning(f"大模型同义词扩展未遵守指令，返回无效内容，使用本地扩展")
+                    return self._local_expand_synonyms(query)
+                synonym_list = re.split(r"[\n、,，\s\"']+", synonyms)
+                synonym_list = [s.strip() for s in synonym_list if s.strip() and len(s) < 20]
+            
+            # 必须包含原词，否则回退
+            if query not in synonym_list:
+                synonym_list.insert(0, query)
+            
+            # 去重后拼接
+            all_terms = list(dict.fromkeys(synonym_list))
+            expanded_query = " ".join(all_terms)
 
-            # 如果返回多个同义词，用空格连接作为扩展查询
-            if "\n" in synonyms or "、" in synonyms or "," in synonyms:
-                # 分割多个同义词并去重
-                synonym_list = re.split(r"[\n、,，\s]+", synonyms)
-                synonym_list = [s.strip() for s in synonym_list if s.strip()]
-                # 保留原始查询词并添加同义词
-                all_terms = list(dict.fromkeys([query] + synonym_list))
-                expanded_query = " ".join(all_terms)
-                logger.info(
-                    f"Query expanded with multiple synonyms: '{query}' -> '{expanded_query}'"
-                )
-                return expanded_query
+            # 质量验证
+            if not self._validate_expansion(expanded_query, query):
+                logger.warning(f"同义词扩展质量验证失败，使用本地扩展")
+                return self._local_expand_synonyms(query)
+            
+            logger.info(f"同义词扩展成功：'{query}' -> '{expanded_query}'")
+            return expanded_query
 
-            logger.info(f"Query expanded: '{query}' -> '{synonyms}'")
-            return synonyms if synonyms else query
         except Exception as e:
-            logger.warning(f"Synonym expansion failed: {e}, using original query")
-            return query
+            logger.warning(f"同义词扩展失败：{e}, 使用本地扩展")
+            return self._local_expand_synonyms(query)
 
-    @staticmethod
-    def _get_cache_key(query: str, age: int, limit: int) -> tuple[str, int, int]:
-        """生成缓存键"""
-        return (query.strip().lower(), age, limit)
+    def _local_expand_synonyms(self, query: str) -> str:
+        """本地同义词扩展兜底逻辑"""
+        synonyms_dict = {
+            "大运动": ["粗大动作", "运动能力", "平衡能力"],
+            "精细动作": ["手眼协调", "手指灵活性"],
+            "语言": ["表达能力", "沟通能力", "词汇量"],
+            "认知": ["思维能力", "逻辑推理", "注意力"],
+            "社交": ["人际交往", "情绪管理", "同伴关系"],
+            "专注力": ["注意力", "集中力"],
+            "感统": ["感觉统合", "前庭觉", "触觉"],
+            "家长": ["父母", "家长教育", "家庭教育", "亲子", "育儿"],
+        }
+
+        expanded_terms = [query]
+        for word, syns in synonyms_dict.items():
+            if word in query:
+                expanded_terms.extend(syns)
+
+        return " ".join(list(dict.fromkeys(expanded_terms)))
+
+    def _get_cache_key(self, query: str, age: int, limit: int) -> tuple:
+        """生成包含索引版本和配置指纹的缓存键"""
+        return (
+            query.strip().lower(),
+            age,
+            limit,
+            self.index_manager.index_version,
+            self.index_manager.config_fingerprint,
+        )

@@ -4,6 +4,7 @@ import { HomePage } from '../pages/HomePage';
 import KnowledgeBasePage from '../pages/KnowledgeBasePage';
 import RagTestPage from '../pages/RagTestPage';
 import KnowledgeSearchPage from '../pages/KnowledgeSearchPage';
+import BookChunksPage from '../pages/BookChunksPage';
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
       {
         path: 'knowledge-search',
         element: <KnowledgeSearchPage />,
+      },
+      {
+        path: 'book-chunks/:fileHash/:fileName',
+        element: <BookChunksPage />,
       },
       // 未来可以添加更多路由，如：
       // { path: 'history', element: <HistoryPage /> },

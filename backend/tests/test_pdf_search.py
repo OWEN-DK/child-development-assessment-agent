@@ -20,8 +20,8 @@ async def test_search():
 
         # 调试：获取所有文档，看有没有PDF内容
         print("\n调试：查看索引中的所有文档来源:")
-        if rag_service.index:
-            docstore = rag_service.index.docstore
+        if rag_service.index_manager.is_index_available():
+            docstore = rag_service.index_manager.get_index().docstore
             sources = set()
             for doc_id in docstore.docs:
                 doc = docstore.docs[doc_id]

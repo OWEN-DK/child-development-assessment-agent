@@ -121,6 +121,51 @@ class PreprocessingRules(BaseModel):
     recent_feedback_limit: int = 3
 
 
+class MetadataRules(BaseModel):
+    """Metadata Extraction Rules"""
+    
+    theme_keywords: Dict[str, List[str]] = Field(
+        default_factory=lambda: {
+            "粗大动作": ["粗大动作", "大运动", "跑", "跳", "爬", "走", "平衡", "协调性"],
+            "精细动作": ["精细动作", "小肌肉", "手部", "手指", "画画", "剪纸", "搭积木", "握笔"],
+            "认知能力": ["认知", "思维", "记忆", "注意力", "观察力", "想象力", "逻辑", "推理", "数感"],
+            "语言发展": ["语言", "说话", "表达", "倾听", "阅读", "识字", "沟通", "交流"],
+            "社交情感": ["社交", "情感", "情绪", "交往", "合作", "分享", "自信心", "同理心"],
+            "感觉统合": ["感觉统合", "感官", "触觉", "听觉", "视觉", "前庭觉", "本体觉"]
+        }
+    )
+    
+    brain_regions_map: Dict[str, List[str]] = Field(
+        default_factory=lambda: {
+            "粗大动作": ["额叶", "小脑", "运动皮层"],
+            "精细动作": ["顶叶", "小脑", "运动皮层"],
+            "认知能力": ["前额叶", "海马体", "顶叶"],
+            "语言发展": ["布洛卡区", "韦尼克区", "颞叶"],
+            "社交情感": ["杏仁核", "前额叶", "岛叶"],
+            "感觉统合": ["顶叶", "颞叶", "枕叶"]
+        }
+    )
+    
+    activity_type_keywords: Dict[str, List[str]] = Field(
+        default_factory=lambda: {
+            "Assessment": ["评估", "测试", "检查", "测评", "量表"],
+            "Game/Activity": ["游戏", "活动", "玩法", "练习", "训练", "互动"],
+            "Advice": ["建议", "指南", "方法", "策略", "技巧", "注意事项"],
+            "CaseStudy": ["案例", "实例", "个案", "例子", "分享"]
+        }
+    )
+    
+    age_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r"(\d+\.?\d*)~(\d+\.?\d*)岁",
+            r"(\d+\.?\d*)-(\d+\.?\d*)岁",
+            r"适合(\d+\.?\d*)到(\d+\.?\d*)岁",
+            r"(\d+)月龄",
+            r"(\d+\.?\d*)岁以上"
+        ]
+    )
+
+
 class RuleSettings(BaseSettings):
     """Centralized Rule Configuration"""
 
@@ -140,6 +185,11 @@ class RuleSettings(BaseSettings):
     preprocessing: PreprocessingRules = Field(
         default_factory=lambda: PreprocessingRules(
             **GLOBAL_RULES_CONFIG.get("preprocessing", {})
+        )
+    )
+    metadata: MetadataRules = Field(
+        default_factory=lambda: MetadataRules(
+            **GLOBAL_RULES_CONFIG.get("metadata", {})
         )
     )
 

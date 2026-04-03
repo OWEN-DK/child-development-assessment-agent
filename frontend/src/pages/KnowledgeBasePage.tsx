@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Upload, Button, Card, Typography, Space, Progress, List, App } from 'antd';
-import { UploadOutlined, DeleteOutlined, CloudSyncOutlined, LoadingOutlined, StopOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, CloudSyncOutlined, LoadingOutlined, StopOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { uploadDocument, getDocuments, deleteDocument, getRagStatus, getUploadTasks, cancelUploadTask, DocumentRecord, UploadTaskStatus } from '../api/client';
 import styles from './KnowledgeBasePage.module.scss';
@@ -9,6 +10,7 @@ const { Title, Text } = Typography;
 
 const KnowledgeBasePage = () => {
   const { modal, message } = App.useApp();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [_uploading, setUploading] = useState(false);
@@ -58,26 +60,33 @@ const KnowledgeBasePage = () => {
   const pollTaskStatus = async () => {
     try {
         const res = await getUploadTasks();
+        // 成功的任务立即从处理列表中移除，只显示 pending/processing/cancelled 的任务
         const activeTasks = res.tasks.filter(t => 
             t.status === 'pending' || 
             t.status === 'processing' || 
             (t.status === 'cancelled' && (Date.now()/1000 - t.created_at < 300)) ||
-            (t.status === 'failed' && (Date.now()/1000 - t.created_at < 3600)) || 
-            (t.status === 'success' && (Date.now()/1000 - t.created_at < 300))
+            (t.status === 'failed' && (Date.now()/1000 - t.created_at < 3600))
         );
         
-        // Check for newly completed tasks compared to previous state
-        activeTasks.forEach(newTask => {
-            const oldTask = processingTasks.find(t => t.task_id === newTask.task_id);
-            if (oldTask && oldTask.status !== 'success' && newTask.status === 'success') {
-                 message.success(`${newTask.filename} 上传并索引成功`);
-                 loadDocuments(); // Refresh doc list
-                 loadRagStatus();
-            } else if (oldTask && oldTask.status !== 'failed' && newTask.status === 'failed') {
-                 message.error(`${newTask.filename} 处理失败: ${newTask.error || '未知错误'}`);
-            } else if (oldTask && oldTask.status !== 'cancelled' && newTask.status === 'cancelled') {
-                 message.info(`${newTask.filename} 已取消`);
-                 loadDocuments(); // Refresh doc list to ensure it's removed
+        // Check for tasks that disappeared from active list (completed successfully)
+        processingTasks.forEach(oldTask => {
+            const stillActive = activeTasks.find(t => t.task_id === oldTask.task_id);
+            // 如果任务从 active 列表中消失，说明可能成功了
+            if (!stillActive && oldTask.status === 'processing') {
+                // 查询完整任务列表确认状态
+                getUploadTasks().then(res => {
+                    const completedTask = res.tasks.find(t => t.task_id === oldTask.task_id);
+                    if (completedTask && completedTask.status === 'success') {
+                        message.success(`${completedTask.filename} 上传并索引成功`);
+                        loadDocuments();
+                        loadRagStatus();
+                    } else if (completedTask && completedTask.status === 'failed') {
+                        message.error(`${completedTask.filename} 处理失败：${completedTask.error || '未知错误'}`);
+                    }
+                });
+            } else if (!stillActive && oldTask.status === 'cancelled') {
+                message.info(`${oldTask.filename} 已取消`);
+                loadDocuments();
             }
         });
         
@@ -298,12 +307,22 @@ const KnowledgeBasePage = () => {
           dataSource={documents.filter(doc => 
              !processingTasks.some(t => 
                  t.filename === doc.file_name && 
-                 (t.status === 'pending' || t.status === 'processing' || t.status === 'cancelled')
+                 (t.status === 'pending' || 
+                  t.status === 'processing' || 
+                  t.status === 'cancelled' ||
+                  (t.status === 'success' && (Date.now()/1000 - t.created_at < 300)))
              )
           )}
           renderItem={(doc) => (
             <List.Item
               actions={[
+                <Button
+                  type="link"
+                  icon={<FileTextOutlined />}
+                  onClick={() => navigate(`/book-chunks/${doc.file_hash}/${encodeURIComponent(doc.file_name)}`)}
+                >
+                  查看分块
+                </Button>,
                 <Button
                   type="text"
                   danger

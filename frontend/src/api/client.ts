@@ -320,3 +320,76 @@ export const restoreSnapshot = async (snapshotId: string): Promise<{ status: str
   const response = await client.post(`/rag/test/snapshots/${snapshotId}/restore`);
   return response.data;
 };
+
+// 分层内容生成进度接口
+export interface LayeredProgressStatus {
+  task_id: string;
+  total: number;
+  processed: number;
+  progress: number;
+  status: 'running' | 'completed';
+  start_time: string;
+  end_time?: string;
+}
+
+export const getLayeredProgress = async (taskId: string): Promise<LayeredProgressStatus> => {
+  const response = await client.get<LayeredProgressStatus>(`/rag/layered-progress/${taskId}`);
+  return response.data;
+};
+
+export const getAllLayeredProgress = async (): Promise<{ tasks: LayeredProgressStatus[] }> => {
+  const response = await client.get<{ tasks: LayeredProgressStatus[] }>('/rag/layered-progress');
+  return response.data;
+};
+
+export interface ChunkMetadata {
+  file_hash: string;
+  source_book: string;
+  page_label?: string;
+  chapter_title?: string;
+  target_age_min?: number;
+  target_age_max?: number;
+  brain_regions?: string[];
+  topics?: string[];
+  [key: string]: any;
+}
+
+export interface DocumentChunk {
+  id: string;
+  content: string;
+  metadata: ChunkMetadata;
+  start_char_idx: number;
+  end_char_idx: number;
+  score?: number;
+}
+
+export interface ChunkDetail extends DocumentChunk {
+  relationships?: any;
+}
+
+export const getDocumentChunks = async (
+  fileHash: string, 
+  page: number = 1, 
+  pageSize: number = 20
+): Promise<{ 
+  status: string; 
+  file_hash: string;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  chunks: DocumentChunk[]
+}> => {
+  const response = await client.get(`/rag/documents/${encodeURIComponent(fileHash)}/chunks`, {
+    params: { page, page_size: pageSize }
+  });
+  return response.data;
+};
+
+export const getChunkDetail = async (chunkId: string): Promise<{ 
+  status: string; 
+  chunk: ChunkDetail 
+}> => {
+  const response = await client.get(`/rag/chunks/${encodeURIComponent(chunkId)}`);
+  return response.data;
+};

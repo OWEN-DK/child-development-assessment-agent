@@ -2,8 +2,9 @@ import fitz  # PyMuPDF
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 import os
+import re
 import warnings
 import tempfile
 from http import HTTPStatus
@@ -12,6 +13,28 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from llama_index.core.schema import Document
 from src.config.settings import settings
 from src.utils.logger import logger
+
+
+class PDFParseError(Exception):
+    """PDF解析失败异常"""
+    pass
+
+
+class PDFCorruptedError(PDFParseError):
+    """PDF文件损坏异常"""
+    pass
+
+
+class ParserServiceError(PDFParseError):
+    """解析服务不可用异常"""
+    pass
+
+
+class ParserType:
+    """解析器类型枚举"""
+    TEXT = "text"      # 传统文本提取
+    OCR = "ocr"        # OCR解析（TBD，当前使用VL作为OCR替代）
+    VLM = "vlm"        # VLM解析
 
 # Suppress ebooklib warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="ebooklib")
@@ -412,10 +435,157 @@ class EPUBParser:
         return documents
 
 
+class PDFParserV2:
+    """
+    改进的PDF解析器，支持三级降级机制：
+    1. 优先使用VLM解析（保留格式、图片内容理解）
+    2. VLM失败时使用OCR解析（当前使用VL作为OCR替代）
+    3. OCR失败时使用传统文本提取
+    """
+    
+    def __init__(
+        self, 
+        fallback_order: List[str] = None, 
+        min_content_length: int = 100,
+        max_workers: int = None
+    ):
+        """
+        初始化PDF解析器
+        :param fallback_order: 降级顺序，默认是 [ParserType.VLM, ParserType.TEXT]
+        :param min_content_length: 最小有效内容长度，低于此长度视为解析失败
+        :param max_workers: 最大并行解析线程数
+        """
+        self.fallback_order = fallback_order or [ParserType.VLM, ParserType.TEXT]
+        self.min_content_length = min_content_length
+        self.max_workers = max_workers or settings.rag_vl_max_workers
+        
+        # 解析器映射
+        self.parsers = {
+            ParserType.VLM: self._parse_with_vlm,
+            ParserType.TEXT: self._parse_with_text
+        }
+    
+    def _clean_content(self, content: str) -> str:
+        """清理解析内容，去除多余空白和特殊字符"""
+        if not content:
+            return ""
+        # 去除多余空白字符
+        content = re.sub(r"\s+", " ", content)
+        # 去除不可见字符
+        content = re.sub(r"[\x00-\x1F\x7F]", "", content)
+        return content.strip()
+    
+    def _is_content_valid(self, documents: List[Document]) -> bool:
+        """校验解析内容是否有效"""
+        if not documents:
+            return False
+        
+        total_length = sum(len(doc.text) for doc in documents)
+        avg_length = total_length / len(documents) if documents else 0
+        
+        # 平均内容长度过短
+        if avg_length < self.min_content_length:
+            return False
+        
+        # 检查乱码比例（可配置）
+        sample_text = " ".join([doc.text[:100] for doc in documents[:10]])
+        if not sample_text:
+            return False
+            
+        non_ascii_ratio = sum(1 for c in sample_text if ord(c) > 127) / len(sample_text)
+        if non_ascii_ratio > 0.8 and not any("\u4e00" <= c <= "\u9fff" for c in sample_text):
+            # 非ASCII字符比例过高且没有中文字符，可能是乱码
+            return False
+            
+        return True
+    
+    def _parse_with_text(self, file_path: str) -> List[Document]:
+        """使用传统文本提取解析PDF"""
+        try:
+            return PDFParser.parse(file_path)
+        except Exception as e:
+            if "corrupted" in str(e).lower() or "invalid pdf" in str(e).lower():
+                raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
+            raise PDFParseError(f"Text extraction failed: {e}") from e
+    
+    def _parse_with_vlm(self, file_path: str) -> List[Document]:
+        """使用VLM解析PDF"""
+        if not settings.dashscope_api_key:
+            raise ParserServiceError("DashScope API Key is required for VLM parsing.")
+            
+        try:
+            return PDFVLParser.parse(file_path, max_workers=self.max_workers)
+        except (TimeoutError, ConnectionError) as e:
+            raise ParserServiceError(f"VLM service unavailable: {e}") from e
+        except Exception as e:
+            if "corrupted" in str(e).lower() or "invalid pdf" in str(e).lower():
+                raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
+            raise PDFParseError(f"VLM parse failed: {e}") from e
+    
+    def parse(self, file_path: str) -> List[Document]:
+        """
+        三级降级解析PDF
+        :param file_path: PDF文件路径
+        :return: 解析后的文档列表
+        :raises PDFParseError: 所有解析方式都失败时抛出
+        :raises PDFCorruptedError: PDF文件本身损坏时抛出
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"PDF file not found: {file_path}")
+        
+        if not file_path.lower().endswith(".pdf"):
+            raise ValueError(f"File is not a PDF: {file_path}")
+        
+        last_error = None
+        file_name = os.path.basename(file_path)
+        
+        for parser_type in self.fallback_order:
+            parser_func = self.parsers.get(parser_type)
+            if not parser_func:
+                logger.warning(f"Unknown parser type: {parser_type}, skipping")
+                continue
+            
+            try:
+                logger.info(f"Parsing PDF {file_name} with {parser_type} parser")
+                
+                documents = parser_func(file_path)
+                
+                # 校验解析结果质量
+                if self._is_content_valid(documents):
+                    total_length = sum(len(doc.text) for doc in documents)
+                    avg_length = total_length / len(documents) if documents else 0
+                    logger.info(f"PDF parsed successfully with {parser_type} parser, "
+                              f"{len(documents)} pages, avg content length: {avg_length:.0f}")
+                    return documents
+                else:
+                    logger.warning(f"{parser_type} parser returned invalid content, falling back")
+            
+            except PDFCorruptedError as e:
+                # PDF本身损坏，直接抛出，不需要继续降级
+                logger.error(f"PDF file {file_name} is corrupted: {e}")
+                raise
+            except ParserServiceError as e:
+                # 解析服务不可用，记录错误继续降级
+                logger.warning(f"{parser_type} service unavailable: {e}, falling back")
+                last_error = e
+            except Exception as e:
+                logger.warning(f"{parser_type} parse failed: {e}, falling back")
+                last_error = e
+        
+        # 所有解析方式都失败
+        error_msg = f"All PDF parsers failed for {file_name}"
+        if last_error:
+            error_msg += f": {last_error}"
+        
+        logger.error(error_msg)
+        raise PDFParseError(error_msg)
+
+
 def get_parser(file_path: str):
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        return PDFParser
+        # 返回新的V2解析器，兼容原有接口
+        return PDFParserV2()
     elif ext == ".epub":
         return EPUBParser
     else:

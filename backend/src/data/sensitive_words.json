@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-04-02",
+  "categories": {
+    "violence": {
+      "name": "暴力",
+      "description": "暴力相关敏感词",
+      "words": ["暴力", "恐怖", "血腥", "殴打", "虐待", "欺凌", "打架", "杀人", "伤害", "武器"]
+    },
+    "adult_content": {
+      "name": "成人内容",
+      "description": "不适宜儿童的成人内容",
+      "words": ["色情", "成人", "限制级", "不适宜儿童", "性", "裸体"]
+    },
+    "dangerous_behavior": {
+      "name": "危险行为",
+      "description": "可能导致危险的行为描述",
+      "words": ["自杀", "自残", "跳楼", "服毒", "危险", "禁止", "不安全", "窒息", "吞咽", "中毒"]
+    },
+    "illegal": {
+      "name": "违法违规",
+      "description": "违法违规相关内容",
+      "words": ["毒品", "赌博", "走私", "诈骗", "盗窃", "抢劫"]
+    },
+    "inappropriate_language": {
+      "name": "不当语言",
+      "description": "不适宜的语言表达",
+      "words": ["脏话", "粗口", "骂人", "诅咒"]
+    }
+  }
+}

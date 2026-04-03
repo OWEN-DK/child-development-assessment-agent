@@ -1,0 +1,79 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-04-02",
+  "settings": {
+    "strict_mode": false,
+    "special_char_threshold": 0.1,
+    "max_content_length": 10000
+  },
+  "special_chars": ["`", "$", "{", "}", "<", ">", "|", ";", "&", "\\", "\"", "'"],
+  "patterns": {
+    "instruction_override": {
+      "name": "指令覆盖",
+      "description": "尝试覆盖或修改系统指令的模式",
+      "regex_patterns": [
+        "忽略.*指令",
+        "忘记.*规则",
+        "不要.*遵循",
+        "系统提示",
+        "system prompt",
+        "ignore previous",
+        "forget all"
+      ],
+      "strict_mode_only": false
+    },
+    "jailbreak": {
+      "name": "越狱尝试",
+      "description": "尝试绕过安全限制的越狱模式",
+      "regex_patterns": [
+        "你现在是",
+        "扮演.*角色",
+        "假设你是",
+        "act as",
+        "pretend to be",
+        "you are now",
+        "dan mode"
+      ],
+      "strict_mode_only": true
+    },
+    "data_exfiltration": {
+      "name": "数据窃取",
+      "description": "尝试获取系统内部信息的模式",
+      "regex_patterns": [
+        "你的系统提示",
+        "你的配置",
+        "你的指令",
+        "your system prompt",
+        "your instructions",
+        "your configuration",
+        "输出.*完整.*提示"
+      ],
+      "strict_mode_only": true
+    },
+    "system_info_theft": {
+      "name": "系统信息泄露",
+      "description": "尝试获取系统配置或内部信息的模式",
+      "regex_patterns": [
+        "api.*key",
+        "secret",
+        "password",
+        "token",
+        "数据库.*地址",
+        "服务器.*配置"
+      ],
+      "strict_mode_only": false
+    },
+    "prompt_leakage": {
+      "name": "提示词泄露",
+      "description": "尝试获取或重复系统提示词的模式",
+      "regex_patterns": [
+        "重复.*以上内容",
+        "输出.*上文",
+        "repeat.*above",
+        "print.*prompt",
+        "show.*instructions"
+      ],
+      "strict_mode_only": false
+    }
+  }
+}

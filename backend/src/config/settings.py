@@ -2,7 +2,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 from llama_index.core import Settings
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 
@@ -41,12 +41,29 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
     log_file: str = Field("./logs/app.log", validation_alias="LOG_FILE")
 
+    # Data directory config
+    data_dir: str = Field("./data", validation_alias="DATA_DIR", description="Base directory for application data files")
+
     # RAG Configuration (individual fields)
     rag_hybrid_bm25_weight: float = Field(
         0.5, validation_alias="RAG_HYBRID_BM25_WEIGHT"
     )
     rag_hybrid_vector_weight: float = Field(
         0.5, validation_alias="RAG_HYBRID_VECTOR_WEIGHT"
+    )
+    # BM25分数校准配置
+    bm25_scale_factor: float = Field(
+        5, validation_alias="BM25_SCALE_FACTOR",
+        description="BM25分数缩放因子，用于sigmoid校准到[0,1]区间"
+    )
+    # 混合检索动态权重配置
+    hybrid_weights: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "default": 0.5,
+            "keyword_query": 0.7,
+            "semantic_query": 0.3
+        },
+        description="不同查询类型的BM25权重配置"
     )
     rag_hybrid_merge_mode: str = Field("OR", validation_alias="RAG_HYBRID_MERGE_MODE")
     rag_hybrid_bm25_top_k: int = Field(10, validation_alias="RAG_HYBRID_BM25_TOP_K")
@@ -66,10 +83,10 @@ class Settings(BaseSettings):
     # RAG 分块配置
     rag_chunk_size: int = Field(1024, validation_alias="RAG_CHUNK_SIZE")
     rag_epub_chunk_target_size: int = Field(
-        800, validation_alias="RAG_EPUB_CHUNK_TARGET_SIZE"
+        1024, validation_alias="RAG_EPUB_CHUNK_TARGET_SIZE"
     )
     rag_pdf_chunk_size: int = Field(1536, validation_alias="RAG_PDF_CHUNK_SIZE")
-    rag_chunk_overlap: int = Field(20, validation_alias="RAG_CHUNK_OVERLAP")
+    rag_chunk_overlap: int = Field(200, validation_alias="RAG_CHUNK_OVERLAP")
     # RAG OCR 配置
     rag_ocr_extraction_rate_threshold: float = Field(
         0.5, validation_alias="RAG_OCR_EXTRACTION_THRESHOLD"
@@ -96,31 +113,37 @@ class Settings(BaseSettings):
     )
     # RAG 搜索配置（前端搜索页面专用）
     rag_search_bm25_weight: float = Field(
-        0.7, validation_alias="RAG_SEARCH_BM25_WEIGHT"
+        0.5, validation_alias="RAG_SEARCH_BM25_WEIGHT",
+        description="降低 BM25 权重，避免校准后分数过度衰减"
     )
     rag_search_vector_weight: float = Field(
-        0.3, validation_alias="RAG_SEARCH_VECTOR_WEIGHT"
+        0.5, validation_alias="RAG_SEARCH_VECTOR_WEIGHT",
+        description="提高向量权重，平衡语义匹配分数"
     )
     rag_search_no_match_vector_penalty: float = Field(
-        0.3, validation_alias="RAG_SEARCH_NO_MATCH_VECTOR_PENALTY"
+        0.5, validation_alias="RAG_SEARCH_NO_MATCH_VECTOR_PENALTY",
+        description="降低纯向量结果的惩罚力度"
     )
     rag_search_score_threshold_hybrid: float = Field(
-        0.1, validation_alias="RAG_SEARCH_SCORE_THRESHOLD_HYBRID"
+        0.35, validation_alias="RAG_SEARCH_SCORE_THRESHOLD_HYBRID",
+        description="混合检索阈值，业界推荐 0.35-0.5"
     )
     rag_search_score_threshold_vector: float = Field(
-        0.3, validation_alias="RAG_SEARCH_SCORE_THRESHOLD_VECTOR"
+        0.35, validation_alias="RAG_SEARCH_SCORE_THRESHOLD_VECTOR",
+        description="向量检索阈值，业界推荐 0.35-0.5"
     )
     rag_search_relative_cutoff_ratio: float = Field(
-        0.1, validation_alias="RAG_SEARCH_RELATIVE_CUTOFF_RATIO"
+        0.5, validation_alias="RAG_SEARCH_RELATIVE_CUTOFF_RATIO",
+        description="相对截断比例，保留 Top 50% 的结果"
     )
     rag_search_min_similarity_threshold: float = Field(
-        0.3, validation_alias="RAG_SEARCH_MIN_SIMILARITY_THRESHOLD"
+        0.2, validation_alias="RAG_SEARCH_MIN_SIMILARITY_THRESHOLD"
     )
     # RAG 年龄过滤配置
     rag_age_filter_strictness: float = Field(
         0.7,
         validation_alias="RAG_AGE_FILTER_STRICTNESS",
-        description="年龄过滤严格程度，0-1，0最宽松，1最严格",
+        description="年龄过滤严格程度，0-1，0 最宽松，1 最严格",
     )
     rag_age_filter_tolerance: int = Field(
         2,
@@ -131,6 +154,108 @@ class Settings(BaseSettings):
         0.3,
         validation_alias="RAG_AGE_FIT_WEIGHT",
         description="年龄适配度在最终得分中的权重",
+    )
+    
+    # PageIndex 配置（增强：熔断、重试、降级）
+    pageindex_enabled: bool = Field(
+        default=False,
+        validation_alias="PAGEINDEX_ENABLED"
+    )
+    pageindex_base_url: str = Field(
+        default="https://api.pageindex.ai",
+        validation_alias="PAGEINDEX_BASE_URL"
+    )
+    pageindex_api_key: str = Field(
+        default="",
+        validation_alias="PAGEINDEX_API_KEY"
+    )
+    pageindex_max_concurrency: int = Field(
+        default=5,
+        validation_alias="PAGEINDEX_MAX_CONCURRENCY"
+    )
+    pageindex_max_tree_depth: int = Field(
+        default=3,
+        validation_alias="PAGEINDEX_MAX_TREE_DEPTH"
+    )
+    pageindex_timeout_seconds: int = Field(
+        default=10,
+        validation_alias="PAGEINDEX_TIMEOUT_SECONDS"
+    )
+    # 熔断配置
+    pageindex_circuit_breaker_failure_threshold: int = Field(
+        default=5,
+        validation_alias="PAGEINDEX_CIRCUIT_BREAKER_FAILURE_THRESHOLD"
+    )
+    pageindex_circuit_breaker_reset_timeout: int = Field(
+        default=60,
+        validation_alias="PAGEINDEX_CIRCUIT_BREAKER_RESET_TIMEOUT"
+    )
+    # 重试配置
+    pageindex_max_retries: int = Field(
+        default=3,
+        validation_alias="PAGEINDEX_MAX_RETRIES"
+    )
+    pageindex_retry_base_delay: float = Field(
+        default=0.5,
+        validation_alias="PAGEINDEX_RETRY_BASE_DELAY"
+    )
+    pageindex_retry_max_delay: float = Field(
+        default=10.0,
+        validation_alias="PAGEINDEX_RETRY_MAX_DELAY"
+    )
+    # 降级配置
+    pageindex_fallback_to_hybrid: bool = Field(
+        default=True,
+        validation_alias="PAGEINDEX_FALLBACK_TO_HYBRID"
+    )
+    
+    # 查询分类器配置
+    query_router_llm_enabled: bool = Field(
+        default=True,
+        validation_alias="QUERY_ROUTER_LLM_ENABLED"
+    )
+    model_query_classification: str = Field(
+        default="qwen3-omni-flash",
+        validation_alias="MODEL_QUERY_CLASSIFICATION"
+    )
+    query_router_confidence_threshold: float = Field(
+        default=0.8,
+        validation_alias="QUERY_ROUTER_CONFIDENCE_THRESHOLD"
+    )
+    query_router_llm_max_retries: int = Field(
+        default=2,
+        validation_alias="QUERY_ROUTER_LLM_MAX_RETRIES"
+    )
+    
+    # 结果融合配置
+    fusion_score_boost_for_pageindex: float = Field(
+        default=1.2,
+        validation_alias="FUSION_SCORE_BOOST_FOR_PAGEINDEX"
+    )
+    fusion_hybrid_supplement_limit: int = Field(
+        default=5,
+        validation_alias="FUSION_HYBRID_SUPPLEMENT_LIMIT"
+    )
+    fusion_dedup_normalize: bool = Field(
+        default=True,
+        validation_alias="FUSION_DEDUP_NORMALIZE"
+    )
+
+    # RAG 重排序器配置
+    rag_reranker_model: str = Field(
+        "BAAI/bge-reranker-v2-m3",
+        validation_alias="RAG_RERANKER_MODEL",
+        description="Cross-Encoder 重排序模型名称",
+    )
+    rag_reranker_initial_k: int = Field(
+        30,
+        validation_alias="RAG_RERANKER_INITIAL_K",
+        description="重排序前初始检索结果数量",
+    )
+    rag_reranker_final_k: int = Field(
+        5,
+        validation_alias="RAG_RERANKER_FINAL_K",
+        description="重排序后最终返回结果数量",
     )
 
     # RAG 自动持久化配置
@@ -156,36 +281,98 @@ class Settings(BaseSettings):
     rag_metadata_extraction_concurrency: int = Field(
         20, validation_alias="RAG_METADATA_EXTRACTION_CONCURRENCY"
     )
+    
+    # 分层内容生成配置
+    rag_layered_content_enabled: bool = Field(True, validation_alias="RAG_LAYERED_CONTENT_ENABLED")
+    rag_layered_content_enable_llm_generation: bool = Field(True, validation_alias="RAG_LAYERED_CONTENT_ENABLE_LLM_GENERATION")
+    rag_layered_content_enable_local_fallback: bool = Field(True, validation_alias="RAG_LAYERED_CONTENT_ENABLE_LOCAL_FALLBACK")
+    rag_layered_content_l0_max_length: int = Field(100, validation_alias="RAG_LAYERED_CONTENT_L0_MAX_LENGTH")
+    rag_layered_content_l1_max_length: int = Field(500, validation_alias="RAG_LAYERED_CONTENT_L1_MAX_LENGTH")
+    rag_layered_content_batch_size: int = Field(20, validation_alias="RAG_LAYERED_CONTENT_BATCH_SIZE")
+    rag_layered_content_large_batch_threshold: int = Field(1000, validation_alias="RAG_LAYERED_CONTENT_LARGE_BATCH_THRESHOLD")
+    rag_layered_content_large_batch_size: int = Field(10, validation_alias="RAG_LAYERED_CONTENT_LARGE_BATCH_SIZE")
+    rag_layered_content_concurrency_limit: int = Field(8, validation_alias="RAG_LAYERED_CONTENT_CONCURRENCY_LIMIT")
     # Embedding 模型配置
     embedding_model_name: str = Field(
-        "text-embedding-v2", validation_alias="EMBEDDING_MODEL_NAME"
+        "text-embedding-v4", validation_alias="EMBEDDING_MODEL_NAME"
     )
     embedding_max_text_length: int = Field(
         1536,
         validation_alias="EMBEDDING_MAX_TEXT_LENGTH",
         description="Embedding 文本最大长度（字符），超过此长度将被截断",
     )
+    embedding_batch_size: int = Field(
+        10,
+        validation_alias="EMBEDDING_BATCH_SIZE",
+        description="Embedding 批处理大小，降低可缓解 API 并发限制",
+    )
+
+    # 向量存储配置
+    vector_store_type: str = Field(
+        "chroma",
+        validation_alias="VECTOR_STORE_TYPE",
+        description="向量存储类型: chroma, pinecone, milvus, weaviate"
+    )
+    vector_store_config: dict = Field(
+        default_factory=dict,
+        validation_alias="VECTOR_STORE_CONFIG",
+        description="向量存储配置，根据不同类型填写对应参数"
+    )
 
     # 语义分块配置
     semantic_splitter_buffer_size: int = Field(
-        3,
+        5,
         validation_alias="SEMANTIC_SPLITTER_BUFFER_SIZE",
         description="语义分块时比较的前后段落数",
     )
     semantic_splitter_breakpoint_threshold: int = Field(
-        95,
+        90,
         validation_alias="SEMANTIC_SPLITTER_BREAKPOINT_THRESHOLD",
         description="语义分块相似度阈值（百分比），低于此值则分割",
     )
     semantic_splitter_chapter_buffer_size: int = Field(
-        1,
+        3,
         validation_alias="SEMANTIC_SPLITTER_CHAPTER_BUFFER_SIZE",
         description="长章节语义分块时比较的前后段落数",
     )
     semantic_splitter_chapter_breakpoint_threshold: int = Field(
-        80,
+        75,
         validation_alias="SEMANTIC_SPLITTER_CHAPTER_BREAKPOINT_THRESHOLD",
         description="长章节语义分块相似度阈值（百分比），低于此值则分割",
+    )
+    # 语义分块边界配置
+    semantic_splitter_separators: List[str] = Field(
+        default_factory=lambda: [
+            "\n## ", "\n### ", "\n#### ",  # 标题边界
+            "\n\n",                        # 段落边界
+            "\n",                          # 换行边界
+            "。", "！", "？",              # 中文句子结束
+            ". ", "! ", "? "               # 英文句子结束
+        ],
+        description="语义分块优先使用的分隔符列表，按优先级排序"
+    )
+    
+    # 规则元数据提取配置
+    rule_metadata_development_domains: List[str] = Field(
+        default_factory=lambda: [
+            "粗大动作", "精细动作", "认知能力", "语言发展", "社交情感", "感觉统合"
+        ],
+        description="儿童发展领域标签列表"
+    )
+    rule_metadata_age_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r"(\d+)~(\d+)个月", r"(\d+)-(\d+)个月", r"适合(\d+)到(\d+)岁", 
+            r"(\d+)岁左右", r"(\d+)月龄", r"(\d+)岁"
+        ],
+        description="规则提取年龄的正则表达式列表"
+    )
+    rule_metadata_difficulty_easy_threshold: int = Field(
+        300,
+        description="内容长度低于此值判定为简单难度"
+    )
+    rule_metadata_difficulty_hard_threshold: int = Field(
+        1000,
+        description="内容长度高于此值判定为困难难度"
     )
 
     # ML评分配置
@@ -232,6 +419,17 @@ class Settings(BaseSettings):
                 "similarity_threshold": self.rag_similarity_threshold,
                 "min_result_count": self.rag_min_result_count,
             },
+            "layered_content": {
+                "enabled": self.rag_layered_content_enabled,
+                "enable_llm_generation": self.rag_layered_content_enable_llm_generation,
+                "enable_local_fallback": self.rag_layered_content_enable_local_fallback,
+                "l0_max_length": self.rag_layered_content_l0_max_length,
+                "l1_max_length": self.rag_layered_content_l1_max_length,
+                "batch_size": self.rag_layered_content_batch_size,
+                "large_batch_threshold": self.rag_layered_content_large_batch_threshold,
+                "large_batch_size": self.rag_layered_content_large_batch_size,
+                "concurrency_limit": self.rag_layered_content_concurrency_limit,
+            }
         }
 
     model_config = SettingsConfigDict(
@@ -247,7 +445,9 @@ from src.core.embedding import SafeDashScopeEmbedding
 
 try:
     LlamaSettings.embed_model = SafeDashScopeEmbedding(
-        model_name=settings.embedding_model_name, api_key=settings.dashscope_api_key
+        model_name=settings.embedding_model_name,
+        api_key=settings.dashscope_api_key,
+        embed_batch_size=settings.embedding_batch_size,
     )
 except Exception as e:
     # 避免在导入阶段因配置错误导致整个应用崩溃

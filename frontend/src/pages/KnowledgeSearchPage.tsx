@@ -185,7 +185,7 @@ const KnowledgeSearchPage = () => {
                       }
                       description={
                         <div className={styles.resultMeta}>
-                          {item.topics.length > 0 && (
+                          {Array.isArray(item.topics) && item.topics.length > 0 && (
                             <div className={styles.topicRow}>
                               <Text type="secondary" strong>主题:</Text>
                               <Space wrap size="small" style={{ marginLeft: 8 }}>
@@ -195,7 +195,7 @@ const KnowledgeSearchPage = () => {
                               </Space>
                             </div>
                           )}
-                          {item.brain_regions.length > 0 && (
+                          {Array.isArray(item.brain_regions) && item.brain_regions.length > 0 && (
                             <div className={styles.topicRow}>
                               <Text type="secondary" strong>脑区:</Text>
                               <Space wrap size="small" style={{ marginLeft: 8 }}>
@@ -265,7 +265,7 @@ const KnowledgeSearchPage = () => {
                   }
                 </Descriptions.Item>
               )}
-              <Descriptions.Item label="相似度">
+              <Descriptions.Item label="相关度">
                 {(previewItem.score * 100).toFixed(2)}%
               </Descriptions.Item>
             </Descriptions>
@@ -279,7 +279,7 @@ const KnowledgeSearchPage = () => {
               </Paragraph>
             </div>
 
-            {previewItem.topics.length > 0 && (
+            {Array.isArray(previewItem.topics) && previewItem.topics.length > 0 && (
               <>
                 <Divider />
                 <Title level={5}>主题标签</Title>
@@ -291,7 +291,7 @@ const KnowledgeSearchPage = () => {
               </>
             )}
 
-            {previewItem.brain_regions.length > 0 && (
+            {Array.isArray(previewItem.brain_regions) && previewItem.brain_regions.length > 0 && (
               <>
                 <Divider />
                 <Title level={5}>刺激脑区</Title>
