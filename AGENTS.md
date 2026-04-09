@@ -1,6 +1,262 @@
+# ⚠️ 不可忽略的核心维护规则 (优先级高于一切)
+
+【文件位置锁定】
+- CLAUDE.md 和 AGENTS.md 必须始终位于项目根目录下，相对路径为：
+  - `./CLAUDE.md`
+  - `./AGENTS.md`
+- 禁止将这两个文件移动到其他目录，禁止创建副本
+- 任何情况下这两个文件的位置都不可改变
+
+【结构性改动强制同步】
+- 任何结构性改动（包括但不限于）必须同步更新 CLAUDE.md 和 AGENTS.md：
+  - 新增/删除/移动文件或目录
+  - 修改模块职责或依赖关系
+  - 调整 Agent 工作流或节点
+  - 变更技术栈或核心组件
+  - 修改 API 端点或路由
+  - 调整配置系统架构
+  - 新增/删除服务层或核心基础设施
+- 更新时必须在本规则下方标记改动内容，不可省略
+- 更新后必须验证两个文档与实际代码结构的一致性
+
+---
+
 # Agent 系统架构
 
 本文档定义了儿童发展评估系统的 Agent 架构。系统基于 **LangGraph** 进行编排，并适时采用 **ReAct** 模式。
+
+## 0. 项目整体架构图
+
+### 系统架构总览 (Mermaid)
+
+```mermaid
+graph TB
+    subgraph 前端层 Frontend
+        UI[React 19 + TypeScript]
+        Assessment[评估功能<br/>AssessmentForm/ReportViewer]
+        Documents[知识库管理<br/>DocumentUploader/DocumentList]
+        Knowledge[知识搜索<br/>SearchInput/SearchResultList]
+        RAGEval[RAG 评估<br/>TestCaseTable/EvaluationReport]
+        SysConfig[系统配置<br/>DynamicConfigForm/ConfigVersionSelector]
+    end
+    
+    subgraph API 网关层 API Gateway
+        FastAPI[FastAPI 0.135.1]
+        CORS[CORS 中间件]
+        TaskCtrl[TaskController]
+        RagCtrl[RagController]
+        RagTestCtrl[RagTestController]
+        ConfigCtrl[ConfigController]
+    end
+    
+    subgraph 业务服务层 Services
+        DocIngestion[DocumentIngestionService<br/>文档导入服务]
+        RagSvc[RagService<br/>RAG 门面服务]
+        RetrievSvc[RetrievalService<br/>检索服务]
+        IndexMgr[IndexManagerService<br/>索引管理服务]
+        CacheSvc[CacheService<br/>缓存服务]
+        ConfigMgr[ConfigManager<br/>配置管理器]
+    end
+    
+    subgraph Agent 核心层 LangGraph
+        Graph[LangGraph 工作流<br/>create_agent_graph]
+        PreNode[PreprocessingNode<br/>预处理与上下文压缩]
+        ValNode[ValidationNode<br/>数据校验与标准化]
+        AssessNode[AssessmentNode<br/>儿童发展评估]
+        RetrievNode[RetrievalNode<br/>混合检索专家]
+        ScoreNode[ScoringNode<br/>AHP 多维评分]
+        ReportNode[ReportingNode<br/>报告生成]
+    end
+    
+    subgraph 基础设施层 Infrastructure
+        DI[Injector 依赖注入]
+        EventBus[EventBus 事件总线]
+        Cache[CacheService 缓存]
+        Memory[MemoryManager 记忆管理]
+        Security[PromptInjectionGuard<br/>ContentAuditService]
+        ABTest[ABTestFramework]
+    end
+    
+    subgraph 数据层 Data
+        Chroma[(Chroma 向量库<br/>本地持久化)]
+        ConfigStore[(配置存储<br/>JSON 文件)]
+        Files[(文件存储<br/>PDF/EPUB)]
+        Logs[(Loguru 日志系统)]
+    end
+    
+    UI --> Assessment
+    UI --> Documents
+    UI --> Knowledge
+    UI --> RAGEval
+    UI --> SysConfig
+    
+    Assessment --> FastAPI
+    Documents --> FastAPI
+    Knowledge --> FastAPI
+    RAGEval --> FastAPI
+    SysConfig --> FastAPI
+    
+    FastAPI --> CORS
+    CORS --> TaskCtrl
+    CORS --> RagCtrl
+    CORS --> RagTestCtrl
+    CORS --> ConfigCtrl
+    
+    TaskCtrl --> Graph
+    RagCtrl --> DocIngestion
+    RagCtrl --> RagSvc
+    RagTestCtrl --> RetrievSvc
+    ConfigCtrl --> ConfigMgr
+    
+    RagSvc --> PreNode
+    RagSvc --> ValNode
+    RagSvc --> AssessNode
+    RagSvc --> RetrievNode
+    RagSvc --> ScoreNode
+    RagSvc --> ReportNode
+    
+    Graph --> DI
+    Graph --> EventBus
+    Graph --> Cache
+    Graph --> Memory
+    Graph --> Security
+    Graph --> ABTest
+    
+    DocIngestion --> Chroma
+    RetrievSvc --> Chroma
+    ConfigMgr --> ConfigStore
+    RagSvc --> Files
+    PreNode --> Logs
+    ValNode --> Logs
+    AssessNode --> Logs
+    RetrievNode --> Logs
+    ScoreNode --> Logs
+    ReportNode --> Logs
+```
+
+### 评估工作流架构 (Mermaid)
+
+```mermaid
+graph LR
+    Input[用户输入<br/>child_profile<br/>proposed_plan<br/>history_context] --> Pre[NodePre: 预处理<br/>PreprocessingNode]
+    
+    Pre -->|condensed_context| Val[Node1: 校验<br/>ValidationNode]
+    Val -->|标准化计划| Assess[Node2: 评估<br/>AssessmentNode]
+    Assess -->|child_state| Retriev[Node3: 检索<br/>RetrievalNode]
+    Retriev -->|retrieved_docs| Score[Node4: 评分<br/>ScoringNode]
+    Score -->|evaluation_result| Report[Node5: 报告<br/>ReportingNode]
+    Report --> Output[最终输出<br/>final_report<br/>Markdown + 结构化数据]
+    
+    Pre -.统计特征压缩.-> Assess
+    Assess -.发展状态评估.-> Score
+    Retriev -.科学知识依据.-> Score
+```
+
+### RAG 系统双流水线架构 (Mermaid)
+
+```mermaid
+graph TB
+    subgraph 文档导入流水线 Ingestion Pipeline
+        Upload[用户上传<br/>PDF/EPUB]
+        Parse[阶段1: 文档解析<br/>PDFParser/PDFVLParser<br/>PDFParserV2/EPUBParser]
+        Chunk[阶段2: 智能分块<br/>语义分块/章节分块<br/>父子块分块]
+        Meta[阶段3: 元数据提取<br/>LLM 提取/规则提取<br/>分层模式优化]
+        Embed[阶段4: 向量 Embedding<br/>DashScope<br/>text-embedding-v4]
+        Index[索引插入<br/>Chroma 向量存储<br/>batch_size=100]
+        Layered[阶段5: 分层内容生成<br/>L0 摘要/L1 概览/L2 详情]
+        Persist[持久化存储<br/>自动备份<br/>间隔 300 秒]
+        
+        Upload --> Parse
+        Parse --> Chunk
+        Chunk --> Meta
+        Meta --> Embed
+        Embed --> Index
+        Index --> Layered
+        Layered --> Persist
+    end
+    
+    subgraph 知识检索流水线 Retrieval Pipeline
+        Query[用户查询]
+        Route[步骤1: 查询路由<br/>QueryRouter<br/>简单/复杂分类]
+        Cache[步骤2: 缓存检查<br/>CacheService<br/>容量 1000, TTL 3600s]
+        Rewrite[步骤3: 查询重写<br/>可选]
+        Synonym[步骤4: 同义词扩展<br/>LLM 生成 + 质量验证]
+        AgeFilter[步骤5: 动态年龄过滤<br/>根据发展阶段调整]
+        Hybrid[步骤6: 混合检索<br/>BM25 + Vector<br/>并行执行]
+        Rerank[步骤7: Cross-Encoder<br/>重排序<br/>BAAI/bge-reranker-v2-m3]
+        Dedup[步骤8: 内容去重<br/>精确匹配 + 相似度]
+        PageIndex[步骤9: PageIndex 增强<br/>外部知识图谱<br/>熔断/重试机制]
+        Fusion[结果融合<br/>分数归一化<br/>动态权重]
+        Result[返回 KnowledgeItem<br/>年龄适配度计算<br/>阈值过滤]
+        
+        Query --> Route
+        Route --> Cache
+        Cache --> Rewrite
+        Rewrite --> Synonym
+        Synonym --> AgeFilter
+        AgeFilter --> Hybrid
+        Hybrid --> Rerank
+        Rerank --> Dedup
+        Dedup --> PageIndex
+        PageIndex --> Fusion
+        Fusion --> Result
+    end
+```
+
+### 配置系统架构 (Mermaid)
+
+```mermaid
+graph TB
+    subgraph 配置管理层
+        ConfigMgr[ConfigManager<br/>配置管理器]
+        ConfigRepo[ConfigRepository<br/>配置持久化]
+        ConfigEvents[ConfigEvents<br/>配置变更事件]
+    end
+    
+    subgraph 配置模块
+        AppSettings[AppSettings<br/>应用配置]
+        ModelSettings[ModelSettings<br/>LLM 模型配置]
+        EmbedSettings[EmbeddingSettings<br/>Embedding 配置]
+        RagSettings[RagSettings<br/>RAG 核心配置]
+        VectorSettings[VectorStoreSettings<br/>向量存储配置]
+        SplitterSettings[SemanticSplitterSettings<br/>分块配置]
+        PageIndexSettings[PageIndexSettings<br/>知识图谱配置]
+        FusionSettings[QueryFusionSettings<br/>查询融合配置]
+        MLSettings[MLScoringSettings<br/>ML 评分配置]
+        PathSettings[PathSettings<br/>路径配置]
+        LogSettings[LogSettings<br/>日志配置]
+        Rules[Rules<br/>业务规则]
+    end
+    
+    subgraph 配置特性
+        HotReload[热重载<br/>文件监听自动生效]
+        VersionCtrl[版本控制<br/>切换/回滚]
+        DiffView[差异对比<br/>可视化变更]
+        EnvOverride[环境变量覆盖<br/>.env.dev]
+    end
+    
+    ConfigMgr --> ConfigRepo
+    ConfigMgr --> ConfigEvents
+    ConfigMgr --> AppSettings
+    ConfigMgr --> ModelSettings
+    ConfigMgr --> EmbedSettings
+    ConfigMgr --> RagSettings
+    ConfigMgr --> VectorSettings
+    ConfigMgr --> SplitterSettings
+    ConfigMgr --> PageIndexSettings
+    ConfigMgr --> FusionSettings
+    ConfigMgr --> MLSettings
+    ConfigMgr --> PathSettings
+    ConfigMgr --> LogSettings
+    ConfigMgr --> Rules
+    
+    ConfigMgr --> HotReload
+    ConfigMgr --> VersionCtrl
+    ConfigMgr --> DiffView
+    ConfigMgr --> EnvOverride
+    
+    ConfigEvents -.事件通知.-> HotReload
+```
 
 ## 1. 系统概览
 
@@ -218,3 +474,63 @@ class AgentState(BaseModel):
 
 - **用户**: 提交画像 (`child_profile`) + 计划 (`proposed_plan`) + 可选历史 (`history_context`)。
 - **系统**: 返回包含 `final_report` (Markdown) 和结构化数据 (雷达图、分数) 的 JSON 响应。
+
+## 5. 前端功能模块
+
+### 5.1 评估功能 (Assessment)
+- **评估表单**: 支持儿童画像和运动计划输入
+- **报告查看器**: 渲染 Markdown 报告和可视化图表
+- **状态管理**: 使用 Zustand 管理评估流程状态
+
+### 5.2 知识库管理 (Documents)
+- **文档上传**: 支持 PDF/EPUB 上传和导入进度跟踪
+- **文档列表**: 展示已索引文档和分块信息
+- **任务管理**: 监控文档导入任务状态
+
+### 5.3 知识搜索 (Knowledge)
+- **混合检索**: 支持 BM25 + 向量语义搜索
+- **结果展示**: 展示检索结果和相关度分数
+- **详情查看**: 支持分块详情和来源追溯
+
+### 5.4 RAG 评估 (RAG Evaluation)
+- **测试集管理**: 导入和管理 RAG 评估测试集
+- **评估报告**: 展示检索和生成质量指标
+- **Bad Case 分析**: 标记和分析评估失败案例
+
+### 5.5 系统配置 (System Config)
+- **动态配置**: 支持运行时配置修改和热重载
+- **版本管理**: 配置版本切换和回滚
+- **差异对比**: 可视化展示配置变更
+
+## 6. 核心基础设施
+
+### 6.1 配置系统
+- **模块化架构**: 按功能域拆分的配置模块
+- **热重载**: 配置文件变更自动生效
+- **版本控制**: 支持配置版本管理和回滚
+- **事件驱动**: 配置变更通过 EventBus 传播
+
+### 6.2 依赖注入
+- **DI Container**: 使用 Injector 框架管理依赖
+- **服务注册**: 核心服务通过 DI 容器注册和解析
+- **测试友好**: 便于单元测试的依赖替换
+
+### 6.3 事件总线
+- **发布/订阅**: 组件间解耦的事件通信
+- **配置事件**: 配置变更事件通知
+- **业务事件**: 业务流程事件触发
+
+### 6.4 安全防护
+- **提示词注入防护**: PromptInjectionGuard 检测和阻止恶意注入
+- **内容审核**: ContentAuditService 确保生成内容安全
+- **敏感词过滤**: 基于敏感词库的内容过滤
+
+### 6.5 记忆管理
+- **MemoryManager**: 管理 Agent 对话历史和上下文
+- **向量记忆**: 支持基于向量相似度的记忆检索
+- **上下文压缩**: 统计特征压缩降低 Token 消耗
+
+### 6.6 AB 测试
+- **ABTestFramework**: 支持不同策略的对比测试
+- **流量分配**: 支持流量分组和实验配置
+- **效果分析**: 实验结果统计和显著性检验
