@@ -120,7 +120,8 @@ export const SearchResultList: React.FC<SearchResultListProps> = React.memo(({
             total={total}
             showSizeChanger
             showTotal={(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`}
-            onChange={(page, size) => onPageChange(page, size)}
+            onChange={(page) => onPageChange(page)}
+            onShowSizeChange={(_, size) => onPageChange(1, size)}
           />
         </div>
       )}

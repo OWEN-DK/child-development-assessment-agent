@@ -1,6 +1,6 @@
 from typing import List, Dict
 from llama_index.core.schema import NodeWithScore
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 import math
 import re

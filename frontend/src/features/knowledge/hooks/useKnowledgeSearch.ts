@@ -7,7 +7,7 @@ interface UseKnowledgeSearchReturn {
   results: SearchResultItem[];
   loading: boolean;
   total: number;
-  handleSearch: (query: string) => Promise<void>;
+  handleSearch: (query: string, limit?: number, offset?: number) => Promise<void>;
   clearSearch: () => void;
 }
 
@@ -17,7 +17,7 @@ export const useKnowledgeSearch = (): UseKnowledgeSearchReturn => {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
 
-  const handleSearch = useCallback(async (searchQuery: string) => {
+  const handleSearch = useCallback(async (searchQuery: string, limit: number = 10, offset: number = 0) => {
     setQuery(searchQuery);
     
     if (!searchQuery.trim()) {
@@ -28,7 +28,7 @@ export const useKnowledgeSearch = (): UseKnowledgeSearchReturn => {
 
     try {
       setLoading(true);
-      const response = await searchKnowledge(searchQuery, 20);
+      const response = await searchKnowledge(searchQuery, limit, offset);
       setResults(response.results);
       setTotal(response.total);
     } catch (e: any) {

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from src.model.schemas import UserInput, AgentState
 from src.core.graph import agent_app
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 import json
 import asyncio

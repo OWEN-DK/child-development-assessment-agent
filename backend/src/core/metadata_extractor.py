@@ -3,7 +3,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from src.core.prompts import METADATA_EXTRACTION_PROMPT
 
@@ -16,11 +16,11 @@ class ExtractedMetadata(BaseModel):
     brain_regions: List[str] = Field(
         default_factory=list, description="提到或隐含的大脑区域列表"
     )
-    target_age_min: int = Field(
-        default=0, description="推荐最小年龄，无明确标注时默认为0"
+    target_age_min: float = Field(
+        default=0.0, description="推荐最小年龄，无明确标注时默认为0"
     )
-    target_age_max: int = Field(
-        default=18, description="推荐最大年龄，无明确标注时默认为18"
+    target_age_max: float = Field(
+        default=18.0, description="推荐最大年龄，无明确标注时默认为18"
     )
     activity_type: str = Field(default="Theory", description="内容类型")
 

@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 import json
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 from src.config.rules import rules
 from src.model.schemas import AgentState, ChildState, DevelopmentStatus
 from src.core.nodes.base import BaseNode

@@ -8,7 +8,7 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.llms.dashscope import DashScope
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from src.core.hybrid_retrieval import HybridRetrievalMerger
 from src.core.reranker import CrossEncoderReranker
@@ -20,6 +20,7 @@ from src.core.child_development_engine import child_development_engine
 from src.service.content_audit_service import content_audit_service
 from src.core.ab_test_framework import ab_test_framework
 from src.core.prompt_injection_guard import prompt_injection_guard
+from src.service.monitoring_service import monitoring_service
 
 
 # Define Pydantic model for structured synonym output
@@ -48,7 +49,7 @@ class RetrievalService:
 
         # 加载 jieba 自定义词典
         import os
-        from src.config.settings import BASE_DIR
+        from src.config import BASE_DIR
 
         custom_dict_path = os.path.join(
             BASE_DIR, "src", "data", "jieba_custom_dict.txt"
@@ -211,19 +212,40 @@ class RetrievalService:
                     f"latency={latency:.3f}s, results={len(knowledge_items)}"
                 )
 
+            # 监控埋点：检索响应时间和召回数量
+            elapsed_ms = (time.time() - start_time) * 1000
+            monitoring_service.record_metric(
+                "retrieval_response_time_ms",
+                elapsed_ms,
+                tags={"age": str(age), "limit": str(limit)}
+            )
+            monitoring_service.record_metric(
+                "retrieval_result_count",
+                len(knowledge_items),
+                tags={"age": str(age)}
+            )
+
             return knowledge_items
 
         except Exception as e:
             logger.error(f"Error during retrieval: {e}", exc_info=True)
             return []
 
-    async def search_content(self, query: str, limit: int = 20) -> List[dict]:
+    async def search_content(self, query: str, limit: int = 20, offset: int = 0) -> dict:
         """
-        搜索知识库内容，返回匹配的片段和元数据
+        搜索知识库内容，返回匹配的片段和元数据（支持分页）
+        
+        Args:
+            query: 搜索关键词
+            limit: 每页数量
+            offset: 偏移量
+            
+        Returns:
+            dict: 包含 total（总数）和 results（当前页结果）
         """
         if not self.index_manager.is_index_available():
             logger.warning("Index not available, returning empty results.")
-            return []
+            return {"total": 0, "results": []}
 
         bm25_nodes = []
         vector_nodes = []
@@ -232,7 +254,8 @@ class RetrievalService:
             # 同义词扩展
             expanded_query = await self._expand_synonyms(query)
             
-            # 执行检索
+            # 执行检索（获取更多结果以支持分页）
+            fetch_limit = offset + limit
             if self.bm25_retriever and self.vector_retriever:
                 # 并行检索
                 bm25_nodes = await self.bm25_retriever.aretrieve(expanded_query)
@@ -245,12 +268,12 @@ class RetrievalService:
                     bm25_weight=settings.rag_search_bm25_weight,
                     vector_weight=settings.rag_search_vector_weight,
                     no_match_vector_penalty=settings.rag_search_no_match_vector_penalty,
-                    limit=limit,
+                    limit=fetch_limit,
                 )
             else:
                 # 回退到单一向量检索
                 corpus_size = self.index_manager.get_corpus_size()
-                adjusted_limit = min(limit, max(1, corpus_size))
+                adjusted_limit = min(fetch_limit, max(1, corpus_size))
                 retriever = self.index_manager.get_index().as_retriever(
                     similarity_top_k=adjusted_limit
                 )
@@ -265,14 +288,18 @@ class RetrievalService:
                 nodes, query, expanded_query, bm25_nodes
             )
 
-            logger.info(f"Search completed: query='{query}', found {len(processed_results)} results")
-            if processed_results:
-                logger.debug(f"Top result score: {processed_results[0]['score']:.3f}, source: {processed_results[0]['source_book']}")
-            return processed_results
+            total = len(processed_results)
+            # 应用分页
+            paginated_results = processed_results[offset:offset + limit]
+
+            logger.info(f"Search completed: query='{query}', total={total}, returned={len(paginated_results)} results")
+            if paginated_results:
+                logger.debug(f"Top result score: {paginated_results[0]['score']:.3f}, source: {paginated_results[0]['source_book']}")
+            return {"total": total, "results": paginated_results}
 
         except Exception as e:
             logger.error(f"Error during content search: {e}", exc_info=True)
-            return []
+            return {"total": 0, "results": []}
 
     def _build_age_filters(self, age: int):
         """构建弹性年龄过滤器"""
@@ -650,7 +677,27 @@ class RetrievalService:
                 logger.debug(f"Processing result {i}: 关键词匹配={matched_original}/{len(original_keywords)}, 加成={keyword_bonus:.4f}")
 
             final_score = min(raw_score + keyword_bonus, 1.0)
-            logger.debug(f"Processing result {i}: 最终分数={final_score:.4f} (原始={raw_score:.4f} + 加成={keyword_bonus:.4f})")
+            logger.debug(f"Processing result {i}: 内部绝对分数={final_score:.4f} (原始={raw_score:.4f} + 加成={keyword_bonus:.4f})")
+
+            # 将内部绝对分数映射为人类友好的展示分数 (60% - 98%)
+            # 内部绝对分数通常在 0.25 (阈值) 到 0.65 之间
+            max_expected_score = 0.65
+            base_display_score = 0.60
+            max_display_score = 0.98
+            
+            if final_score >= max_expected_score:
+                display_score = max_display_score
+            else:
+                # 线性映射: [threshold, max_expected_score] -> [base_display_score, max_display_score]
+                score_range = max_expected_score - threshold
+                if score_range > 0:
+                    ratio = (final_score - threshold) / score_range
+                    display_score = base_display_score + ratio * (max_display_score - base_display_score)
+                else:
+                    display_score = base_display_score
+                    
+            display_score = min(max(display_score, base_display_score), max_display_score)
+            logger.debug(f"Processing result {i}: 展示分数={display_score:.4f}")
 
             # 获取源书名
             file_hash = metadata.get("file_hash")
@@ -687,7 +734,8 @@ class RetrievalService:
                 {
                     "id": node.node_id,
                     "content": content,
-                    "score": final_score,
+                    "score": display_score,
+                    "raw_score": final_score,
                     "source_book": source_book,
                     "chapter_title": metadata.get("chapter_title"),
                     "page_label": page_label,

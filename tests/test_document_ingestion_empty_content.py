@@ -45,7 +45,8 @@ def test_clean_documents_all_empty(ingestion_service):
     # 验证所有空文档都被过滤，返回空列表
     assert len(cleaned_docs) == 0
 
-def test_ingest_empty_document_raises_error(ingestion_service, mocker):
+@pytest.mark.asyncio
+async def test_ingest_empty_document_raises_error(ingestion_service, mocker):
     """测试导入全空内容的文件时会抛出明确错误"""
     # 模拟文件解析返回的文档都是空的
     mock_documents = [
@@ -55,20 +56,16 @@ def test_ingest_empty_document_raises_error(ingestion_service, mocker):
     ]
     
     # Mock依赖函数
-    mocker.patch.object(ingestion_service, '_parse_document', return_value=(mock_documents, 3))
-    mocker.patch.object(ingestion_service, '_audit_content', return_value=(True, ""))
-    mocker.patch.object(ingestion_service, '_calculate_chapter_count', return_value=3)
+    mock_parser = mocker.MagicMock()
+    mock_parser.parse.return_value = mock_documents
+    mocker.patch('src.service.document_ingestion_service.get_parser', return_value=mock_parser)
+    mocker.patch('os.path.exists', return_value=True)
+    mocker.patch('src.service.document_manager.document_manager.exists', return_value=False)
+    mocker.patch.object(ingestion_service, '_calculate_file_hash', return_value='fake_hash')
     
     # 测试导入时是否抛出预期的错误
-    with pytest.raises(ValueError, match="文件 test.epub 中未找到有效内容"):
-        # 我们只测试到分块前的逻辑，不需要执行完整的导入流程
-        # 直接调用_clean_documents后检查空判断逻辑
-        cleaned_docs = ingestion_service._clean_documents(mock_documents, "test.epub")
-        assert len(cleaned_docs) == 0
-        
-        # 模拟分块前的空检查
-        if not cleaned_docs:
-            raise ValueError(f"文件 test.epub 中未找到有效内容，请检查文件内容是否正常")
+    with pytest.raises(ValueError, match="未找到有效内容"):
+        await ingestion_service.ingest_book("test.epub", "test.epub")
 
 def test_chunking_with_mixed_empty_and_valid_chapters(ingestion_service):
     """测试混合空章节和有效章节的场景"""

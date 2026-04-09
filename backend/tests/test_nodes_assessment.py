@@ -99,7 +99,59 @@ async def test_assessment_node_fallback(mock_agent_state):
 
 
 @pytest.mark.asyncio
-async def test_assessment_node_exception_handling(mock_agent_state):
+async def test_assessment_node_invalid_json(mock_agent_state):
+    # Test handling of invalid JSON from LLM
+    with patch("src.core.nodes.assessment.settings") as mock_settings:
+        mock_settings.dashscope_api_key = "test_key"
+        mock_settings.llm_models = {"assessment": "qwen-plus"}
+
+        with patch("src.core.nodes.assessment.DashScope") as MockDashScope:
+            mock_llm = AsyncMock()
+            MockDashScope.return_value = mock_llm
+            
+            # Simulate invalid JSON response
+            mock_response = MagicMock()
+            mock_response.text = "This is just some text, not JSON at all."
+            mock_llm.acomplete.return_value = mock_response
+
+            node = AssessmentNode()
+            result = await node(mock_agent_state)
+
+            assert "child_state" in result
+            child_state = result["child_state"]
+            # Should fall back to default
+            assert "暂无法评估" in child_state.vestibular_system.description
+
+
+@pytest.mark.asyncio
+async def test_assessment_node_missing_fields(mock_agent_state):
+    # Test handling of missing critical fields in JSON from LLM
+    with patch("src.core.nodes.assessment.settings") as mock_settings:
+        mock_settings.dashscope_api_key = "test_key"
+        mock_settings.llm_models = {"assessment": "qwen-plus"}
+
+        with patch("src.core.nodes.assessment.DashScope") as MockDashScope:
+            mock_llm = AsyncMock()
+            MockDashScope.return_value = mock_llm
+            
+            # Simulate missing 'vestibular_system'
+            mock_response = MagicMock()
+            mock_response.text = """
+            ```json
+            {
+                "overall_assessment": "Needs improvement"
+            }
+            ```
+            """
+            mock_llm.acomplete.return_value = mock_response
+
+            node = AssessmentNode()
+            result = await node(mock_agent_state)
+
+            assert "child_state" in result
+            child_state = result["child_state"]
+            # Should have the fields with default or handle it gracefully
+            assert hasattr(child_state, "vestibular_system")
     # Test exception handling during LLM call
     with patch("src.core.nodes.assessment.settings") as mock_settings:
         mock_settings.dashscope_api_key = "test_key"

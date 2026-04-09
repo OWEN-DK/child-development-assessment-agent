@@ -71,11 +71,31 @@ async def test_qwen_scorer():
         "targetedness": 10,
     }
 
-    with patch.object(
-        QwenScorer,
-        "predict",
-        return_value=(expected_score, expected_feature_importance, expected_reasoning),
-    ):
+    mock_response_data = {
+        "output": {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "score": expected_score,
+                            "reasoning": expected_reasoning,
+                            "feature_importance": expected_feature_importance
+                        })
+                    }
+                }
+            ]
+        }
+    }
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = mock_response_data
+
+    # Async mock for httpx.AsyncClient.post
+    async def mock_post(*args, **kwargs):
+        return mock_response
+
+    with patch("httpx.AsyncClient.post", new=mock_post):
         scorer = QwenScorer()
         score, feature_importance, reasoning = await scorer.predict(
             child, plan, child_state, [], ahp_scores
@@ -85,7 +105,7 @@ async def test_qwen_scorer():
         assert isinstance(feature_importance, dict)
         assert isinstance(reasoning, str)
         assert score == expected_score
-        assert "平衡感" in expected_reasoning
+        assert "平衡感" in reasoning
         assert (
             feature_importance["scientific_match"]
             == expected_feature_importance["scientific_match"]

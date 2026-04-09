@@ -1,7 +1,8 @@
 from typing import List, Optional
 from llama_index.core.schema import NodeWithScore
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
+from src.service.monitoring_service import monitoring_service
 
 try:
     from sentence_transformers import CrossEncoder
@@ -93,15 +94,41 @@ class CrossEncoderReranker:
             # 批量评分
             scores = self.model.predict(pairs)
             
+            # 记录重排序前后得分变化
+            original_top_score = max(n.score or 0 for n in nodes) if nodes else 0
+            improvement_rate = 0.0
+            
             # 更新分数并排序
             for node, score in zip(nodes, scores):
                 node.score = float(score)
             
             nodes.sort(key=lambda x: x.score or 0, reverse=True)
             
+            # 计算改进率
+            if nodes and original_top_score > 0:
+                new_top_score = nodes[0].score or 0
+                improvement_rate = (new_top_score - original_top_score) / original_top_score if original_top_score > 0 else 0
+            
+            # 监控埋点
+            monitoring_service.record_metric(
+                "reranker_improvement_rate",
+                improvement_rate,
+                tags={"model": self.model_name}
+            )
+            monitoring_service.record_metric(
+                "reranker_input_count",
+                original_count,
+                tags={"model": self.model_name}
+            )
+            monitoring_service.record_metric(
+                "reranker_output_count",
+                min(len(nodes), self.final_k),
+                tags={"model": self.model_name}
+            )
+            
             logger.info(
                 f"Reranking completed: {original_count} -> {len(nodes)} -> {self.final_k} results, "
-                f"top score: {nodes[0].score if nodes else 0:.3f}"
+                f"top score: {nodes[0].score if nodes else 0:.3f}, improvement: {improvement_rate:.2%}"
             )
             
             return nodes[:self.final_k]

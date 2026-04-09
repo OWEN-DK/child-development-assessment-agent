@@ -11,7 +11,7 @@ from http import HTTPStatus
 import dashscope
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from llama_index.core.schema import Document
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 
 
@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="ebooklib")
 
 class PDFParser:
     @staticmethod
-    def parse(file_path: str) -> List[Document]:
+    def parse(file_path: str, progress_callback=None) -> List[Document]:
         """
         Parse PDF file using PyMuPDF.
         If PDF has bookmarks (TOC), split by bookmarks first, otherwise split by page.
@@ -104,7 +104,7 @@ class PDFParser:
                 )
 
             # 按书签分割文档
-            for toc_item in processed_toc:
+            for toc_idx, toc_item in enumerate(processed_toc):
                 # 合并当前书签范围内的所有页面文本
                 combined_text = ""
                 for page_num in range(toc_item["start_page"] - 1, toc_item["end_page"]):
@@ -131,6 +131,11 @@ class PDFParser:
                     Document(text=combined_text.strip(), metadata=metadata)
                 )
 
+                # 报告进度
+                if progress_callback:
+                    current_page = toc_item["end_page"]
+                    progress_callback(current_page, total_pages)
+
             logger.info(f"Split PDF into {len(documents)} sections based on bookmarks")
         else:
             # 没有书签，按原有逻辑逐页分割
@@ -148,6 +153,10 @@ class PDFParser:
                 }
 
                 documents.append(Document(text=text, metadata=metadata))
+
+                # 报告进度
+                if progress_callback:
+                    progress_callback(page_num + 1, total_pages)
 
         doc.close()
         return documents
@@ -228,7 +237,7 @@ class PDFVLParser:
                 os.remove(tmp_img_path)
 
     @staticmethod
-    def parse(file_path: str, max_workers: int = None) -> List[Document]:
+    def parse(file_path: str, max_workers: int = None, progress_callback=None) -> List[Document]:
         """
         Parse PDF file using Qwen-VL for OCR/understanding (for scanned PDFs).
         使用多线程并行解析，大幅提升速度。
@@ -266,10 +275,16 @@ class PDFVLParser:
                 for args in page_args
             ]
 
+            completed = 0
             for future in as_completed(futures):
                 result = future.result()
                 if result:
                     documents.append(result)
+                
+                completed += 1
+                # 报告进度
+                if progress_callback:
+                    progress_callback(completed, total_pages)
 
         doc.close()
 
@@ -351,7 +366,7 @@ class EPUBParser:
                 )
 
     @staticmethod
-    def parse(file_path: str) -> List[Document]:
+    def parse(file_path: str, progress_callback=None) -> List[Document]:
         """
         Parse EPUB file using EbookLib.
         If EPUB has TOC, split by TOC hierarchy with full path titles, otherwise split by document item.
@@ -385,7 +400,7 @@ class EPUBParser:
                 )
 
             # 为每个TOC条目获取内容并创建Document
-            for toc_item in processed_toc:
+            for idx, toc_item in enumerate(processed_toc):
                 text = EPUBParser._get_item_content(book, toc_item["href"])
                 if not text or not text.strip():
                     continue
@@ -400,37 +415,46 @@ class EPUBParser:
                 }
 
                 documents.append(Document(text=text.strip(), metadata=metadata))
+                
+                # 报告进度
+                if progress_callback:
+                    progress_callback(idx + 1, len(processed_toc))
 
             logger.info(f"Processed {len(documents)} chapters from EPUB TOC")
         else:
             # 没有TOC，按原有逻辑处理每个document item
             logger.info("EPUB has no TOC, processing by document items")
-            for item in book.get_items():
-                if item.get_type() == ebooklib.ITEM_DOCUMENT:
-                    content = item.get_content()
-                    soup = BeautifulSoup(content, "html.parser")
-                    text = soup.get_text(separator="\n")
+            document_items = [item for item in book.get_items() if item.get_type() == ebooklib.ITEM_DOCUMENT]
+            
+            for idx, item in enumerate(document_items):
+                content = item.get_content()
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text(separator="\n")
 
-                    if not text.strip():
-                        continue
+                if not text.strip():
+                    continue
 
-                    # Try to extract chapter title
-                    title = ""
-                    if soup.h1:
-                        title = soup.h1.get_text().strip()
-                    elif soup.h2:
-                        title = soup.h2.get_text().strip()
-                    elif soup.title:
-                        title = soup.title.get_text().strip()
+                # Try to extract chapter title
+                title = ""
+                if soup.h1:
+                    title = soup.h1.get_text().strip()
+                elif soup.h2:
+                    title = soup.h2.get_text().strip()
+                elif soup.title:
+                    title = soup.title.get_text().strip()
 
-                    metadata = {
-                        "file_name": file_name,
-                        "chapter_title": title if title else item.get_name(),
-                        "page_label": item.get_name(),
-                        "total_pages": total_pages,
-                    }
+                metadata = {
+                    "file_name": file_name,
+                    "chapter_title": title if title else item.get_name(),
+                    "page_label": item.get_name(),
+                    "total_pages": total_pages,
+                }
 
-                    documents.append(Document(text=text, metadata=metadata))
+                documents.append(Document(text=text, metadata=metadata))
+                
+                # 报告进度
+                if progress_callback:
+                    progress_callback(idx + 1, len(document_items))
 
         return documents
 
@@ -499,22 +523,22 @@ class PDFParserV2:
             
         return True
     
-    def _parse_with_text(self, file_path: str) -> List[Document]:
+    def _parse_with_text(self, file_path: str, progress_callback=None) -> List[Document]:
         """使用传统文本提取解析PDF"""
         try:
-            return PDFParser.parse(file_path)
+            return PDFParser.parse(file_path, progress_callback=progress_callback)
         except Exception as e:
             if "corrupted" in str(e).lower() or "invalid pdf" in str(e).lower():
                 raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
             raise PDFParseError(f"Text extraction failed: {e}") from e
     
-    def _parse_with_vlm(self, file_path: str) -> List[Document]:
+    def _parse_with_vlm(self, file_path: str, progress_callback=None) -> List[Document]:
         """使用VLM解析PDF"""
         if not settings.dashscope_api_key:
             raise ParserServiceError("DashScope API Key is required for VLM parsing.")
             
         try:
-            return PDFVLParser.parse(file_path, max_workers=self.max_workers)
+            return PDFVLParser.parse(file_path, max_workers=self.max_workers, progress_callback=progress_callback)
         except (TimeoutError, ConnectionError) as e:
             raise ParserServiceError(f"VLM service unavailable: {e}") from e
         except Exception as e:
@@ -522,10 +546,11 @@ class PDFParserV2:
                 raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
             raise PDFParseError(f"VLM parse failed: {e}") from e
     
-    def parse(self, file_path: str) -> List[Document]:
+    def parse(self, file_path: str, progress_callback=None) -> List[Document]:
         """
         三级降级解析PDF
         :param file_path: PDF文件路径
+        :param progress_callback: 进度回调函数，接收(current_page, total_pages)参数
         :return: 解析后的文档列表
         :raises PDFParseError: 所有解析方式都失败时抛出
         :raises PDFCorruptedError: PDF文件本身损坏时抛出
@@ -548,7 +573,7 @@ class PDFParserV2:
             try:
                 logger.info(f"Parsing PDF {file_name} with {parser_type} parser")
                 
-                documents = parser_func(file_path)
+                documents = parser_func(file_path, progress_callback=progress_callback)
                 
                 # 校验解析结果质量
                 if self._is_content_valid(documents):

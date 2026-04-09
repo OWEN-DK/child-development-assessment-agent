@@ -1,6 +1,6 @@
 from typing import Dict, Type, Callable
 from llama_index.core.vector_stores.types import BasePydanticVectorStore
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 
 class VectorStoreFactory:

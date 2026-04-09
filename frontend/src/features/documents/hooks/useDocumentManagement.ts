@@ -17,6 +17,7 @@ interface UseDocumentManagementReturn {
   loadDocuments: () => Promise<void>;
   loadRagStatus: () => Promise<void>;
   handleCancel: (taskId: string) => Promise<void>;
+  addTask: (task: UploadTaskStatus) => void;
 }
 
 export const useDocumentManagement = (): UseDocumentManagementReturn => {
@@ -56,7 +57,7 @@ export const useDocumentManagement = (): UseDocumentManagementReturn => {
         t.status === 'processing' ||
         (t.status === 'cancelled' && (Date.now() / 1000 - t.created_at < 300)) ||
         (t.status === 'failed' && (Date.now() / 1000 - t.created_at < 3600)) ||
-        (t.status === 'success' && (Date.now() / 1000 - t.created_at < 300))
+        (t.status === 'success' && (Date.now() / 1000 - t.created_at < 5))
       );
       setProcessingTasks(activeTasks);
     } catch (e) {
@@ -74,6 +75,16 @@ export const useDocumentManagement = (): UseDocumentManagementReturn => {
       console.error('Cancel failed:', e);
       throw e;
     }
+  }, []);
+
+  const addTask = useCallback((task: UploadTaskStatus) => {
+    setProcessingTasks(prev => {
+      const exists = prev.find(t => t.task_id === task.task_id);
+      if (exists) {
+        return prev.map(t => t.task_id === task.task_id ? task : t);
+      }
+      return [...prev, task];
+    });
   }, []);
 
   useEffect(() => {
@@ -95,7 +106,8 @@ export const useDocumentManagement = (): UseDocumentManagementReturn => {
             t.status === 'pending' ||
             t.status === 'processing' ||
             (t.status === 'cancelled' && (Date.now() / 1000 - t.created_at < 300)) ||
-            (t.status === 'failed' && (Date.now() / 1000 - t.created_at < 3600))
+            (t.status === 'failed' && (Date.now() / 1000 - t.created_at < 3600)) ||
+            (t.status === 'success' && (Date.now() / 1000 - t.created_at < 5))
           );
 
           processingTasks.forEach(oldTask => {
@@ -148,5 +160,6 @@ export const useDocumentManagement = (): UseDocumentManagementReturn => {
     loadDocuments,
     loadRagStatus,
     handleCancel,
+    addTask,
   };
 };

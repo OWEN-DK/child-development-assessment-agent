@@ -1,6 +1,6 @@
 from typing import Tuple, List, Dict, Optional
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 import hashlib
 import os

@@ -5,7 +5,7 @@ import asyncio
 from typing import Any, Optional, List, Set
 from collections import defaultdict
 from functools import wraps
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from src.core.interfaces import ICacheService
 

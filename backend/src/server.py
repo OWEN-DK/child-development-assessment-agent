@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from src.config.settings import settings
-from src.controller import task_controller, rag_controller, rag_test_controller
+from src.config import settings
+from src.controller import task_controller, rag_controller, rag_test_controller, config_controller
 from fastapi.middleware.cors import CORSMiddleware
 from src.utils.logger import logger
 
@@ -18,6 +18,7 @@ def create_app() -> FastAPI:
     app.include_router(task_controller.router)
     app.include_router(rag_controller.router)
     app.include_router(rag_test_controller.router)
+    app.include_router(config_controller.router)
     return app
 
 

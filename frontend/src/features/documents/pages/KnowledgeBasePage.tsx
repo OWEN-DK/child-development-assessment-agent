@@ -20,11 +20,12 @@ const KnowledgeBasePage: React.FC = () => {
     loadDocuments,
     loadRagStatus,
     handleCancel,
+    addTask,
   } = useDocumentManagement();
 
-  const handleUploadStart = useCallback((_task: UploadTaskStatus) => {
-    // 任务已在 DocumentUploader 中添加到列表
-  }, []);
+  const handleUploadStart = useCallback((task: UploadTaskStatus) => {
+    addTask(task);
+  }, [addTask]);
 
   const handleUploadSuccess = useCallback(async () => {
     await loadDocuments();
@@ -40,7 +41,11 @@ const KnowledgeBasePage: React.FC = () => {
     }
   }, [handleCancel, message]);
 
-  const processingFilenames = new Set(processingTasks.map(t => t.filename));
+  const processingFilenames = new Set(
+    processingTasks
+      .filter(t => t.status !== 'success')
+      .map(t => t.filename)
+  );
 
   return (
     <div className={styles.container}>

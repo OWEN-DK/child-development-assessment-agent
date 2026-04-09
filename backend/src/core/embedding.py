@@ -5,7 +5,7 @@ from llama_index.embeddings.dashscope import DashScopeEmbedding
 from src.utils.logger import logger
 
 # 延迟导入 settings 以避免循环引用
-# from src.config.settings import settings
+# from src.config import settings
 
 
 class SafeDashScopeEmbedding(DashScopeEmbedding):
@@ -25,7 +25,7 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
 
     @property
     def max_text_length(self) -> int:
-        from src.config.settings import settings
+        from src.config import settings
 
         return settings.embedding_max_text_length
 

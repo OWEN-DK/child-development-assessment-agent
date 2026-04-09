@@ -25,6 +25,7 @@ export interface TestResult {
   recall: number;
   f1_score: number;
   mrr: number;
+  ndcg_at_k: number;
   results: TestResultItem[];
   executed_at: string;
   execution_time_ms: number;
@@ -39,12 +40,16 @@ export interface TestRun {
   overall_recall: number;
   overall_f1: number;
   overall_mrr: number;
+  overall_ndcg: number;
   total_test_cases: number;
   passed_test_cases: number;
   status: string;
   created_at: string;
   completed_at?: string;
   snapshot_id?: string;
+  config_version_id?: string;
+  previous_config_version_id?: string;
+  config_snapshot?: Record<string, any>;
 }
 
 export interface KnowledgeSnapshot {

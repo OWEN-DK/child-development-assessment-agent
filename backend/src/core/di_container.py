@@ -1,5 +1,5 @@
 from injector import Injector, Module, provider, singleton
-from src.config.settings import settings
+from src.config import settings
 from src.core.interfaces import (
     IIndexManager,
     ICacheService,

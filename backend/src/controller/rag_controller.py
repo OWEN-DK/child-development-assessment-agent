@@ -7,7 +7,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks,
 from src.service.rag_service import rag_service
 from src.utils.logger import logger
 from src.utils.exceptions import TaskCancelledException
-from src.config.settings import settings
+from src.config import settings
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -340,16 +340,24 @@ async def list_documents():
 
 
 @router.get("/search")
-async def search_knowledge_content(query: str, limit: int = Query(20, ge=1, le=100)):
+async def search_knowledge_content(
+    query: str, 
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
     """
-    搜索知识库内容，返回匹配的片段和元数据
+    搜索知识库内容，返回匹配的片段和元数据（支持分页）
     """
     if not query.strip():
         raise HTTPException(status_code=400, detail="搜索关键词不能为空")
 
     try:
-        results = await rag_service.search_content(query.strip(), limit)
-        return {"status": "success", "total": len(results), "results": results}
+        result = await rag_service.search_content(query.strip(), limit, offset)
+        return {
+            "status": "success", 
+            "total": result["total"], 
+            "results": result["results"]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
 

@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Tuple
 import json
 import httpx
 from pydantic import BaseModel, Field
-from src.config.settings import settings
+from src.config import settings
 from src.model.schemas import ChildProfile, ProposedPlan, ChildState, KnowledgeItem
 from src.utils.logger import logger
 

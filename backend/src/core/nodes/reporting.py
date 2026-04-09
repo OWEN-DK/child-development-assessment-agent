@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 from src.model.schemas import (
     AgentState,
     FinalReport,

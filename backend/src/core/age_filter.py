@@ -4,7 +4,7 @@
 from enum import Enum
 from typing import Tuple
 from pydantic import BaseModel
-from backend.src.config.settings import settings
+from backend.src.config import settings
 
 
 class DevelopmentStage(str, Enum):
@@ -58,7 +58,7 @@ class DynamicAgeFilter:
     }
     
     @classmethod
-    def get_stage(cls, age: int) -> DevelopmentStage:
+    def get_stage(cls, age: float | int) -> DevelopmentStage:
         """根据年龄判断发展阶段"""
         if age <= 1:
             return DevelopmentStage.INFANT
@@ -70,7 +70,7 @@ class DynamicAgeFilter:
             return DevelopmentStage.SCHOOL_AGE
     
     @classmethod
-    def get_config(cls, age: int) -> AgeFilterConfig:
+    def get_config(cls, age: float | int) -> AgeFilterConfig:
         """获取指定年龄的过滤配置"""
         stage = cls.get_stage(age)
         return cls.STAGE_CONFIGS[stage]
@@ -106,8 +106,8 @@ class DynamicAgeFilter:
     def calculate_age_fit_score(
         cls, 
         age: int, 
-        target_min: int, 
-        target_max: int
+        target_min: float, 
+        target_max: float
     ) -> float:
         """
         计算年龄适配度得分

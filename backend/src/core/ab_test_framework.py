@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import os
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 
 

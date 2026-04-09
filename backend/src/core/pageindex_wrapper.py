@@ -7,7 +7,7 @@ import logging
 import time
 from enum import Enum
 from typing import List, Dict, Any, Optional
-from src.config.settings import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,8912 @@
+[
+  {
+    "id": "tc_0001",
+    "query": "0岁儿童走路的发展情况如何",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试婴儿粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0002",
+    "query": "0岁宝宝还不会跑步正常吗",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跑步",
+      "发育",
+      "正常"
+    ],
+    "description": "测试婴儿粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0003",
+    "query": "如何训练0岁儿童的跳跃能力",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "训练",
+      "方法"
+    ],
+    "description": "测试婴儿粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0004",
+    "query": "0岁儿童攀爬发育迟缓的表现有哪些",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攀爬",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试婴儿粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0005",
+    "query": "0岁孩子投球能力落后怎么办",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "落后",
+      "干预"
+    ],
+    "description": "测试婴儿粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0006",
+    "query": "0岁儿童大运动发展的里程碑是什么",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试婴儿粗大动作领域关于踢球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0007",
+    "query": "促进0岁宝宝单脚站立的游戏有哪些",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "单脚站立",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试婴儿粗大动作领域关于单脚站立的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0008",
+    "query": "0岁儿童上下楼梯不协调需要就医吗",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "上下楼梯",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试婴儿粗大动作领域关于上下楼梯的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0009",
+    "query": "0岁儿童骑三轮车的发展情况如何",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "骑三轮车",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试婴儿粗大动作领域关于骑三轮车的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0010",
+    "query": "0岁宝宝还不会平衡木行走正常吗",
+    "age": 0,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "平衡木行走",
+      "发育",
+      "正常"
+    ],
+    "description": "测试婴儿粗大动作领域关于平衡木行走的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0011",
+    "query": "如何训练1岁儿童的走路能力",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0012",
+    "query": "1岁儿童跑步发育迟缓的表现有哪些",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跑步",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0013",
+    "query": "1岁孩子跳跃能力落后怎么办",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "落后",
+      "干预"
+    ],
+    "description": "测试幼儿粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0014",
+    "query": "1岁儿童大运动发展的里程碑是什么",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试幼儿粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0015",
+    "query": "促进1岁宝宝投球的游戏有哪些",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试幼儿粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0016",
+    "query": "1岁儿童踢球不协调需要就医吗",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "踢球",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试幼儿粗大动作领域关于踢球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0017",
+    "query": "1岁儿童单脚站立的发展情况如何",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "单脚站立",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试幼儿粗大动作领域关于单脚站立的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0018",
+    "query": "1岁宝宝还不会上下楼梯正常吗",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "上下楼梯",
+      "发育",
+      "正常"
+    ],
+    "description": "测试幼儿粗大动作领域关于上下楼梯的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0019",
+    "query": "如何训练1岁儿童的骑三轮车能力",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "骑三轮车",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿粗大动作领域关于骑三轮车的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0020",
+    "query": "1岁儿童平衡木行走发育迟缓的表现有哪些",
+    "age": 1,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "平衡木行走",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿粗大动作领域关于平衡木行走的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0021",
+    "query": "2岁孩子走路能力落后怎么办",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "落后",
+      "干预"
+    ],
+    "description": "测试幼儿粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0022",
+    "query": "2岁儿童大运动发展的里程碑是什么",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试幼儿粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0023",
+    "query": "促进2岁宝宝跳跃的游戏有哪些",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试幼儿粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0024",
+    "query": "2岁儿童攀爬不协调需要就医吗",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攀爬",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试幼儿粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0025",
+    "query": "2岁儿童投球的发展情况如何",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试幼儿粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0026",
+    "query": "2岁宝宝还不会踢球正常吗",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "踢球",
+      "发育",
+      "正常"
+    ],
+    "description": "测试幼儿粗大动作领域关于踢球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0027",
+    "query": "如何训练2岁儿童的单脚站立能力",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "单脚站立",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿粗大动作领域关于单脚站立的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0028",
+    "query": "2岁儿童上下楼梯发育迟缓的表现有哪些",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "上下楼梯",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿粗大动作领域关于上下楼梯的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0029",
+    "query": "2岁孩子骑三轮车能力落后怎么办",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "骑三轮车",
+      "落后",
+      "干预"
+    ],
+    "description": "测试幼儿粗大动作领域关于骑三轮车的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0030",
+    "query": "2岁儿童大运动发展的里程碑是什么",
+    "age": 2,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试幼儿粗大动作领域关于平衡木行走的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0031",
+    "query": "促进3岁宝宝走路的游戏有哪些",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0032",
+    "query": "3岁儿童跑步不协调需要就医吗",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跑步",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0033",
+    "query": "3岁儿童跳跃的发展情况如何",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0034",
+    "query": "3岁宝宝还不会攀爬正常吗",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攀爬",
+      "发育",
+      "正常"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0035",
+    "query": "如何训练3岁儿童的投球能力",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0036",
+    "query": "3岁儿童踢球发育迟缓的表现有哪些",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "踢球",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于踢球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0037",
+    "query": "3岁孩子单脚站立能力落后怎么办",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "单脚站立",
+      "落后",
+      "干预"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于单脚站立的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0038",
+    "query": "3岁儿童大运动发展的里程碑是什么",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于上下楼梯的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0039",
+    "query": "促进3岁宝宝骑三轮车的游戏有哪些",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "骑三轮车",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于骑三轮车的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0040",
+    "query": "3岁儿童平衡木行走不协调需要就医吗",
+    "age": 3,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "平衡木行走",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于平衡木行走的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0041",
+    "query": "4岁儿童走路的发展情况如何",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0042",
+    "query": "4岁宝宝还不会跑步正常吗",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跑步",
+      "发育",
+      "正常"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0043",
+    "query": "如何训练4岁儿童的跳跃能力",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0044",
+    "query": "4岁儿童攀爬发育迟缓的表现有哪些",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攀爬",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0045",
+    "query": "4岁孩子投球能力落后怎么办",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "落后",
+      "干预"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0046",
+    "query": "4岁儿童大运动发展的里程碑是什么",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于踢球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0047",
+    "query": "促进4岁宝宝单脚站立的游戏有哪些",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "单脚站立",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于单脚站立的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0048",
+    "query": "4岁儿童上下楼梯不协调需要就医吗",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "上下楼梯",
+      "不协调",
+      "就医"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于上下楼梯的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0049",
+    "query": "4岁儿童骑三轮车的发展情况如何",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "骑三轮车",
+      "发展",
+      "里程碑"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于骑三轮车的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0050",
+    "query": "4岁宝宝还不会平衡木行走正常吗",
+    "age": 4,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "平衡木行走",
+      "发育",
+      "正常"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于平衡木行走的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0051",
+    "query": "如何训练5岁儿童的走路能力",
+    "age": 5,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "走路",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于走路的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0052",
+    "query": "5岁儿童跑步发育迟缓的表现有哪些",
+    "age": 5,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跑步",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跑步的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0053",
+    "query": "5岁孩子跳跃能力落后怎么办",
+    "age": 5,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "跳跃",
+      "落后",
+      "干预"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于跳跃的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0054",
+    "query": "5岁儿童大运动发展的里程碑是什么",
+    "age": 5,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "大运动",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于攀爬的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0055",
+    "query": "促进5岁宝宝投球的游戏有哪些",
+    "age": 5,
+    "domain": "粗大动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "投球",
+      "游戏",
+      "促进"
+    ],
+    "description": "测试学龄前儿童粗大动作领域关于投球的检索能力",
+    "answer_points": [
+      "发展里程碑",
+      "正常范围",
+      "训练方法",
+      "就医指征",
+      "家庭干预建议"
+    ],
+    "professional_terms": [
+      "大运动发展",
+      "运动里程碑",
+      "肌张力"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0056",
+    "query": "0岁儿童握笔能力如何培养",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试婴儿精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0057",
+    "query": "0岁宝宝还不会用勺子需要担心吗",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "用勺子",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试婴儿精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0058",
+    "query": "训练0岁儿童搭积木的方法有哪些",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "搭积木",
+      "训练",
+      "方法"
+    ],
+    "description": "测试婴儿精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0059",
+    "query": "0岁孩子手部精细动作发展标准",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试婴儿精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0060",
+    "query": "0岁儿童剪纸发育迟缓怎么办",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪纸",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试婴儿精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0061",
+    "query": "适合0岁宝宝的精细动作训练游戏",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试婴儿精细动作领域关于扣纽扣的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0062",
+    "query": "0岁儿童握笔姿势不正确如何纠正",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试婴儿精细动作领域关于拉拉链的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0063",
+    "query": "0岁孩子用剪刀不熟练正常吗",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试婴儿精细动作领域关于翻书的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0064",
+    "query": "0岁儿童涂鸦能力如何培养",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "涂鸦",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试婴儿精细动作领域关于涂鸦的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0065",
+    "query": "0岁宝宝还不会拼拼图需要担心吗",
+    "age": 0,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "拼拼图",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试婴儿精细动作领域关于拼拼图的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0066",
+    "query": "训练1岁儿童握笔的方法有哪些",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0067",
+    "query": "1岁孩子手部精细动作发展标准",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试幼儿精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0068",
+    "query": "1岁儿童搭积木发育迟缓怎么办",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "搭积木",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试幼儿精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0069",
+    "query": "适合1岁宝宝的精细动作训练游戏",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0070",
+    "query": "1岁儿童握笔姿势不正确如何纠正",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试幼儿精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0071",
+    "query": "1岁孩子用剪刀不熟练正常吗",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试幼儿精细动作领域关于扣纽扣的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0072",
+    "query": "1岁儿童拉拉链能力如何培养",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "拉拉链",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试幼儿精细动作领域关于拉拉链的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0073",
+    "query": "1岁宝宝还不会翻书需要担心吗",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "翻书",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试幼儿精细动作领域关于翻书的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0074",
+    "query": "训练1岁儿童涂鸦的方法有哪些",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "涂鸦",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿精细动作领域关于涂鸦的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0075",
+    "query": "1岁孩子手部精细动作发展标准",
+    "age": 1,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试幼儿精细动作领域关于拼拼图的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0076",
+    "query": "2岁儿童握笔发育迟缓怎么办",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试幼儿精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0077",
+    "query": "适合2岁宝宝的精细动作训练游戏",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0078",
+    "query": "2岁儿童握笔姿势不正确如何纠正",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试幼儿精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0079",
+    "query": "2岁孩子用剪刀不熟练正常吗",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试幼儿精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0080",
+    "query": "2岁儿童剪纸能力如何培养",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪纸",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试幼儿精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0081",
+    "query": "2岁宝宝还不会扣纽扣需要担心吗",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "扣纽扣",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试幼儿精细动作领域关于扣纽扣的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0082",
+    "query": "训练2岁儿童拉拉链的方法有哪些",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "拉拉链",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿精细动作领域关于拉拉链的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0083",
+    "query": "2岁孩子手部精细动作发展标准",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试幼儿精细动作领域关于翻书的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0084",
+    "query": "2岁儿童涂鸦发育迟缓怎么办",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "涂鸦",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试幼儿精细动作领域关于涂鸦的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0085",
+    "query": "适合2岁宝宝的精细动作训练游戏",
+    "age": 2,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿精细动作领域关于拼拼图的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0086",
+    "query": "3岁儿童握笔姿势不正确如何纠正",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0087",
+    "query": "3岁孩子用剪刀不熟练正常吗",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0088",
+    "query": "3岁儿童搭积木能力如何培养",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "搭积木",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0089",
+    "query": "3岁宝宝还不会串珠子需要担心吗",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "串珠子",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0090",
+    "query": "训练3岁儿童剪纸的方法有哪些",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪纸",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0091",
+    "query": "3岁孩子手部精细动作发展标准",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于扣纽扣的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0092",
+    "query": "3岁儿童拉拉链发育迟缓怎么办",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "拉拉链",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于拉拉链的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0093",
+    "query": "适合3岁宝宝的精细动作训练游戏",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于翻书的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0094",
+    "query": "3岁儿童握笔姿势不正确如何纠正",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于涂鸦的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0095",
+    "query": "3岁孩子用剪刀不熟练正常吗",
+    "age": 3,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于拼拼图的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0096",
+    "query": "4岁儿童握笔能力如何培养",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0097",
+    "query": "4岁宝宝还不会用勺子需要担心吗",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "用勺子",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0098",
+    "query": "训练4岁儿童搭积木的方法有哪些",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "搭积木",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0099",
+    "query": "4岁孩子手部精细动作发展标准",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0100",
+    "query": "4岁儿童剪纸发育迟缓怎么办",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪纸",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0101",
+    "query": "适合4岁宝宝的精细动作训练游戏",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于扣纽扣的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0102",
+    "query": "4岁儿童握笔姿势不正确如何纠正",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于拉拉链的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0103",
+    "query": "4岁孩子用剪刀不熟练正常吗",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "剪刀",
+      "精细动作",
+      "正常"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于翻书的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0104",
+    "query": "4岁儿童涂鸦能力如何培养",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "涂鸦",
+      "培养",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于涂鸦的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0105",
+    "query": "4岁宝宝还不会拼拼图需要担心吗",
+    "age": 4,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "拼拼图",
+      "精细动作",
+      "发育"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于拼拼图的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0106",
+    "query": "训练5岁儿童握笔的方法有哪些",
+    "age": 5,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于握笔的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0107",
+    "query": "5岁孩子手部精细动作发展标准",
+    "age": 5,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "手部",
+      "精细动作",
+      "标准"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于用勺子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0108",
+    "query": "5岁儿童搭积木发育迟缓怎么办",
+    "age": 5,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "搭积木",
+      "迟缓",
+      "干预"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于搭积木的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0109",
+    "query": "适合5岁宝宝的精细动作训练游戏",
+    "age": 5,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "精细动作",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于串珠子的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0110",
+    "query": "5岁儿童握笔姿势不正确如何纠正",
+    "age": 5,
+    "domain": "精细动作",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "握笔",
+      "纠正",
+      "精细动作"
+    ],
+    "description": "测试学龄前儿童精细动作领域关于剪纸的检索能力",
+    "answer_points": [
+      "发展标准",
+      "训练游戏",
+      "日常练习",
+      "异常表现",
+      "专业评估建议"
+    ],
+    "professional_terms": [
+      "手眼协调",
+      "精细运动",
+      "手指灵活性"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0111",
+    "query": "0岁儿童语言发展里程碑有哪些",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试婴儿语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0112",
+    "query": "0岁宝宝还不会说话正常吗",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试婴儿语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0113",
+    "query": "如何促进0岁儿童的语言表达能力",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试婴儿语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0114",
+    "query": "0岁孩子语言发育迟缓的表现",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试婴儿语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0115",
+    "query": "0岁儿童口吃需要干预吗",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试婴儿语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0116",
+    "query": "适合0岁宝宝的语言训练方法",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试婴儿语言发展领域关于描述事物的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0117",
+    "query": "0岁孩子词汇量少怎么办",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试婴儿语言发展领域关于表达需求的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0118",
+    "query": "0岁儿童发音不清如何纠正",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试婴儿语言发展领域关于理解指令的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0119",
+    "query": "0岁儿童语言发展里程碑有哪些",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试婴儿语言发展领域关于数数的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0120",
+    "query": "0岁宝宝还不会说话正常吗",
+    "age": 0,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试婴儿语言发展领域关于认字的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0121",
+    "query": "如何促进1岁儿童的语言表达能力",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试幼儿语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0122",
+    "query": "1岁孩子语言发育迟缓的表现",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0123",
+    "query": "1岁儿童口吃需要干预吗",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试幼儿语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0124",
+    "query": "适合1岁宝宝的语言训练方法",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0125",
+    "query": "1岁孩子词汇量少怎么办",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试幼儿语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0126",
+    "query": "1岁儿童发音不清如何纠正",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试幼儿语言发展领域关于描述事物的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0127",
+    "query": "1岁儿童语言发展里程碑有哪些",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试幼儿语言发展领域关于表达需求的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0128",
+    "query": "1岁宝宝还不会说话正常吗",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试幼儿语言发展领域关于理解指令的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0129",
+    "query": "如何促进1岁儿童的语言表达能力",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试幼儿语言发展领域关于数数的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0130",
+    "query": "1岁孩子语言发育迟缓的表现",
+    "age": 1,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿语言发展领域关于认字的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0131",
+    "query": "2岁儿童口吃需要干预吗",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试幼儿语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0132",
+    "query": "适合2岁宝宝的语言训练方法",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0133",
+    "query": "2岁孩子词汇量少怎么办",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试幼儿语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0134",
+    "query": "2岁儿童发音不清如何纠正",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试幼儿语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0135",
+    "query": "2岁儿童语言发展里程碑有哪些",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试幼儿语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0136",
+    "query": "2岁宝宝还不会说话正常吗",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试幼儿语言发展领域关于描述事物的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0137",
+    "query": "如何促进2岁儿童的语言表达能力",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试幼儿语言发展领域关于表达需求的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0138",
+    "query": "2岁孩子语言发育迟缓的表现",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿语言发展领域关于理解指令的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0139",
+    "query": "2岁儿童口吃需要干预吗",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试幼儿语言发展领域关于数数的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0140",
+    "query": "适合2岁宝宝的语言训练方法",
+    "age": 2,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试幼儿语言发展领域关于认字的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0141",
+    "query": "3岁孩子词汇量少怎么办",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0142",
+    "query": "3岁儿童发音不清如何纠正",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0143",
+    "query": "3岁儿童语言发展里程碑有哪些",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0144",
+    "query": "3岁宝宝还不会说话正常吗",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0145",
+    "query": "如何促进3岁儿童的语言表达能力",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0146",
+    "query": "3岁孩子语言发育迟缓的表现",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于描述事物的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0147",
+    "query": "3岁儿童口吃需要干预吗",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于表达需求的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0148",
+    "query": "适合3岁宝宝的语言训练方法",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于理解指令的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0149",
+    "query": "3岁孩子词汇量少怎么办",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于数数的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0150",
+    "query": "3岁儿童发音不清如何纠正",
+    "age": 3,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于认字的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0151",
+    "query": "4岁儿童语言发展里程碑有哪些",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0152",
+    "query": "4岁宝宝还不会说话正常吗",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0153",
+    "query": "如何促进4岁儿童的语言表达能力",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0154",
+    "query": "4岁孩子语言发育迟缓的表现",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0155",
+    "query": "4岁儿童口吃需要干预吗",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0156",
+    "query": "适合4岁宝宝的语言训练方法",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于描述事物的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0157",
+    "query": "4岁孩子词汇量少怎么办",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于表达需求的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0158",
+    "query": "4岁儿童发音不清如何纠正",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "发音",
+      "纠正",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于理解指令的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0159",
+    "query": "4岁儿童语言发展里程碑有哪些",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "里程碑",
+      "发展"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于数数的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0160",
+    "query": "4岁宝宝还不会说话正常吗",
+    "age": 4,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "说话",
+      "语言",
+      "发育迟缓"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于认字的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0161",
+    "query": "如何促进5岁儿童的语言表达能力",
+    "age": 5,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "表达",
+      "促进"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于叫爸爸妈妈的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0162",
+    "query": "5岁孩子语言发育迟缓的表现",
+    "age": 5,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于说短句的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0163",
+    "query": "5岁儿童口吃需要干预吗",
+    "age": 5,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "口吃",
+      "干预",
+      "语言"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于讲故事的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0164",
+    "query": "适合5岁宝宝的语言训练方法",
+    "age": 5,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "语言",
+      "训练",
+      "方法"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于唱儿歌的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0165",
+    "query": "5岁孩子词汇量少怎么办",
+    "age": 5,
+    "domain": "语言发展",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "词汇",
+      "语言",
+      "训练"
+    ],
+    "description": "测试学龄前儿童语言发展领域关于回答问题的检索能力",
+    "answer_points": [
+      "语言发展阶段",
+      "促进方法",
+      "异常信号",
+      "家庭语言环境",
+      "专业干预时机"
+    ],
+    "professional_terms": [
+      "语言习得",
+      "语音发展",
+      "语义理解"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0166",
+    "query": "0岁儿童认知发展特点是什么",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试婴儿认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0167",
+    "query": "0岁宝宝的注意力能集中多久",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试婴儿认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0168",
+    "query": "如何培养0岁儿童的记忆力",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试婴儿认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0169",
+    "query": "0岁孩子认知能力发育迟缓的表现",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试婴儿认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0170",
+    "query": "适合0岁儿童的认知训练游戏",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试婴儿认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0171",
+    "query": "0岁宝宝空间概念发展情况",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试婴儿认知能力领域关于找不同的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0172",
+    "query": "0岁儿童逻辑思维能力如何培养",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试婴儿认知能力领域关于记忆图片的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0173",
+    "query": "0岁孩子问题解决能力发展标准",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试婴儿认知能力领域关于理解因果关系的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0174",
+    "query": "0岁儿童认知发展特点是什么",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试婴儿认知能力领域关于解决问题的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0175",
+    "query": "0岁宝宝的注意力能集中多久",
+    "age": 0,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试婴儿认知能力领域关于模仿的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0176",
+    "query": "如何培养1岁儿童的记忆力",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0177",
+    "query": "1岁孩子认知能力发育迟缓的表现",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0178",
+    "query": "适合1岁儿童的认知训练游戏",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0179",
+    "query": "1岁宝宝空间概念发展情况",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0180",
+    "query": "1岁儿童逻辑思维能力如何培养",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试幼儿认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0181",
+    "query": "1岁孩子问题解决能力发展标准",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试幼儿认知能力领域关于找不同的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0182",
+    "query": "1岁儿童认知发展特点是什么",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试幼儿认知能力领域关于记忆图片的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0183",
+    "query": "1岁宝宝的注意力能集中多久",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于理解因果关系的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0184",
+    "query": "如何培养1岁儿童的记忆力",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于解决问题的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0185",
+    "query": "1岁孩子认知能力发育迟缓的表现",
+    "age": 1,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿认知能力领域关于模仿的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0186",
+    "query": "适合2岁儿童的认知训练游戏",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0187",
+    "query": "2岁宝宝空间概念发展情况",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0188",
+    "query": "2岁儿童逻辑思维能力如何培养",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试幼儿认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0189",
+    "query": "2岁孩子问题解决能力发展标准",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试幼儿认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0190",
+    "query": "2岁儿童认知发展特点是什么",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试幼儿认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0191",
+    "query": "2岁宝宝的注意力能集中多久",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于找不同的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0192",
+    "query": "如何培养2岁儿童的记忆力",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于记忆图片的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0193",
+    "query": "2岁孩子认知能力发育迟缓的表现",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试幼儿认知能力领域关于理解因果关系的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0194",
+    "query": "适合2岁儿童的认知训练游戏",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿认知能力领域关于解决问题的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0195",
+    "query": "2岁宝宝空间概念发展情况",
+    "age": 2,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试幼儿认知能力领域关于模仿的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0196",
+    "query": "3岁儿童逻辑思维能力如何培养",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0197",
+    "query": "3岁孩子问题解决能力发展标准",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0198",
+    "query": "3岁儿童认知发展特点是什么",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0199",
+    "query": "3岁宝宝的注意力能集中多久",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0200",
+    "query": "如何培养3岁儿童的记忆力",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0201",
+    "query": "3岁孩子认知能力发育迟缓的表现",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于找不同的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0202",
+    "query": "适合3岁儿童的认知训练游戏",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于记忆图片的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0203",
+    "query": "3岁宝宝空间概念发展情况",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于理解因果关系的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0204",
+    "query": "3岁儿童逻辑思维能力如何培养",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于解决问题的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0205",
+    "query": "3岁孩子问题解决能力发展标准",
+    "age": 3,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于模仿的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0206",
+    "query": "4岁儿童认知发展特点是什么",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0207",
+    "query": "4岁宝宝的注意力能集中多久",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0208",
+    "query": "如何培养4岁儿童的记忆力",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0209",
+    "query": "4岁孩子认知能力发育迟缓的表现",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0210",
+    "query": "适合4岁儿童的认知训练游戏",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0211",
+    "query": "4岁宝宝空间概念发展情况",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于找不同的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0212",
+    "query": "4岁儿童逻辑思维能力如何培养",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于记忆图片的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0213",
+    "query": "4岁孩子问题解决能力发展标准",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "问题解决",
+      "能力",
+      "标准"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于理解因果关系的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0214",
+    "query": "4岁儿童认知发展特点是什么",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于解决问题的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0215",
+    "query": "4岁宝宝的注意力能集中多久",
+    "age": 4,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "注意力",
+      "集中",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于模仿的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0216",
+    "query": "如何培养5岁儿童的记忆力",
+    "age": 5,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "记忆力",
+      "培养",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于颜色识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0217",
+    "query": "5岁孩子认知能力发育迟缓的表现",
+    "age": 5,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "迟缓",
+      "表现"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于形状识别的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0218",
+    "query": "适合5岁儿童的认知训练游戏",
+    "age": 5,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "认知",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于数数的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0219",
+    "query": "5岁宝宝空间概念发展情况",
+    "age": 5,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "空间",
+      "概念",
+      "认知"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于分类的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0220",
+    "query": "5岁儿童逻辑思维能力如何培养",
+    "age": 5,
+    "domain": "认知能力",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "逻辑",
+      "思维",
+      "培养"
+    ],
+    "description": "测试学龄前儿童认知能力领域关于配对的检索能力",
+    "answer_points": [
+      "认知发展特点",
+      "训练方法",
+      "日常活动建议",
+      "异常表现",
+      "评估工具"
+    ],
+    "professional_terms": [
+      "认知发展",
+      "执行功能",
+      "工作记忆"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0221",
+    "query": "0岁儿童社交能力发展特点",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试婴儿社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0222",
+    "query": "0岁宝宝不合群怎么办",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试婴儿社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0223",
+    "query": "如何培养0岁儿童的情绪管理能力",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试婴儿社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0224",
+    "query": "0岁孩子分离焦虑严重正常吗",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试婴儿社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0225",
+    "query": "0岁儿童攻击性行为如何引导",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试婴儿社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0226",
+    "query": "适合0岁宝宝的社交技能训练",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试婴儿社交情感领域关于轮流等待的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0227",
+    "query": "0岁孩子不会分享怎么办",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试婴儿社交情感领域关于安慰他人的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0228",
+    "query": "0岁儿童同理心发展情况",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试婴儿社交情感领域关于表达喜好的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0229",
+    "query": "0岁儿童社交能力发展特点",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试婴儿社交情感领域关于合作游戏的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0230",
+    "query": "0岁宝宝不合群怎么办",
+    "age": 0,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试婴儿社交情感领域关于处理冲突的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0231",
+    "query": "如何培养1岁儿童的情绪管理能力",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试幼儿社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0232",
+    "query": "1岁孩子分离焦虑严重正常吗",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试幼儿社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0233",
+    "query": "1岁儿童攻击性行为如何引导",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试幼儿社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0234",
+    "query": "适合1岁宝宝的社交技能训练",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试幼儿社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0235",
+    "query": "1岁孩子不会分享怎么办",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试幼儿社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0236",
+    "query": "1岁儿童同理心发展情况",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试幼儿社交情感领域关于轮流等待的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0237",
+    "query": "1岁儿童社交能力发展特点",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试幼儿社交情感领域关于安慰他人的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0238",
+    "query": "1岁宝宝不合群怎么办",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试幼儿社交情感领域关于表达喜好的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0239",
+    "query": "如何培养1岁儿童的情绪管理能力",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试幼儿社交情感领域关于合作游戏的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0240",
+    "query": "1岁孩子分离焦虑严重正常吗",
+    "age": 1,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试幼儿社交情感领域关于处理冲突的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0241",
+    "query": "2岁儿童攻击性行为如何引导",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试幼儿社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0242",
+    "query": "适合2岁宝宝的社交技能训练",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试幼儿社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0243",
+    "query": "2岁孩子不会分享怎么办",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试幼儿社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0244",
+    "query": "2岁儿童同理心发展情况",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试幼儿社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0245",
+    "query": "2岁儿童社交能力发展特点",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试幼儿社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0246",
+    "query": "2岁宝宝不合群怎么办",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试幼儿社交情感领域关于轮流等待的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0247",
+    "query": "如何培养2岁儿童的情绪管理能力",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试幼儿社交情感领域关于安慰他人的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0248",
+    "query": "2岁孩子分离焦虑严重正常吗",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试幼儿社交情感领域关于表达喜好的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0249",
+    "query": "2岁儿童攻击性行为如何引导",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试幼儿社交情感领域关于合作游戏的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0250",
+    "query": "适合2岁宝宝的社交技能训练",
+    "age": 2,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试幼儿社交情感领域关于处理冲突的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0251",
+    "query": "3岁孩子不会分享怎么办",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0252",
+    "query": "3岁儿童同理心发展情况",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0253",
+    "query": "3岁儿童社交能力发展特点",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0254",
+    "query": "3岁宝宝不合群怎么办",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0255",
+    "query": "如何培养3岁儿童的情绪管理能力",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0256",
+    "query": "3岁孩子分离焦虑严重正常吗",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于轮流等待的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0257",
+    "query": "3岁儿童攻击性行为如何引导",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于安慰他人的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0258",
+    "query": "适合3岁宝宝的社交技能训练",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于表达喜好的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0259",
+    "query": "3岁孩子不会分享怎么办",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于合作游戏的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0260",
+    "query": "3岁儿童同理心发展情况",
+    "age": 3,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于处理冲突的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0261",
+    "query": "4岁儿童社交能力发展特点",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0262",
+    "query": "4岁宝宝不合群怎么办",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0263",
+    "query": "如何培养4岁儿童的情绪管理能力",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0264",
+    "query": "4岁孩子分离焦虑严重正常吗",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0265",
+    "query": "4岁儿童攻击性行为如何引导",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0266",
+    "query": "适合4岁宝宝的社交技能训练",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于轮流等待的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0267",
+    "query": "4岁孩子不会分享怎么办",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于安慰他人的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0268",
+    "query": "4岁儿童同理心发展情况",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "同理心",
+      "社交",
+      "发展"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于表达喜好的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0269",
+    "query": "4岁儿童社交能力发展特点",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "发展",
+      "特点"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于合作游戏的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0270",
+    "query": "4岁宝宝不合群怎么办",
+    "age": 4,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "不合群",
+      "社交",
+      "干预"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于处理冲突的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0271",
+    "query": "如何培养5岁儿童的情绪管理能力",
+    "age": 5,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "情绪",
+      "管理",
+      "培养"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于微笑回应的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0272",
+    "query": "5岁孩子分离焦虑严重正常吗",
+    "age": 5,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分离焦虑",
+      "情绪",
+      "正常"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于眼神交流的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0273",
+    "query": "5岁儿童攻击性行为如何引导",
+    "age": 5,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "攻击性",
+      "行为",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于和小朋友玩的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0274",
+    "query": "适合5岁宝宝的社交技能训练",
+    "age": 5,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "社交",
+      "技能",
+      "训练"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于表达情感的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0275",
+    "query": "5岁孩子不会分享怎么办",
+    "age": 5,
+    "domain": "社交情感",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "分享",
+      "社交",
+      "引导"
+    ],
+    "description": "测试学龄前儿童社交情感领域关于遵守规则的检索能力",
+    "answer_points": [
+      "社交发展阶段",
+      "情绪管理技巧",
+      "家庭引导方法",
+      "异常行为识别",
+      "专业支持"
+    ],
+    "professional_terms": [
+      "依恋关系",
+      "情绪调节",
+      "社会认知"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0276",
+    "query": "0岁儿童感觉统合失调的表现",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试婴儿感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0277",
+    "query": "0岁宝宝前庭觉训练方法",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试婴儿感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0278",
+    "query": "如何判断0岁儿童触觉敏感",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试婴儿感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0279",
+    "query": "0岁孩子本体觉发育不良怎么办",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试婴儿感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0280",
+    "query": "适合0岁儿童的感觉统合训练游戏",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试婴儿感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0281",
+    "query": "0岁宝宝听觉敏感如何改善",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试婴儿感觉统合领域关于平衡感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0282",
+    "query": "0岁儿童视觉追踪能力训练",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试婴儿感觉统合领域关于方向感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0283",
+    "query": "感觉统合训练对0岁孩子有效果吗",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试婴儿感觉统合领域关于身体协调的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0284",
+    "query": "0岁儿童感觉统合失调的表现",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试婴儿感觉统合领域关于动作计划的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0285",
+    "query": "0岁宝宝前庭觉训练方法",
+    "age": 0,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试婴儿感觉统合领域关于感觉调节的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "0岁婴儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0286",
+    "query": "如何判断1岁儿童触觉敏感",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试幼儿感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0287",
+    "query": "1岁孩子本体觉发育不良怎么办",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试幼儿感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0288",
+    "query": "适合1岁儿童的感觉统合训练游戏",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0289",
+    "query": "1岁宝宝听觉敏感如何改善",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试幼儿感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0290",
+    "query": "1岁儿童视觉追踪能力训练",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试幼儿感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0291",
+    "query": "感觉统合训练对1岁孩子有效果吗",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试幼儿感觉统合领域关于平衡感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0292",
+    "query": "1岁儿童感觉统合失调的表现",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试幼儿感觉统合领域关于方向感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0293",
+    "query": "1岁宝宝前庭觉训练方法",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试幼儿感觉统合领域关于身体协调的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0294",
+    "query": "如何判断1岁儿童触觉敏感",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试幼儿感觉统合领域关于动作计划的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0295",
+    "query": "1岁孩子本体觉发育不良怎么办",
+    "age": 1,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试幼儿感觉统合领域关于感觉调节的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "1岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0296",
+    "query": "适合2岁儿童的感觉统合训练游戏",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0297",
+    "query": "2岁宝宝听觉敏感如何改善",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试幼儿感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0298",
+    "query": "2岁儿童视觉追踪能力训练",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试幼儿感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0299",
+    "query": "感觉统合训练对2岁孩子有效果吗",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试幼儿感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0300",
+    "query": "2岁儿童感觉统合失调的表现",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试幼儿感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0301",
+    "query": "2岁宝宝前庭觉训练方法",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试幼儿感觉统合领域关于平衡感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0302",
+    "query": "如何判断2岁儿童触觉敏感",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试幼儿感觉统合领域关于方向感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0303",
+    "query": "2岁孩子本体觉发育不良怎么办",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试幼儿感觉统合领域关于身体协调的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0304",
+    "query": "适合2岁儿童的感觉统合训练游戏",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试幼儿感觉统合领域关于动作计划的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0305",
+    "query": "2岁宝宝听觉敏感如何改善",
+    "age": 2,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试幼儿感觉统合领域关于感觉调节的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "2岁幼儿适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0306",
+    "query": "3岁儿童视觉追踪能力训练",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0307",
+    "query": "感觉统合训练对3岁孩子有效果吗",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0308",
+    "query": "3岁儿童感觉统合失调的表现",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0309",
+    "query": "3岁宝宝前庭觉训练方法",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0310",
+    "query": "如何判断3岁儿童触觉敏感",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0311",
+    "query": "3岁孩子本体觉发育不良怎么办",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于平衡感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0312",
+    "query": "适合3岁儿童的感觉统合训练游戏",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于方向感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0313",
+    "query": "3岁宝宝听觉敏感如何改善",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于身体协调的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0314",
+    "query": "3岁儿童视觉追踪能力训练",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于动作计划的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0315",
+    "query": "感觉统合训练对3岁孩子有效果吗",
+    "age": 3,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于感觉调节的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "3岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0316",
+    "query": "4岁儿童感觉统合失调的表现",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0317",
+    "query": "4岁宝宝前庭觉训练方法",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0318",
+    "query": "如何判断4岁儿童触觉敏感",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0319",
+    "query": "4岁孩子本体觉发育不良怎么办",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0320",
+    "query": "适合4岁儿童的感觉统合训练游戏",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0321",
+    "query": "4岁宝宝听觉敏感如何改善",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于平衡感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0322",
+    "query": "4岁儿童视觉追踪能力训练",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于方向感的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0323",
+    "query": "感觉统合训练对4岁孩子有效果吗",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "训练",
+      "效果"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于身体协调的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0324",
+    "query": "4岁儿童感觉统合失调的表现",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "失调",
+      "表现"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于动作计划的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0325",
+    "query": "4岁宝宝前庭觉训练方法",
+    "age": 4,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "前庭觉",
+      "训练",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于感觉调节的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "4岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0326",
+    "query": "如何判断5岁儿童触觉敏感",
+    "age": 5,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "触觉",
+      "敏感",
+      "感觉统合"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于前庭觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0327",
+    "query": "5岁孩子本体觉发育不良怎么办",
+    "age": 5,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "本体觉",
+      "发育",
+      "干预"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于触觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0328",
+    "query": "适合5岁儿童的感觉统合训练游戏",
+    "age": 5,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "感觉统合",
+      "游戏",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于本体觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0329",
+    "query": "5岁宝宝听觉敏感如何改善",
+    "age": 5,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "听觉",
+      "敏感",
+      "改善"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于听觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  },
+  {
+    "id": "tc_0330",
+    "query": "5岁儿童视觉追踪能力训练",
+    "age": 5,
+    "domain": "感觉统合",
+    "expected_knowledge_ids": [],
+    "expected_keywords": [
+      "视觉",
+      "追踪",
+      "训练"
+    ],
+    "description": "测试学龄前儿童感觉统合领域关于视觉的检索能力",
+    "answer_points": [
+      "感觉统合原理",
+      "失调表现",
+      "训练方法",
+      "家庭环境调整",
+      "专业治疗"
+    ],
+    "professional_terms": [
+      "感觉处理",
+      "感觉调节障碍",
+      "前庭系统"
+    ],
+    "age_requirement": "5岁学龄前儿童适用",
+    "relevance_scores": {}
+  }
+]

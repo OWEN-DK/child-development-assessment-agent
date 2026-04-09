@@ -1,5 +1,7 @@
 import pytest
+from unittest.mock import patch
 from src.core.nodes.scoring import ScoringNode
+from src.config.settings import settings
 from src.model.schemas import (
     AgentState,
     ChildProfile,
@@ -11,6 +13,10 @@ from src.model.schemas import (
     KnowledgeItem,
 )
 
+@pytest.fixture(autouse=True)
+def mock_settings():
+    with patch.object(settings, "ml_scoring_enabled", False):
+        yield
 
 @pytest.fixture
 def base_state():

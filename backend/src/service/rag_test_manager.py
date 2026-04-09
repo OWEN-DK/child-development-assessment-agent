@@ -3,6 +3,7 @@ import os
 import threading
 import shutil
 import time
+import math
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -16,6 +17,7 @@ from src.model.rag_test import (
 )
 from src.service.rag_service import rag_service, STORAGE_DIR
 from src.service.document_manager import document_manager
+from src.config.config_manager import config_manager
 from src.utils.logger import logger
 
 TEST_CASE_STORE_PATH = "./storage/test_cases.json"
@@ -168,6 +170,9 @@ class RagTestManager:
             else 0.0
         )
         mrr = 1.0 / first_relevant_rank if first_relevant_rank is not None else 0.0
+        
+        # 计算 NDCG@K
+        ndcg_at_k = self._calculate_ndcg(test_result_items, test_case.expected_knowledge_ids)
 
         return TestResult(
             test_case_id=test_case.id,
@@ -177,6 +182,7 @@ class RagTestManager:
             recall=recall,
             f1_score=f1_score,
             mrr=mrr,
+            ndcg_at_k=ndcg_at_k,
             results=test_result_items,
             execution_time_ms=execution_time_ms,
         )
@@ -189,11 +195,20 @@ class RagTestManager:
         if not test_cases:
             raise ValueError("No test cases available")
 
+        current_version = config_manager.get_active_version()
+        config_snapshot = config_manager.get_full_config()
+
+        previous_run = self._get_last_test_run()
+        previous_config_version = previous_run.config_version_id if previous_run else None
+
         test_run = TestRun(
             name=name or f"Test Run {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             description=description,
             total_test_cases=len(test_cases),
             status="running",
+            config_version_id=current_version,
+            config_snapshot=config_snapshot,
+            previous_config_version_id=previous_config_version,
         )
 
         test_results = []
@@ -202,6 +217,7 @@ class RagTestManager:
         total_recall = 0.0
         total_f1 = 0.0
         total_mrr = 0.0
+        total_ndcg = 0.0
 
         for test_case in test_cases:
             try:
@@ -212,6 +228,7 @@ class RagTestManager:
                 total_recall += result.recall
                 total_f1 += result.f1_score
                 total_mrr += result.mrr
+                total_ndcg += result.ndcg_at_k
 
                 # 认为F1 > 0.7为通过
                 if result.f1_score >= 0.7:
@@ -228,6 +245,7 @@ class RagTestManager:
             test_run.overall_recall = total_recall / test_count
             test_run.overall_f1 = total_f1 / test_count
             test_run.overall_mrr = total_mrr / test_count
+            test_run.overall_ndcg = total_ndcg / test_count
 
         test_run.test_results = test_results
         test_run.passed_test_cases = passed_count
@@ -305,14 +323,14 @@ class RagTestManager:
         snapshot_dir = os.path.join(self.snapshots_dir, snapshot.id)
         os.makedirs(snapshot_dir, exist_ok=True)
 
-        # 复制当前索引到快照目录
-        if os.path.exists(STORAGE_DIR):
-            shutil.copytree(
-                STORAGE_DIR, os.path.join(snapshot_dir, "storage"), dirs_exist_ok=True
-            )
+        # 仅复制索引目录
+        index_dir = os.path.join(STORAGE_DIR, "index")
+        snapshot_index_dir = os.path.join(snapshot_dir, "index")
+        if os.path.exists(index_dir):
+            shutil.copytree(index_dir, snapshot_index_dir, dirs_exist_ok=True)
 
         # 复制文档存储
-        doc_store_path = "./storage/document_store.json"
+        doc_store_path = os.path.join(STORAGE_DIR, "document_store.json")
         if os.path.exists(doc_store_path):
             shutil.copy2(
                 doc_store_path, os.path.join(snapshot_dir, "document_store.json")
@@ -382,26 +400,45 @@ class RagTestManager:
                 if hasattr(rag_service.retrieval_service, 'vector_retriever'):
                     rag_service.retrieval_service.vector_retriever = None
 
-            # 备份当前状态
+            # 备份当前状态（仅备份 index 目录和 document_store.json，不移动整个 STORAGE_DIR 以免丢失测试用例等）
             backup_dir = (
                 f"{STORAGE_DIR}_backup_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
-            if os.path.exists(STORAGE_DIR):
-                shutil.move(STORAGE_DIR, backup_dir)
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            current_index_dir = os.path.join(STORAGE_DIR, "index")
+            if os.path.exists(current_index_dir):
+                shutil.move(current_index_dir, os.path.join(backup_dir, "index"))
+                
+            current_doc_store = os.path.join(STORAGE_DIR, "document_store.json")
+            if os.path.exists(current_doc_store):
+                shutil.move(current_doc_store, os.path.join(backup_dir, "document_store.json"))
 
-            # 恢复快照
-            snapshot_storage = os.path.join(snapshot.storage_path, "storage")
-            if os.path.exists(snapshot_storage):
-                shutil.copytree(snapshot_storage, STORAGE_DIR)
+            # 恢复快照中的 index
+            snapshot_index_dir = os.path.join(snapshot.storage_path, "index")
+            # 兼容旧版本快照中可能存在的嵌套路径
+            old_snapshot_index_dir = os.path.join(snapshot.storage_path, "storage", "index")
+            
+            if os.path.exists(snapshot_index_dir):
+                shutil.copytree(snapshot_index_dir, current_index_dir)
+            elif os.path.exists(old_snapshot_index_dir):
+                shutil.copytree(old_snapshot_index_dir, current_index_dir)
 
             # 恢复文档存储
             snapshot_doc_store = os.path.join(
                 snapshot.storage_path, "document_store.json"
             )
+            old_snapshot_doc_store = os.path.join(
+                snapshot.storage_path, "storage", "document_store.json"
+            )
+            
             if os.path.exists(snapshot_doc_store):
-                shutil.copy2(snapshot_doc_store, "./storage/document_store.json")
-                # 重新加载文档管理器
-                document_manager._load_store()
+                shutil.copy2(snapshot_doc_store, current_doc_store)
+            elif os.path.exists(old_snapshot_doc_store):
+                shutil.copy2(old_snapshot_doc_store, current_doc_store)
+                
+            # 重新加载文档管理器
+            document_manager._load_store()
 
             # 重新初始化索引
             rag_service.index_manager._initialize_index()
@@ -413,12 +450,107 @@ class RagTestManager:
             logger.error(f"Failed to restore snapshot {snapshot_id}: {e}")
             # 恢复备份
             if "backup_dir" in locals() and os.path.exists(backup_dir):
-                if os.path.exists(STORAGE_DIR):
-                    shutil.rmtree(STORAGE_DIR)
-                shutil.move(backup_dir, STORAGE_DIR)
+                backup_index = os.path.join(backup_dir, "index")
+                if os.path.exists(backup_index):
+                    if os.path.exists(current_index_dir):
+                        shutil.rmtree(current_index_dir)
+                    shutil.move(backup_index, current_index_dir)
+                    
+                backup_doc = os.path.join(backup_dir, "document_store.json")
+                if os.path.exists(backup_doc):
+                    if os.path.exists(current_doc_store):
+                        os.remove(current_doc_store)
+                    shutil.move(backup_doc, current_doc_store)
+                    
                 rag_service.index_manager._initialize_index()
                 document_manager._load_store()
             return False
+
+    def _get_last_test_run(self) -> Optional[TestRun]:
+        """获取上一次测试运行"""
+        runs = self.list_test_runs()
+        if runs:
+            return runs[0]
+        return None
+
+    def compare_config_versions(self, version_id1: str, version_id2: str) -> Dict:
+        """对比两个配置版本的测试结果"""
+        runs = self.list_test_runs()
+        runs_for_v1 = [r for r in runs if r.config_version_id == version_id1]
+        runs_for_v2 = [r for r in runs if r.config_version_id == version_id2]
+
+        if not runs_for_v1:
+            raise ValueError(f"No test runs found for config version {version_id1}")
+        if not runs_for_v2:
+            raise ValueError(f"No test runs found for config version {version_id2}")
+
+        avg_v1_precision = sum(r.overall_precision for r in runs_for_v1) / len(runs_for_v1)
+        avg_v1_recall = sum(r.overall_recall for r in runs_for_v1) / len(runs_for_v1)
+        avg_v1_f1 = sum(r.overall_f1 for r in runs_for_v1) / len(runs_for_v1)
+        avg_v1_mrr = sum(r.overall_mrr for r in runs_for_v1) / len(runs_for_v1)
+
+        avg_v2_precision = sum(r.overall_precision for r in runs_for_v2) / len(runs_for_v2)
+        avg_v2_recall = sum(r.overall_recall for r in runs_for_v2) / len(runs_for_v2)
+        avg_v2_f1 = sum(r.overall_f1 for r in runs_for_v2) / len(runs_for_v2)
+        avg_v2_mrr = sum(r.overall_mrr for r in runs_for_v2) / len(runs_for_v2)
+
+        return {
+            "version1": {
+                "version_id": version_id1,
+                "run_count": len(runs_for_v1),
+                "avg_precision": avg_v1_precision,
+                "avg_recall": avg_v1_recall,
+                "avg_f1": avg_v1_f1,
+                "avg_mrr": avg_v1_mrr,
+            },
+            "version2": {
+                "version_id": version_id2,
+                "run_count": len(runs_for_v2),
+                "avg_precision": avg_v2_precision,
+                "avg_recall": avg_v2_recall,
+                "avg_f1": avg_v2_f1,
+                "avg_mrr": avg_v2_mrr,
+            },
+            "differences": {
+                "precision_change": avg_v2_precision - avg_v1_precision,
+                "recall_change": avg_v2_recall - avg_v1_recall,
+                "f1_change": avg_v2_f1 - avg_v1_f1,
+                "mrr_change": avg_v2_mrr - avg_v1_mrr,
+            },
+        }
+
+    def _calculate_ndcg(self, results: List[TestResultItem], expected_ids: List[str], k: int = 3) -> float:
+        """计算 NDCG@K
+        
+        Args:
+            results: 检索结果列表
+            expected_ids: 预期知识ID列表
+            k: 截断位置
+            
+        Returns:
+            NDCG@K 值（0-1 之间）
+        """
+        if not results or not expected_ids:
+            return 0.0
+        
+        # 取前 k 个结果
+        top_k = results[:k]
+        
+        # 计算 DCG
+        dcg = 0.0
+        for i, item in enumerate(top_k):
+            # 相关性：预期结果得分为 1，否则为 0
+            rel = 1.0 if item.knowledge_id in expected_ids else 0.0
+            dcg += rel / math.log2(i + 2)  # i+2 因为排名从 1 开始
+        
+        # 计算理想 DCG (IDCG)
+        ideal_rels = [1.0] * min(len(expected_ids), k) + [0.0] * max(0, k - len(expected_ids))
+        idcg = sum(rel / math.log2(i + 2) for i, rel in enumerate(ideal_rels[:k]))
+        
+        if idcg == 0:
+            return 0.0
+        
+        return dcg / idcg
 
     def compare_test_runs(self, run_id1: str, run_id2: str) -> Dict:
         """比较两个测试运行的结果"""

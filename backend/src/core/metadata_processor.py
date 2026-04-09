@@ -7,8 +7,9 @@ from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeP
 
 # from llama_index.core.node_parser.text.sentence import SENTENCE_SPLITTER_RE
 from src.core.metadata_extractor import MetadataExtractor
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
+from src.utils.text_cleaner import clean_document_text
 
 # 初始化语义分块器（全局单例）
 _semantic_splitter = None
@@ -191,15 +192,8 @@ class MetadataProcessor:
                     if isinstance(meta_dict.get("brain_regions"), list):
                         meta_dict["brain_regions"] = json.dumps(meta_dict["brain_regions"], ensure_ascii=False)
                     node.metadata.update(meta_dict)
-                    # 清理内容：去除多余空行，保留英文单词间单个空格
-                    content = node.get_content()
-                    # 清理连续换行（保留最多 2 个换行符表示段落分隔）
-                    cleaned_content = re.sub(r"\n\s*\n", "\n\n", content)
-                    # 清理行首行尾空格，但保留行内单词间的单个空格
-                    cleaned_content = '\n'.join(line.strip() for line in cleaned_content.split('\n'))
-                    # 清理多个连续空格为单个空格
-                    cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
-                    cleaned_content = cleaned_content.strip()
+                    # 清理节点内容
+                    cleaned_content = self._clean_node_content(node.get_content())
                     node.metadata["content"] = cleaned_content
                     node.metadata["file_hash"] = file_hash
 
@@ -232,15 +226,8 @@ class MetadataProcessor:
                     if isinstance(meta_dict.get("brain_regions"), list):
                         meta_dict["brain_regions"] = json.dumps(meta_dict["brain_regions"], ensure_ascii=False)
                     node.metadata.update(meta_dict)
-                    # 清理内容：去除多余空行，保留英文单词间单个空格
-                    content = node.get_content()
-                    # 清理连续换行（保留最多 2 个换行符表示段落分隔）
-                    cleaned_content = re.sub(r"\n\s*\n", "\n\n", content)
-                    # 清理行首行尾空格，但保留行内单词间的单个空格
-                    cleaned_content = '\n'.join(line.strip() for line in cleaned_content.split('\n'))
-                    # 清理多个连续空格为单个空格
-                    cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
-                    cleaned_content = cleaned_content.strip()
+                    # 清理节点内容
+                    cleaned_content = self._clean_node_content(node.get_content())
                     node.metadata["content"] = cleaned_content
                     node.metadata["file_hash"] = file_hash
                     node.metadata["metadata_extraction_failed"] = True
@@ -350,15 +337,8 @@ class MetadataProcessor:
                         meta_dict["brain_regions"] = json.dumps(meta_dict["brain_regions"], ensure_ascii=False)
                     
                     node.metadata.update(meta_dict)
-                    # 清理内容：去除多余空行，保留英文单词间单个空格
-                    content = node.get_content()
-                    # 清理连续换行（保留最多 2 个换行符表示段落分隔）
-                    cleaned_content = re.sub(r"\n\s*\n", "\n\n", content)
-                    # 清理行首行尾空格，但保留行内单词间的单个空格
-                    cleaned_content = '\n'.join(line.strip() for line in cleaned_content.split('\n'))
-                    # 清理多个连续空格为单个空格
-                    cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
-                    cleaned_content = cleaned_content.strip()
+                    # 清理节点内容
+                    cleaned_content = self._clean_node_content(node.get_content())
                     node.metadata["content"] = cleaned_content
                     node.metadata["file_hash"] = file_hash
 
@@ -388,15 +368,8 @@ class MetadataProcessor:
                     if isinstance(meta_dict.get("brain_regions"), list):
                         meta_dict["brain_regions"] = json.dumps(meta_dict["brain_regions"], ensure_ascii=False)
                     node.metadata.update(meta_dict)
-                    # 清理内容：去除多余空行，保留英文单词间单个空格
-                    content = node.get_content()
-                    # 清理连续换行（保留最多 2 个换行符表示段落分隔）
-                    cleaned_content = re.sub(r"\n\s*\n", "\n\n", content)
-                    # 清理行首行尾空格，但保留行内单词间的单个空格
-                    cleaned_content = '\n'.join(line.strip() for line in cleaned_content.split('\n'))
-                    # 清理多个连续空格为单个空格
-                    cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
-                    cleaned_content = cleaned_content.strip()
+                    # 清理节点内容
+                    cleaned_content = self._clean_node_content(node.get_content())
                     node.metadata["content"] = cleaned_content
                     node.metadata["file_hash"] = file_hash
                     node.metadata["metadata_extraction_failed"] = True
@@ -480,6 +453,39 @@ class MetadataProcessor:
             key_indices = set(sorted(key_indices)[:max_key_chunks])
         
         return key_indices
+    
+    def _clean_node_content(self, content: str) -> str:
+        """
+        清理节点内容，去除多余空行、行首尾空格和连续空格
+        
+        清理步骤：
+        1. 清理连续换行（保留最多 2 个换行符表示段落分隔）
+        2. 清理行首行尾空格，但保留行内单词间的单个空格
+        3. 清理多个连续空格为单个空格
+        4. 去除首尾空白字符
+        
+        Args:
+            content: 原始文本内容
+            
+        Returns:
+            清理后的文本内容
+        """
+        if not content:
+            return ""
+        
+        # 清理连续换行（保留最多 2 个换行符表示段落分隔）
+        cleaned_content = re.sub(r"\n\s*\n", "\n\n", content)
+        
+        # 清理行首行尾空格，但保留行内单词间的单个空格
+        cleaned_content = '\n'.join(line.strip() for line in cleaned_content.split('\n'))
+        
+        # 清理多个连续空格为单个空格
+        cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
+        
+        # 去除首尾空白字符
+        cleaned_content = cleaned_content.strip()
+        
+        return cleaned_content
 
     @staticmethod
     def split_chapters_into_chunks(
@@ -515,23 +521,10 @@ class MetadataProcessor:
         def process_chapter(doc):
             chapter_nodes = []
             # 预处理：清理文本中的空行和特殊字符
-            import re
-            
-            # 安全地修改文本
-            original_text = doc.text
-            # 1. 将 3 个以上连续换行符替换为 2 个
-            new_text = re.sub(r"\n{3,}", "\n\n", original_text)
-            # 2. 移除段落内部的单独空行（前后都有文字的单换行）
-            new_text = re.sub(r'([^\n])\n([^\n])', r'\1\2', new_text)
-            # 3. 移除只包含空格的行
-            lines = new_text.split('\n')
-            lines = [line for line in lines if line.strip()]
-            new_text = '\n'.join(lines)
-            # 4. 统一多个空格为单个空格
-            new_text = re.sub(r' +', ' ', new_text)
+            new_text = clean_document_text(doc.text)
             
             current_doc = doc
-            if new_text != original_text:
+            if new_text != doc.text:
                 current_doc = Document(text=new_text, metadata=doc.metadata)
 
             # 策略优化：对于超大章节，先使用 SentenceSplitter 进行粗粒度拆分
@@ -738,14 +731,10 @@ class MetadataProcessor:
             page_chunks = []
             try:
                 # 预处理：移除过多的连续换行，但保留段落结构
-                import re
-                
-                # 安全地修改文本
-                original_text = doc.text
-                new_text = re.sub(r"\n{3,}", "\n\n", original_text)
+                new_text = clean_document_text(doc.text)
                 
                 doc_to_split = doc
-                if new_text != original_text:
+                if new_text != doc.text:
                     doc_to_split = Document(text=new_text, metadata=doc.metadata)
 
                 # 使用语义分块器拆分

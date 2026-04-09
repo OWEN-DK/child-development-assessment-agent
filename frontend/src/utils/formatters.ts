@@ -64,3 +64,10 @@ export const formatPageLabel = (pageLabel: string, chapterTitle?: string): strin
   
   return pageLabel;
 };
+
+export const formatScore = (score: string | number | null | undefined): string => {
+  if (score === null || score === undefined || score === '') return '0.0';
+  const num = Number(score);
+  if (isNaN(num)) return '0.0';
+  return num.toFixed(1);
+};

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Tuple
 from pydantic import BaseModel
 from llama_index.llms.dashscope import DashScope
-from src.config.settings import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, Typography, Spin, App } from 'antd';
 import { useKnowledgeSearch } from '../hooks/useKnowledgeSearch';
 import { SearchInput } from '../../../components/knowledge/SearchInput';
@@ -29,24 +29,41 @@ const KnowledgeSearchPage: React.FC = () => {
 
   const [previewItem, setPreviewItem] = useState<SearchResultItem | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  
+  // 保存当前搜索关键词，用于分页时重新搜索
+  const [currentSearchQuery, setCurrentSearchQuery] = useState('');
 
-  const handleSearchWithError = async (searchQuery: string) => {
+  // 执行搜索的函数
+  const executeSearch = useCallback(async (searchQuery: string, page: number, size: number) => {
+    const offset = (page - 1) * size;
     try {
-      await handleSearch(searchQuery);
+      await handleSearch(searchQuery, size, offset);
     } catch (e: any) {
       message.error(`搜索失败: ${e.response?.data?.detail || e.message}`);
     }
-  };
+  }, [handleSearch, message]);
 
-  const handlePreview = (item: SearchResultItem) => {
+  const handleSearchWithError = useCallback(async (searchQuery: string) => {
+    setCurrentSearchQuery(searchQuery);
+    setCurrentPage(1); // 新搜索时重置到第一页
+    await executeSearch(searchQuery, 1, pageSize);
+  }, [pageSize, executeSearch, setCurrentPage]);
+
+  const handlePageChange = useCallback((page: number, size?: number) => {
+    const newPageSize = size || pageSize;
+    setCurrentPage(page);
+    if (size) setPageSize(size);
+    
+    // 如果有搜索关键词，重新搜索
+    if (currentSearchQuery) {
+      executeSearch(currentSearchQuery, page, newPageSize);
+    }
+  }, [currentSearchQuery, pageSize, executeSearch, setCurrentPage, setPageSize]);
+
+  const handlePreview = useCallback((item: SearchResultItem) => {
     setPreviewItem(item);
     setPreviewVisible(true);
-  };
-
-  const paginatedResults = results.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  }, []);
 
   return (
     <div className={styles.container}>
@@ -67,16 +84,13 @@ const KnowledgeSearchPage: React.FC = () => {
       <Card className={styles.contentCard}>
         <Spin spinning={loading}>
           <SearchResultList
-            results={paginatedResults}
+            results={results}
             loading={loading}
             query={query}
             total={total}
             currentPage={currentPage}
             pageSize={pageSize}
-            onPageChange={(page, size) => {
-              setCurrentPage(page);
-              if (size) setPageSize(size);
-            }}
+            onPageChange={handlePageChange}
             onPreview={handlePreview}
           />
         </Spin>

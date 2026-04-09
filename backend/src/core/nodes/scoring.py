@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 import jieba
 from src.config.rules import rules
-from src.config.settings import settings
+from src.config import settings
 from src.model.schemas import (
     AgentState,
     EvaluationResult,

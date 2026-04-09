@@ -15,7 +15,7 @@ function App() {
             title="儿童发展评估助手"
             layout="top"
             navTheme="light"
-            contentWidth="Fixed"
+            contentWidth="Fluid"
             fixedHeader
             token={{
               header: {
@@ -29,7 +29,8 @@ function App() {
               { path: '/', name: '首页' },
               { path: '/knowledge-base', name: '知识库' },
               { path: '/knowledge-search', name: '内容搜索' },
-              { path: '/rag-test', name: '回撤测试' },
+              { path: '/rag-evaluation', name: '回撤测试' },
+              { path: '/system-config', name: '系统配置' },
               // { path: '/history', name: '历史记录' },
             ]}
             menuItemRender={(item, dom) => (

@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 import hashlib
 import aiofiles
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from llama_index.llms.dashscope import DashScope
 

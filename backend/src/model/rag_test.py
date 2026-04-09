@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -38,6 +38,7 @@ class TestResult(BaseModel):
     recall: float  # 召回率 = 检索到的相关结果数 / 总相关结果数
     f1_score: float  # F1分数
     mrr: float  # 平均倒数排名
+    ndcg_at_k: float = 0.0  # NDCG@K，归一化折损累计增益
     results: List[TestResultItem] = Field(default_factory=list)
     executed_at: datetime = Field(default_factory=datetime.now)
     execution_time_ms: int = 0  # 执行时间（毫秒）
@@ -56,12 +57,16 @@ class TestRun(BaseModel):
     overall_recall: float = 0.0
     overall_f1: float = 0.0
     overall_mrr: float = 0.0
+    overall_ndcg: float = 0.0
     total_test_cases: int = 0
     passed_test_cases: int = 0
     status: str = "pending"  # pending, running, completed, failed
     created_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
     snapshot_id: Optional[str] = None  # 关联的知识库快照ID
+    config_version_id: Optional[str] = None  # 运行时的配置版本
+    config_snapshot: Optional[Dict[str, Any]] = None  # 完整配置快照
+    previous_config_version_id: Optional[str] = None  # 上一次运行的配置版本（用于对比）
 
 
 class KnowledgeSnapshot(BaseModel):

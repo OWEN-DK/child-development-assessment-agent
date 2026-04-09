@@ -10,7 +10,7 @@ from llama_index.core import (
     Settings,
 )
 from llama_index.core.schema import Node
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from src.service.document_manager import document_manager
 from src.core.vector_store_factory import VectorStoreFactory

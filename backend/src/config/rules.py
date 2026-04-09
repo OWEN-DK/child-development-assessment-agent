@@ -22,8 +22,8 @@ if RULES_JSON_PATH.exists():
 class ValidationRules(BaseModel):
     """Validation Node Rules"""
 
-    default_intensity: str = "medium"
-    default_category: str = "gross_motor"
+    default_intensity: str = Field("medium", description="活动默认强度等级")
+    default_category: str = Field("gross_motor", description="活动默认分类")
     activity_intensity_map: Dict[str, str] = Field(
         default_factory=lambda: {
             "画画": "low",
@@ -50,7 +50,8 @@ class ValidationRules(BaseModel):
             "jumping": "high",
             "swimming": "high",
             "basketball": "high",
-        }
+        },
+        description="活动名称到强度的映射关系"
     )
     activity_category_map: Dict[str, str] = Field(
         default_factory=lambda: {
@@ -76,7 +77,8 @@ class ValidationRules(BaseModel):
             "推球": "proprioception",
             "蹦床": "vestibular",
             "trampoline": "vestibular",
-        }
+        },
+        description="活动名称到分类的映射关系"
     )
 
 
@@ -89,7 +91,8 @@ class AssessmentRules(BaseModel):
             "3-5": "- 能单脚站立 5-10 秒\n- 能接住反弹球\n- 能交替上下楼梯\n- 前庭系统对旋转刺激开始整合",
             "5-7": "- 能熟练跳绳\n- 能闭眼单脚站立\n- 左右手分化完成\n- 注意力能集中 15-20 分钟",
             "7+": "- 具备复杂的动作规划能力\n- 团队运动规则理解\n- 情绪控制能力显著增强",
-        }
+        },
+        description="不同年龄段的发展里程碑说明"
     )
 
 
@@ -97,28 +100,28 @@ class ScoringRules(BaseModel):
     """Scoring Node Rules"""
 
     # AHP Weights (Total should be 1.0)
-    weight_scientific: float = 0.4
-    weight_age: float = 0.3
-    weight_safety: float = 0.3
+    weight_scientific: float = Field(0.4, description="评分科学性维度权重")
+    weight_age: float = Field(0.3, description="评分年龄适配维度权重")
+    weight_safety: float = Field(0.3, description="评分安全性维度权重")
 
     # Thresholds
-    max_weekly_duration_preschool: int = 300  # Age < 5
-    max_single_duration_preschool: int = 30  # Age < 6
+    max_weekly_duration_preschool: int = Field(300, description="学龄前儿童每周活动最大时长（分钟）")
+    max_single_duration_preschool: int = Field(30, description="学龄前儿童单次活动最大时长（分钟）")
 
     # Penalties (positive values that will be subtracted)
-    penalty_duration_overlimit: int = 20
-    penalty_single_duration_overlimit: int = 10
-    penalty_high_intensity_preschool: int = 30  # Age < 4
-    penalty_risk_high: int = 20
-    penalty_vestibular_mismatch: int = 10
+    penalty_duration_overlimit: int = Field(20, description="周时长超标的扣分")
+    penalty_single_duration_overlimit: int = Field(10, description="单次时长超标的扣分")
+    penalty_high_intensity_preschool: int = Field(30, description="低龄儿童高强度活动的扣分")
+    penalty_risk_high: int = Field(20, description="高风险活动的扣分")
+    penalty_vestibular_mismatch: int = Field(10, description="前庭刺激不匹配的扣分")
 
 
 class PreprocessingRules(BaseModel):
     """Preprocessing Node Rules"""
 
-    trend_threshold: float = 0.5
-    min_records_for_trend: int = 3
-    recent_feedback_limit: int = 3
+    trend_threshold: float = Field(0.5, description="趋势判断阈值")
+    min_records_for_trend: int = Field(3, description="趋势分析需要的最少记录数")
+    recent_feedback_limit: int = Field(3, description="最近反馈考虑的数量")
 
 
 class MetadataRules(BaseModel):
@@ -132,7 +135,8 @@ class MetadataRules(BaseModel):
             "语言发展": ["语言", "说话", "表达", "倾听", "阅读", "识字", "沟通", "交流"],
             "社交情感": ["社交", "情感", "情绪", "交往", "合作", "分享", "自信心", "同理心"],
             "感觉统合": ["感觉统合", "感官", "触觉", "听觉", "视觉", "前庭觉", "本体觉"]
-        }
+        },
+        description="主题分类关键词映射"
     )
     
     brain_regions_map: Dict[str, List[str]] = Field(
@@ -143,7 +147,8 @@ class MetadataRules(BaseModel):
             "语言发展": ["布洛卡区", "韦尼克区", "颞叶"],
             "社交情感": ["杏仁核", "前额叶", "岛叶"],
             "感觉统合": ["顶叶", "颞叶", "枕叶"]
-        }
+        },
+        description="发展领域对应脑区映射"
     )
     
     activity_type_keywords: Dict[str, List[str]] = Field(
@@ -152,7 +157,8 @@ class MetadataRules(BaseModel):
             "Game/Activity": ["游戏", "活动", "玩法", "练习", "训练", "互动"],
             "Advice": ["建议", "指南", "方法", "策略", "技巧", "注意事项"],
             "CaseStudy": ["案例", "实例", "个案", "例子", "分享"]
-        }
+        },
+        description="活动类型关键词映射"
     )
     
     age_patterns: List[str] = Field(
@@ -162,7 +168,8 @@ class MetadataRules(BaseModel):
             r"适合(\d+\.?\d*)到(\d+\.?\d*)岁",
             r"(\d+)月龄",
             r"(\d+\.?\d*)岁以上"
-        ]
+        ],
+        description="年龄提取正则表达式列表"
     )
 
 

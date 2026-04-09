@@ -2,7 +2,7 @@ import re
 import json
 from typing import Tuple, List, Dict, Any
 from pathlib import Path
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 
 

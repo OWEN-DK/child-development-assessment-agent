@@ -1,8 +1,10 @@
 from typing import List, Any, Optional
-from src.config.settings import settings
+import time
+from src.config import settings
 from src.core.di_container import injector
 from src.core.interfaces import IIndexManager, ICacheService, IRetrievalService, IDocumentIngestionService
 from src.utils.logger import logger
+from src.service.monitoring_service import monitoring_service
 
 # 兼容原有导出
 STORAGE_DIR = settings.rag_storage_dir
@@ -40,6 +42,8 @@ class RagService:
 
     async def retrieve_knowledge(self, query: str, age: int, limit: int = 3, user_id: str = None):
         """检索知识点（增强：支持 PageIndex 混合架构）"""
+        start_time = time.time()
+        
         # 1. 意图分类
         classification = self.query_router.classify(query)
         logger.info(f"Query classified as {classification.query_type.value}, confidence: {classification.confidence:.2f}")
@@ -61,10 +65,37 @@ class RagService:
                 query_type="complex",
                 limit=limit
             )
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            monitoring_service.record_metric(
+                "rag_response_time_ms",
+                elapsed_ms,
+                tags={"query_type": "complex", "endpoint": "retrieve_knowledge"}
+            )
+            monitoring_service.record_metric(
+                "rag_retrieval_count",
+                len(fused_results),
+                tags={"query_type": "complex"}
+            )
+            
             return fused_results
         else:
             # 简单查询：仅使用现有的混合检索
-            return await hybrid_task
+            results = await hybrid_task
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            monitoring_service.record_metric(
+                "rag_response_time_ms",
+                elapsed_ms,
+                tags={"query_type": "simple", "endpoint": "retrieve_knowledge"}
+            )
+            monitoring_service.record_metric(
+                "rag_retrieval_count",
+                len(results),
+                tags={"query_type": "simple"}
+            )
+            
+            return results
 
     async def ingest_book(
         self, file_path: str, original_filename: str = None, progress_callback=None
@@ -81,9 +112,9 @@ class RagService:
             self.retrieval_service.reload_retrievers()
         return success
 
-    async def search_content(self, query: str, limit: int = 20) -> List[dict]:
-        """搜索内容（原有接口）"""
-        return await self.retrieval_service.search_content(query, limit)
+    async def search_content(self, query: str, limit: int = 20, offset: int = 0) -> dict:
+        """搜索内容（支持分页）"""
+        return await self.retrieval_service.search_content(query, limit, offset)
     
     def get_document_chunks(self, file_hash: str, page: int = 1, page_size: int = 20) -> dict:
         """获取指定文档的分块列表（支持分页）"""

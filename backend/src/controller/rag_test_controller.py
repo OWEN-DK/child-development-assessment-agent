@@ -180,7 +180,6 @@ async def get_snapshot(snapshot_id: str):
 async def restore_snapshot(snapshot_id: str, background_tasks: BackgroundTasks):
     """恢复到指定快照"""
     try:
-        # 恢复操作可能耗时，放到后台执行
         background_tasks.add_task(rag_test_manager.restore_snapshot, snapshot_id)
         return {
             "status": "success",
@@ -190,3 +189,13 @@ async def restore_snapshot(snapshot_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(
             status_code=500, detail=f"Failed to restore snapshot: {str(e)}"
         )
+
+
+@router.get("/compare-configs/{version_id1}/{version_id2}")
+async def compare_config_versions(version_id1: str, version_id2: str):
+    """对比两个配置版本的测试结果"""
+    try:
+        comparison = rag_test_manager.compare_config_versions(version_id1, version_id2)
+        return {"status": "success", "comparison": comparison}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

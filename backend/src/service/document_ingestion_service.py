@@ -6,9 +6,10 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Callable, List, Dict, Any
 from llama_index.core.schema import Document
-from src.config.settings import settings
+from src.config import settings
 from src.utils.logger import logger
 from src.utils.exceptions import TaskCancelledException
+from src.utils.text_cleaner import clean_document_text
 from src.core.parsers import get_parser, PDFParser, PDFVLParser
 from src.core.metadata_processor import MetadataProcessor
 from src.model.document import DocumentRecord, DocumentMetadata
@@ -304,7 +305,18 @@ class DocumentIngestionService:
                 self.task_manager.save_task_state(task_id, task_state)
 
             parser_cls = get_parser(file_path)
-            documents = parser_cls.parse(file_path)
+            
+            # 创建页码进度回调函数
+            def page_progress_callback(current_page: int, total_pages: int):
+                if progress_callback and actual_total_pages:
+                    # 解析阶段占 10% 到 30% 的进度
+                    parse_progress = 10.0 + (current_page / actual_total_pages) * 20.0
+                    message = f"正在解析文件，第 {current_page}/{actual_total_pages} 页"
+                    progress_callback("parsing", parse_progress, message)
+                    task_state["progress"] = parse_progress
+                    self.task_manager.save_task_state(task_id, task_state)
+            
+            documents = parser_cls.parse(file_path, progress_callback=page_progress_callback)
 
             # 检查PDF提取质量，必要时使用VL解析
             documents = self._check_and_use_vl_parsing(file_path, documents, parser_cls)
@@ -707,10 +719,8 @@ class DocumentIngestionService:
         """清理文档内容，移除多余空白字符"""
         cleaned_documents = []
         for doc in documents:
-            # 清理多余的换行和空格
-            cleaned_text = re.sub(r"\n\s*\n", "\n\n", doc.text)
-            cleaned_text = re.sub(r" +", " ", cleaned_text)
-            cleaned_text = cleaned_text.strip()
+            # 清理文档内容
+            cleaned_text = clean_document_text(doc.text)
 
             # 跳过空文本的文档
             if not cleaned_text:

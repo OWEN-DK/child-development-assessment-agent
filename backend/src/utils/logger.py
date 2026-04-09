@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from loguru import logger
-from src.config.settings import settings as log_config
+from src.config import settings as log_config
 
 # 确保日志目录存在
 LOG_PATH = Path(log_config.log_file).parent

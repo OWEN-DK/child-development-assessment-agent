@@ -1,0 +1,74 @@
+.container {
+  margin-top: 16px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: #262626;
+}
+
+.versionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.empty {
+  text-align: center;
+  color: #8c8c8c;
+  font-size: 12px;
+  padding: 16px 0;
+}
+
+.versionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+}
+
+.versionInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.versionId {
+  font-size: 13px;
+  font-weight: 500;
+  color: #262626;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activeBadge {
+  font-size: 11px;
+  color: #52c41a;
+  background: #f6ffed;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #b7eb8f;
+}
+
+.versionTime {
+  font-size: 11px;
+  color: #8c8c8c;
+}
+
+.versionDesc {
+  font-size: 11px;
+  color: #595959;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

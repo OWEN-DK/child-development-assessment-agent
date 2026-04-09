@@ -186,6 +186,29 @@ const BookChunksPage = () => {
                 title={
                   <Space>
                     <Text strong>#{index + 1}</Text>
+                    {chunk.metadata.page_label && (
+                      <Text type="secondary">| 第 {(() => {
+                        const pageLabel = chunk.metadata.page_label;
+                        let displayLabel = pageLabel;
+                        if (pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html')) {
+                          const match = pageLabel.match(/part(\d+)/i) || pageLabel.match(/chapter(\d+)/i);
+                          if (match) {
+                            displayLabel = `${parseInt(match[1])}`;
+                          } else {
+                            const numMatch = pageLabel.match(/(\d+)/);
+                            if (numMatch) {
+                              displayLabel = `${parseInt(numMatch[1])}`;
+                            } else {
+                              displayLabel = '';
+                            }
+                          }
+                        }
+                        return displayLabel;
+                      })()} {(() => {
+                        const pageLabel = chunk.metadata.page_label;
+                        return pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html') ? '章' : '页';
+                      })()}</Text>
+                    )}
                     {chunk.metadata.chapter_title && (
                       <Text type="secondary">| {chunk.metadata.chapter_title}</Text>
                     )}
