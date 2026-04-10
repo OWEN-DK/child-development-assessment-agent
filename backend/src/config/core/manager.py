@@ -1,10 +1,9 @@
 import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from src.config import settings, Settings
-from src.config.rules import rules
-from src.config.config_repository import JsonConfigRepository, ConfigRepository
-from src.config.config_events import ConfigChangedEvent, ConfigRollbackEvent, ConfigResetEvent
+from src.config import settings, Settings, rules
+from src.config.core.repository import JsonConfigRepository, ConfigRepository
+from src.config.core.events import ConfigChangedEvent, ConfigRollbackEvent, ConfigResetEvent
 from src.core.event_bus import event_bus
 from src.utils.logger import logger
 
@@ -135,6 +134,22 @@ class ConfigManager:
 
     def get_active_version(self) -> Optional[str]:
         return self._active_version
+
+    def list_versions(self, limit: int = 50) -> list:
+        """列出所有配置版本（公共方法，替代直接访问_repository）"""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self._repository.list_versions(limit=limit))
+
+    def sync_cache_from_settings(self, new_settings) -> None:
+        """从Settings实例同步缓存（公共方法，替代直接访问_memory_cache）"""
+        self._memory_cache.clear()
+        for field_name, field_value in new_settings.model_dump().items():
+            self._memory_cache[field_name] = field_value
+        logger.info("ConfigManager 缓存已从 Settings 同步")
 
     async def rollback_to_version(self, version_id: str) -> Dict[str, Any]:
         async with self._lock:

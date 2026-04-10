@@ -95,14 +95,8 @@ class CacheService(ICacheService):
     
     def _get_cache_key(self, key_prefix: str, args: tuple, kwargs: dict) -> str:
         """生成包含索引版本和配置指纹的缓存键"""
-        # 加入全局上下文：索引版本、配置指纹
-        global_context = (
-            getattr(settings, "index_version", "v1"),
-            getattr(settings, "config_fingerprint", "default"),
-            key_prefix
-        )
         # 拼接参数
-        key_parts = global_context + args + tuple(sorted(kwargs.items()))
+        key_parts = args + tuple(sorted(kwargs.items()))
         # 哈希生成最终键
         key_hash = hashlib.md5(json.dumps(key_parts, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         return f"rag:cache:{key_prefix}:{key_hash}"

@@ -511,39 +511,9 @@ class IndexManagerService(IIndexManager):
                             "end_char_idx": end_idx,
                             "score": None
                         })
-            else:
-                # 回退到 docstore 方式（兼容旧版本）
-                if hasattr(self.index, 'docstore'):
-                    docstore = self.index.docstore
-                    for doc_id, node in docstore.docs.items():
-                        if node.metadata.get("file_hash") == file_hash:
-                            # 解析 JSON 字符串字段为数组
-                            metadata = self._parse_metadata_json_strings(node.metadata)
-                            all_chunks.append({
-                                "id": doc_id,
-                                "content": node.text,
-                                "metadata": metadata,
-                                "start_char_idx": node.start_char_idx,
-                                "end_char_idx": node.end_char_idx,
-                                "score": None
-                            })
         except Exception as e:
             logger.error(f"Failed to get chunks from vector store: {e}")
-            # 回退到 docstore 方式
-            if hasattr(self.index, 'docstore'):
-                docstore = self.index.docstore
-                for doc_id, node in docstore.docs.items():
-                    if node.metadata.get("file_hash") == file_hash:
-                        # 解析 JSON 字符串字段为数组
-                        metadata = self._parse_metadata_json_strings(node.metadata)
-                        all_chunks.append({
-                            "id": doc_id,
-                            "content": node.text,
-                            "metadata": metadata,
-                            "start_char_idx": node.start_char_idx,
-                            "end_char_idx": node.end_char_idx,
-                            "score": None
-                        })
+            return {"total": 0, "chunks": [], "page": page, "page_size": page_size, "total_pages": 0}
         
         # 按页码排序
         all_chunks.sort(key=lambda x: x["metadata"].get("page_label", "0"))
@@ -610,26 +580,7 @@ class IndexManagerService(IIndexManager):
                         }
             except Exception as e:
                 logger.error(f"Failed to get chunk detail from vector store: {e}")
-        
-        # 回退到 docstore 方式（兼容旧版本）
-        if hasattr(self.index, 'docstore'):
-            docstore = self.index.docstore
-            if chunk_id not in docstore.docs:
                 return None
-            
-            node = docstore.docs[chunk_id]
-            # 解析 JSON 字符串字段为数组
-            metadata = self._parse_metadata_json_strings(node.metadata)
-            return {
-                "id": chunk_id,
-                "content": node.text,
-                "metadata": metadata,
-                "start_char_idx": node.start_char_idx,
-                "end_char_idx": node.end_char_idx,
-                "relationships": node.relationships
-            }
-        
-        return None
 
     def __del__(self):
         """析构时停止自动持久化线程并确保数据持久化"""

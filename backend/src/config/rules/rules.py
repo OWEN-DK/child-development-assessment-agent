@@ -3,13 +3,14 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 import json
-from src.utils.logger import logger
+import logging
+logger = logging.getLogger(__name__)
 
 # 获取当前文件所在目录的绝对路径
 BASE_DIR = Path(__file__).parent.parent.parent.resolve()
 
 # 尝试加载 rules.json
-RULES_JSON_PATH = BASE_DIR / "src/config/rules.json"
+RULES_JSON_PATH = Path(__file__).parent / "rules.json"
 GLOBAL_RULES_CONFIG = {}
 if RULES_JSON_PATH.exists():
     try:

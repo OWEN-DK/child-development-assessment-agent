@@ -16,9 +16,33 @@ export const DynamicConfigForm: React.FC<DynamicConfigFormProps> = ({
 }) => {
   const { draftChanges, updateDraft } = useConfigStore();
 
+  // Group fields by category with support for nested categories (e.g., "rag.retrieval" -> RAG > Retrieval)
   const filteredFields = category
     ? fields.filter((f) => f.category === category)
     : fields;
+    
+  const groupedFields = filteredFields.reduce((groups, field) => {
+    const fullCategory = field.category || '其他配置';
+    // Split category by dot to support nested grouping
+    const [mainCategory, subCategory] = fullCategory.split('.', 2);
+    // Capitalize first letter for better display
+    const formattedMainCategory = mainCategory.charAt(0).toUpperCase() + mainCategory.slice(1);
+    
+    if (!groups[formattedMainCategory]) {
+      groups[formattedMainCategory] = {};
+    }
+    
+    const subGroup = subCategory 
+      ? subCategory.charAt(0).toUpperCase() + subCategory.slice(1)
+      : '通用配置';
+      
+    if (!groups[formattedMainCategory][subGroup]) {
+      groups[formattedMainCategory][subGroup] = [];
+    }
+    
+    groups[formattedMainCategory][subGroup].push(field);
+    return groups;
+  }, {} as Record<string, Record<string, ConfigFieldMetadata[]>>);
 
   const renderField = (field: ConfigFieldMetadata) => {
     const currentValue =
@@ -27,10 +51,12 @@ export const DynamicConfigForm: React.FC<DynamicConfigFormProps> = ({
     return (
       <div key={field.key} className={styles.configItem}>
         <div className={styles.configHeader}>
-          <span className={styles.configLabel}>{field.key}</span>
-          <Tooltip title={field.description || '暂无描述'}>
-            <QuestionCircleOutlined className={styles.helpIcon} />
-          </Tooltip>
+          <div className={styles.configLabelGroup}>
+            <span className={styles.configLabel}>{field.key}</span>
+            <Tooltip title={field.description || '暂无描述'}>
+              <QuestionCircleOutlined className={styles.helpIcon} />
+            </Tooltip>
+          </div>
           {field.requires_restart && (
             <Tooltip title="修改后需重启服务">
               <WarningOutlined className={styles.warningIcon} />
@@ -53,8 +79,20 @@ export const DynamicConfigForm: React.FC<DynamicConfigFormProps> = ({
   };
 
   return (
-    <div className={styles.configForm}>
-      {filteredFields.map(renderField)}
+    <div>
+      {Object.entries(groupedFields).map(([mainCategory, subCategories]) => (
+        <div key={mainCategory} className={styles.mainCategory}>
+          <h2 className={styles.mainCategoryTitle}>{mainCategory}</h2>
+          {Object.entries(subCategories as Record<string, ConfigFieldMetadata[]>).map(([subCategory, fields]) => (
+            <div key={subCategory} className={styles.subCategory}>
+              <h3 className={styles.subCategoryTitle}>{subCategory}</h3>
+              <div className={styles.categoryGrid}>
+                {fields.map(renderField)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 };
@@ -77,7 +115,7 @@ function renderControl(
       return (
         <div className={styles.dictEditor}>
           {Object.entries(dictValue).map(([key, val], index) => (
-            <Space key={index} style={{ display: 'flex', marginBottom: 8, width: '100%' }}>
+            <div key={index} className={styles.itemRow}>
               <Input
                 value={key}
                 placeholder="键名"
@@ -92,6 +130,7 @@ function renderControl(
                   }
                 }}
                 style={{ width: '35%' }}
+                size="middle"
               />
               <Input
                 value={String(val)}
@@ -112,6 +151,7 @@ function renderControl(
                   onChange(field.key, newDict);
                 }}
                 style={{ flex: 1 }}
+                size="middle"
               />
               <MinusCircleOutlined
                 onClick={() => {
@@ -120,9 +160,9 @@ function renderControl(
                   delete newDict[currentKey];
                   onChange(field.key, newDict);
                 }}
-                style={{ color: '#ff4d4f', fontSize: 18 }}
+                className={styles.deleteIcon}
               />
-            </Space>
+            </div>
           ))}
           <Button
             type="dashed"
@@ -131,6 +171,7 @@ function renderControl(
             }}
             icon={<PlusOutlined />}
             style={{ width: '100%' }}
+            size="middle"
           >
             添加键值对
           </Button>
@@ -167,7 +208,7 @@ function renderControl(
       return (
         <div className={styles.listEditor}>
           {listValue.map((item, index) => (
-            <Space key={index} style={{ display: 'flex', marginBottom: 8, width: '100%' }}>
+            <div key={index} className={styles.itemRow}>
               <Input
                 value={item}
                 onChange={(e) => {
@@ -176,15 +217,16 @@ function renderControl(
                   onChange(field.key, newList);
                 }}
                 style={{ flex: 1 }}
+                size="middle"
               />
               <MinusCircleOutlined
                 onClick={() => {
                   const newList = listValue.filter((_, i) => i !== index);
                   onChange(field.key, newList);
                 }}
-                style={{ color: '#ff4d4f', fontSize: 18 }}
+                className={styles.deleteIcon}
               />
-            </Space>
+            </div>
           ))}
           <Button
             type="dashed"
@@ -193,6 +235,7 @@ function renderControl(
             }}
             icon={<PlusOutlined />}
             style={{ width: '100%' }}
+            size="middle"
           >
             添加项
           </Button>
@@ -233,6 +276,7 @@ function renderControl(
           onChange={(val) => onChange(field.key, val)}
           step={0.05}
           style={{ width: '100%' }}
+          size="middle"
         />
       );
     case 'int':
@@ -242,6 +286,7 @@ function renderControl(
           onChange={(val) => onChange(field.key, val)}
           step={1}
           style={{ width: '100%' }}
+          size="middle"
         />
       );
     case 'str':

@@ -8,7 +8,7 @@ from src.utils.logger import logger
 from src.core.prompts import METADATA_EXTRACTION_PROMPT
 
 
-from src.config.rules import rules
+from src.config import rules
 
 class ExtractedMetadata(BaseModel):
     summary: str = Field(default="", description="内容的简要摘要（最多50字）")

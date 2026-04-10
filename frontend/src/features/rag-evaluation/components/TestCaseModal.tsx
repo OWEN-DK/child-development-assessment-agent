@@ -20,12 +20,16 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (testCase) {
-      form.setFieldsValue(testCase);
-    } else {
-      form.resetFields();
+    if (visible) {
+      if (testCase) {
+        setTimeout(() => {
+          form.setFieldsValue(testCase);
+        }, 0);
+      } else {
+        form.resetFields();
+      }
     }
-  }, [testCase, form]);
+  }, [visible, testCase, form]);
 
   const handleSubmit = async () => {
     try {
@@ -68,6 +72,7 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
         </Space>
       }
       width={700}
+      forceRender
     >
       <Form form={form} layout="vertical">
         <Form.Item

@@ -185,7 +185,7 @@ graph TB
         Hybrid[步骤6: 混合检索<br/>BM25 + Vector<br/>并行执行]
         Rerank[步骤7: Cross-Encoder<br/>重排序<br/>BAAI/bge-reranker-v2-m3]
         Dedup[步骤8: 内容去重<br/>精确匹配 + 相似度]
-        PageIndex[步骤9: PageIndex 增强<br/>外部知识图谱<br/>熔断/重试机制]
+        PageIndex[步骤9: PageIndex 增强<br/>无向量推理式层级树索引<br/>熔断/重试机制]
         Fusion[结果融合<br/>分数归一化<br/>动态权重]
         Result[返回 KnowledgeItem<br/>年龄适配度计算<br/>阈值过滤]
         
@@ -213,19 +213,38 @@ graph TB
         ConfigEvents[ConfigEvents<br/>配置变更事件]
     end
     
-    subgraph 配置模块
-        AppSettings[AppSettings<br/>应用配置]
-        ModelSettings[ModelSettings<br/>LLM 模型配置]
-        EmbedSettings[EmbeddingSettings<br/>Embedding 配置]
-        RagSettings[RagSettings<br/>RAG 核心配置]
-        VectorSettings[VectorStoreSettings<br/>向量存储配置]
-        SplitterSettings[SemanticSplitterSettings<br/>分块配置]
-        PageIndexSettings[PageIndexSettings<br/>知识图谱配置]
-        FusionSettings[QueryFusionSettings<br/>查询融合配置]
-        MLSettings[MLScoringSettings<br/>ML 评分配置]
-        PathSettings[PathSettings<br/>路径配置]
-        LogSettings[LogSettings<br/>日志配置]
-        Rules[Rules<br/>业务规则]
+    subgraph 基础设施层 core/
+        CoreManager[manager.py<br/>配置管理器实现]
+        CoreRepository[repository.py<br/>存储层实现]
+        CoreEvents[events.py<br/>事件定义]
+    end
+    
+    subgraph 配置模块层 modules/
+        subgraph 基础配置
+            App[app.py<br/>应用配置]
+            Logging[logging.py<br/>日志配置]
+            Paths[paths.py<br/>路径配置]
+        end
+        
+        subgraph AI模型配置 models/
+            LLM[llm.py<br/>LLM模型配置]
+            Embedding[embedding.py<br/>Embedding配置]
+            MLScoring[ml_scoring.py<br/>ML评分配置]
+        end
+        
+        subgraph RAG配置 rag/
+            RagCore[core.py<br/>RAG核心设置]
+            RagRetrieval[retrieval.py<br/>检索配置]
+            RagChunking[chunking.py<br/>分块配置]
+            RagVector[vector_store.py<br/>向量存储配置]
+            RagPageIndex[pageindex.py<br/>PageIndex索引配置]
+            RagPipeline[pipeline.py<br/>导入流水线配置]
+        end
+    end
+    
+    subgraph 业务规则层 rules/
+        Rules[rules.py<br/>规则定义]
+        RulesJson[rules.json<br/>规则数据]
     end
     
     subgraph 配置特性
@@ -235,20 +254,25 @@ graph TB
         EnvOverride[环境变量覆盖<br/>.env.dev]
     end
     
-    ConfigMgr --> ConfigRepo
-    ConfigMgr --> ConfigEvents
-    ConfigMgr --> AppSettings
-    ConfigMgr --> ModelSettings
-    ConfigMgr --> EmbedSettings
-    ConfigMgr --> RagSettings
-    ConfigMgr --> VectorSettings
-    ConfigMgr --> SplitterSettings
-    ConfigMgr --> PageIndexSettings
-    ConfigMgr --> FusionSettings
-    ConfigMgr --> MLSettings
-    ConfigMgr --> PathSettings
-    ConfigMgr --> LogSettings
+    ConfigMgr --> CoreManager
+    CoreManager --> CoreRepository
+    CoreManager --> CoreEvents
+    
+    ConfigMgr --> App
+    ConfigMgr --> Logging
+    ConfigMgr --> Paths
+    ConfigMgr --> LLM
+    ConfigMgr --> Embedding
+    ConfigMgr --> MLScoring
+    ConfigMgr --> RagCore
+    ConfigMgr --> RagRetrieval
+    ConfigMgr --> RagChunking
+    ConfigMgr --> RagVector
+    ConfigMgr --> RagPageIndex
+    ConfigMgr --> RagPipeline
     ConfigMgr --> Rules
+    
+    Rules --> RulesJson
     
     ConfigMgr --> HotReload
     ConfigMgr --> VersionCtrl
@@ -261,6 +285,9 @@ graph TB
 ## 1. 系统概览
 
 本系统是一个由专用 Agent/节点组成的有向循环图 (DAG)，负责处理用户输入并生成全面的儿童发展评估报告。
+
+- **项目状态**: 开发中，尚未上线
+- **部署策略**: 当前无需任何迁移设计，仅关注本地开发和功能实现
 
 ### 核心工作流
 `网关 (Gateway)` -> `预处理 (Preprocessing)` -> `校验 (Validation)` -> `评估 (Assessment)` -> `检索 (Retrieval)` -> `评分 (Scoring)` -> `报告生成 (Report Generation)`
@@ -405,7 +432,7 @@ graph TB
 
 **步骤 9: 复杂查询增强 (可选)**
 - 触发条件: query_type == "complex" 且 pageindex_enabled = True
-- PageIndex 检索: 外部知识图谱，熔断机制 (失败5次→熔断60秒)，重试 (3次指数退避)
+- PageIndex 检索: 无向量推理式层级树索引，熔断机制 (失败5次→熔断60秒)，重试 (3次指数退避)
 - 结果融合: 去重 + 分数提升 (1.2x) + 混合补充 (最多5个) + 重新归一化
 
 #### 2.3.3 搜索页面专用检索
@@ -475,6 +502,29 @@ class AgentState(BaseModel):
 - **用户**: 提交画像 (`child_profile`) + 计划 (`proposed_plan`) + 可选历史 (`history_context`)。
 - **系统**: 返回包含 `final_report` (Markdown) 和结构化数据 (雷达图、分数) 的 JSON 响应。
 
+## 4.1 RAG 测试数据模型
+
+### 测试用例 (TestCase)
+- `id`, `query`, `age`, `expected_knowledge_ids`, `expected_keywords`, `description`
+- `domain`: 领域 (粗大动作/精细动作/语言发展/认知能力/社交情感/感觉统合)
+- `answer_points`, `professional_terms`, `age_requirement`, `relevance_scores`
+- `source_document_id`, `test_set_id`, `version`
+
+### 源文档 (SourceDocument)
+- `id`, `title`, `file_type`, `file_path`, `file_hash`
+- `content_summary`, `page_count`, `chapter_structure`, `quality_report`
+- `status`: uploaded/parsing/ready/archived
+
+### 测试用例草稿 (TestCaseDraft)
+- `id`, `source_document_id`, `query`, `age`, `domain`
+- `expected_knowledge_ids`, `expected_keywords`, `description`
+- `answer_points`, `professional_terms`, `age_requirement`
+- `generation_params`, `status`: draft/reviewed/rejected/imported
+
+### 测试集 (TestSet)
+- `id`, `name`, `description`, `source_type`: manual/json_import/book_generated/mixed
+- `test_case_ids`: 包含的测试用例ID列表
+
 ## 5. 前端功能模块
 
 ### 5.1 评估功能 (Assessment)
@@ -493,9 +543,12 @@ class AgentState(BaseModel):
 - **详情查看**: 支持分块详情和来源追溯
 
 ### 5.4 RAG 评估 (RAG Evaluation)
-- **测试集管理**: 导入和管理 RAG 评估测试集
+- **测试集管理**: 创建/编辑/删除/导出测试集，支持添加/移除测试用例
 - **评估报告**: 展示检索和生成质量指标
 - **Bad Case 分析**: 标记和分析评估失败案例
+- **JSON 导入**: 从 JSON 文件批量导入测试用例，支持预览/校验/去重
+- **书籍导入**: 上传 PDF/EPUB/TXT 文档，自动生成测试用例草稿（默认 10 条，领域：感觉统合，年龄：0-6 岁）
+- **草稿审核**: 表格化审核测试用例草稿，支持编辑/通过/拒绝/批量导入，审核后转为正式测试用例
 
 ### 5.5 系统配置 (System Config)
 - **动态配置**: 支持运行时配置修改和热重载
@@ -505,7 +558,11 @@ class AgentState(BaseModel):
 ## 6. 核心基础设施
 
 ### 6.1 配置系统
-- **模块化架构**: 按功能域拆分的配置模块
+- **三层分层架构**:
+  - `core/`：配置基础设施，包含管理器、持久化存储、事件系统
+  - `modules/`：按功能域拆分的配置模块（基础配置、AI模型、RAG、业务规则）
+  - `rules/`：独立的业务规则配置层
+- **统一入口**: 所有配置通过 `from src.config import settings, rules, config_manager` 一站式导入
 - **热重载**: 配置文件变更自动生效
 - **版本控制**: 支持配置版本管理和回滚
 - **事件驱动**: 配置变更通过 EventBus 传播

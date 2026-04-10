@@ -458,7 +458,7 @@ class RetrievalService:
                     topics = json.loads(topics)
                 except:
                     topics = []
-            benefits = metadata.get("benefits", topics)  # 兼容旧数据
+            benefits = metadata.get("benefits", [])
             target_age_min = metadata.get("target_age_min", 0)
             target_age_max = metadata.get("target_age_max", 18)
             activity_type = metadata.get("activity_type", "Theory")
@@ -880,13 +880,6 @@ class RetrievalService:
                 synonym_list = [str(s).strip() for s in result.synonyms if str(s).strip()]
             except Exception as e:
                 logger.warning(f"同义词扩展JSON解析失败: {e}, 原始内容: {result_text[:100]}")
-                # JSON解析失败时尝试兼容旧格式
-                synonyms = re.sub(r"^同义词[:：]\s*", "", result_text)
-                synonyms = re.sub(r"^Synonyms[:：]\s*", "", synonyms)
-                synonyms = synonyms.strip("\"'`{}[]")
-                if len(synonyms) > 100 or "。" in synonyms or "？" in synonyms or "！" in synonyms or "：" in synonyms:
-                    logger.warning(f"大模型同义词扩展未遵守指令，返回无效内容，使用本地扩展")
-                    return self._local_expand_synonyms(query)
                 synonym_list = re.split(r"[\n、,，\s\"']+", synonyms)
                 synonym_list = [s.strip() for s in synonym_list if s.strip() and len(s) < 20]
             

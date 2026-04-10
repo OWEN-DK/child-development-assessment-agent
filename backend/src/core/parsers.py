@@ -609,7 +609,6 @@ class PDFParserV2:
 def get_parser(file_path: str):
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        # 返回新的V2解析器，兼容原有接口
         return PDFParserV2()
     elif ext == ".epub":
         return EPUBParser

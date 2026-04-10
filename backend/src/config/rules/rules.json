@@ -44,5 +44,11 @@
     "trend_threshold": 0.5,
     "min_records_for_trend": 3,
     "recent_feedback_limit": 3
+  },
+  "metadata": {
+    "default_topics": ["感觉统合", "儿童发展"],
+    "default_brain_regions": ["全脑"],
+    "default_developmental_domains": ["粗大动作", "精细动作", "语言发展", "认知能力", "社交情感", "感觉统合"],
+    "difficulty_levels": ["入门", "基础", "进阶", "挑战"]
   }
 }

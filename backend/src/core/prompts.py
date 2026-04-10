@@ -72,6 +72,28 @@ METADATA_EXTRACTION_PROMPT = """
 只返回JSON对象，不要其他任何内容。
 """
 
+TEST_CASE_DRAFT_GENERATION_PROMPT = """
+你是儿童发展、感觉统合、教育心理学领域的专业测试用例设计师。
+请根据提供的文档内容，生成 {count} 个 RAG（检索增强生成）测试用例草稿。
+
+文档内容:
+{text}
+
+生成要求：
+1. 生成的测试用例应围绕目标领域（{domains}）和适用年龄段（{age_range_min}-{age_range_max}岁）。
+2. 每个测试用例应包含：
+   - query: 模拟家长或专业人士会提出的具体问题。
+   - description: 这个查询的意图和测试目标。
+   - expected_keywords: 回答中必须包含的预期专业关键词列表。
+   - answer_points: 预期回答的核心要点列表。
+   - professional_terms: 涉及的专业术语列表。
+3. 返回结果必须是包含 `drafts` 数组的 JSON 对象，每个元素对应一个测试用例。
+4. 绝对不要返回除了 JSON 之外的任何内容（例如Markdown标记、前言、解释）。
+
+返回 JSON 结构示例：
+{{"drafts": [{{"query": "3岁孩子怕荡秋千是怎么回事？","description": "测试系统是否能正确检索前庭觉敏感相关知识","expected_keywords": ["前庭觉", "重力不安全感", "敏感"],"answer_points": ["分析前庭觉敏感的原因", "给出渐进式脱敏建议", "提供居家小游戏"],"professional_terms": ["前庭防御", "重力不安全感"]}}]}}
+"""
+
 # --------------------------
 # System Prompts (Placeholders)
 # --------------------------

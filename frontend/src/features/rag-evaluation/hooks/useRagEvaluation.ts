@@ -10,13 +10,21 @@ import {
   compareTestRuns,
   createSnapshot,
   getSnapshots,
+  getDrafts,
+  reviewDraft,
+  updateDraft,
+  importDrafts,
+  getSourceDocuments,
+  generateDrafts,
 } from '@/api/rag-test';
-import type { TestCase, TestRun, KnowledgeSnapshot } from '@/api/rag-test/types';
+import type { TestCase, TestRun, KnowledgeSnapshot, TestCaseDraft, SourceDocument, GenerationParams } from '@/api/rag-test/types';
 
 export function useRagEvaluation() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [testRuns, setTestRuns] = useState<TestRun[]>([]);
   const [snapshots, setSnapshots] = useState<KnowledgeSnapshot[]>([]);
+  const [drafts, setDrafts] = useState<TestCaseDraft[]>([]);
+  const [sourceDocuments, setSourceDocuments] = useState<SourceDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -154,15 +162,90 @@ export function useRagEvaluation() {
     }
   }, [loadSnapshots]);
 
+  const loadDrafts = useCallback(async (sourceDocumentId?: string) => {
+    setLoading(true);
+    try {
+      console.log('[loadDrafts] 开始加载草稿, sourceDocumentId:', sourceDocumentId);
+      const data = await getDrafts(sourceDocumentId);
+      console.log('[loadDrafts] 加载到草稿数据:', data.length, '条');
+      setDrafts(data);
+      setError(null);
+    } catch (err) {
+      console.error('[loadDrafts] 加载草稿失败:', err);
+      setError(err instanceof Error ? err.message : '加载草稿失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadSourceDocuments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getSourceDocuments();
+      setSourceDocuments(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载源文档失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleReviewDraft = useCallback(async (draftId: string, action: 'reviewed' | 'rejected') => {
+    try {
+      await reviewDraft(draftId, action);
+      await loadDrafts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '审核草稿失败');
+      throw err;
+    }
+  }, [loadDrafts]);
+
+  const handleUpdateDraft = useCallback(async (draftId: string, data: Partial<TestCaseDraft>) => {
+    try {
+      await updateDraft(draftId, data);
+      await loadDrafts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新草稿失败');
+      throw err;
+    }
+  }, [loadDrafts]);
+
+  const handleImportDrafts = useCallback(async (draftIds: string[]) => {
+    try {
+      const result = await importDrafts(draftIds);
+      await loadDrafts();
+      await loadTestCases();
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入草稿失败');
+      throw err;
+    }
+  }, [loadDrafts, loadTestCases]);
+
+  const handleGenerateDrafts = useCallback(async (docId: string, params: GenerationParams) => {
+    try {
+      await generateDrafts(docId, params);
+      await loadDrafts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成草稿失败');
+      throw err;
+    }
+  }, [loadDrafts]);
+
   return {
     testCases,
     testRuns,
     snapshots,
+    drafts,
+    sourceDocuments,
     loading,
     error,
     loadTestCases,
     loadTestRuns,
     loadSnapshots,
+    loadDrafts,
+    loadSourceDocuments,
     runAllTests: handleRunAllTests,
     runSingleTest: handleRunSingleTest,
     createTestCase: handleCreateTestCase,
@@ -170,5 +253,9 @@ export function useRagEvaluation() {
     deleteTestCase: handleDeleteTestCase,
     compareTestRuns: handleCompareRuns,
     createSnapshot: handleCreateSnapshot,
+    reviewDraft: handleReviewDraft,
+    updateDraft: handleUpdateDraft,
+    importDrafts: handleImportDrafts,
+    generateDrafts: handleGenerateDrafts,
   };
 }

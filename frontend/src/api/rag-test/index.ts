@@ -1,5 +1,5 @@
 import apiClient from '../client';
-import type { TestCase, TestRun, KnowledgeSnapshot, TestResult } from './types';
+import type { TestCase, TestRun, KnowledgeSnapshot, TestResult, ImportPreviewResult, BatchImportRequest, BatchImportResult, SourceDocument, TestCaseDraft, TestSet, GenerationParams } from './types';
 
 export const createTestCase = async (data: Omit<TestCase, 'id' | 'created_at' | 'updated_at'>): Promise<TestCase> => {
   const response = await apiClient.post<TestCase>('/rag/test/cases', data);
@@ -68,5 +68,114 @@ export const getSnapshot = async (snapshotId: string): Promise<KnowledgeSnapshot
 
 export const restoreSnapshot = async (snapshotId: string): Promise<{ status: string; message: string }> => {
   const response = await apiClient.post(`/rag/test/snapshots/${snapshotId}/restore`);
+  return response.data;
+};
+
+export const previewImportCases = async (file: File): Promise<ImportPreviewResult> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.post<ImportPreviewResult>('/rag/test/cases/import/preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+
+export const batchImportCases = async (data: BatchImportRequest): Promise<BatchImportResult> => {
+  const response = await apiClient.post<BatchImportResult>('/rag/test/cases/batch', data);
+  return response.data;
+};
+
+export const uploadSourceDocument = async (file: File, title?: string): Promise<{ status: string; document: SourceDocument }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (title) formData.append('title', title);
+  formData.append('auto_generate', 'true');
+  const response = await apiClient.post('/rag/test/documents/upload', formData);
+  return response.data;
+};
+
+export const getSourceDocuments = async (): Promise<SourceDocument[]> => {
+  const response = await apiClient.get<SourceDocument[]>('/rag/test/documents');
+  return response.data;
+};
+
+export const getSourceDocument = async (docId: string): Promise<SourceDocument> => {
+  const response = await apiClient.get<SourceDocument>(`/rag/test/documents/${docId}`);
+  return response.data;
+};
+
+export const deleteSourceDocument = async (docId: string): Promise<{ status: string; message: string }> => {
+  const response = await apiClient.delete(`/rag/test/documents/${docId}`);
+  return response.data;
+};
+
+export const generateDrafts = async (docId: string, params: GenerationParams): Promise<{ status: string; drafts: TestCaseDraft[] }> => {
+  const response = await apiClient.post(`/rag/test/documents/${docId}/generate-drafts`, { params });
+  return response.data;
+};
+
+export const getDrafts = async (sourceDocumentId?: string): Promise<TestCaseDraft[]> => {
+  const url = sourceDocumentId ? `/rag/test/drafts?source_document_id=${sourceDocumentId}` : '/rag/test/drafts';
+  const response = await apiClient.get<TestCaseDraft[]>(url);
+  return response.data;
+};
+
+export const getDraft = async (draftId: string): Promise<TestCaseDraft> => {
+  const response = await apiClient.get<TestCaseDraft>(`/rag/test/drafts/${draftId}`);
+  return response.data;
+};
+
+export const updateDraft = async (draftId: string, data: Partial<TestCaseDraft>): Promise<TestCaseDraft> => {
+  const response = await apiClient.put<TestCaseDraft>(`/rag/test/drafts/${draftId}`, data);
+  return response.data;
+};
+
+export const reviewDraft = async (draftId: string, action: 'reviewed' | 'rejected'): Promise<{ status: string; draft: TestCaseDraft }> => {
+  const response = await apiClient.post(`/rag/test/drafts/${draftId}/review?action=${action}`);
+  return response.data;
+};
+
+export const importDrafts = async (draftIds: string[]): Promise<BatchImportResult> => {
+  const response = await apiClient.post('/rag/test/drafts/import', { draft_ids: draftIds });
+  return response.data;
+};
+
+export const createTestSet = async (data: { name: string; description?: string; source_type?: string }): Promise<{ status: string; test_set: TestSet }> => {
+  const response = await apiClient.post('/rag/test/sets', data);
+  return response.data;
+};
+
+export const getTestSets = async (): Promise<TestSet[]> => {
+  const response = await apiClient.get<TestSet[]>('/rag/test/sets');
+  return response.data;
+};
+
+export const getTestSet = async (setId: string): Promise<TestSet> => {
+  const response = await apiClient.get<TestSet>(`/rag/test/sets/${setId}`);
+  return response.data;
+};
+
+export const updateTestSet = async (setId: string, data: Partial<TestSet>): Promise<TestSet> => {
+  const response = await apiClient.put<TestSet>(`/rag/test/sets/${setId}`, data);
+  return response.data;
+};
+
+export const deleteTestSet = async (setId: string): Promise<{ status: string; message: string }> => {
+  const response = await apiClient.delete(`/rag/test/sets/${setId}`);
+  return response.data;
+};
+
+export const addCasesToSet = async (setId: string, caseIds: string[]): Promise<TestSet> => {
+  const response = await apiClient.post(`/rag/test/sets/${setId}/cases`, { case_ids: caseIds });
+  return response.data;
+};
+
+export const removeCasesFromSet = async (setId: string, caseIds: string[]): Promise<TestSet> => {
+  const response = await apiClient.delete(`/rag/test/sets/${setId}/cases`, { params: { case_ids: caseIds } });
+  return response.data;
+};
+
+export const exportTestSet = async (setId: string): Promise<TestCase[]> => {
+  const response = await apiClient.get<TestCase[]>(`/rag/test/sets/${setId}/export`);
   return response.data;
 };

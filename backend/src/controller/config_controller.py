@@ -1,9 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
-from src.config.config_manager import config_manager
-from src.config import settings, ConfigFieldMetadata
-from src.config.rules import rules
+from src.config import settings, ConfigFieldMetadata, config_manager, rules
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/api/v1/config", tags=["Configuration"])
@@ -44,17 +42,17 @@ async def get_config():
             
             # Infer category
             if full_field_name.startswith("rule_validation_"):
-                category = "校验规则配置"
+                category = "rules.validation"
             elif full_field_name.startswith("rule_assessment_"):
-                category = "评估规则配置"
+                category = "rules.assessment"
             elif full_field_name.startswith("rule_scoring_"):
-                category = "评分规则配置"
+                category = "rules.scoring"
             elif full_field_name.startswith("rule_preprocessing_"):
-                category = "预处理规则配置"
+                category = "rules.preprocessing"
             elif full_field_name.startswith("rule_metadata_"):
-                category = "元数据提取规则配置"
+                category = "rules.metadata"
             else:
-                category = "其他配置"
+                category = "other"
             
             annotation = field_info.annotation
             type_name = annotation.__name__ if hasattr(annotation, '__name__') else str(annotation)
@@ -112,7 +110,7 @@ async def update_config(request: ConfigUpdateRequest):
 
 @router.get("/versions")
 async def list_versions(limit: int = 50):
-    versions = await config_manager._repository.list_versions(limit=limit)
+    versions = config_manager.list_versions(limit=limit)
     active_version = config_manager.get_active_version()
 
     return [

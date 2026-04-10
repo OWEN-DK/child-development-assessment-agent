@@ -19,30 +19,29 @@
   }
 }
 
-.categoryList {
-  list-style: none;
-  padding: 0;
+.categoryTree {
   margin: 0 0 24px 0;
-
-  li {
-    padding: 8px 12px;
+  
+  :global(.ant-tree-node-content-wrapper) {
+    padding: 6px 8px;
     border-radius: 4px;
-    cursor: pointer;
-    color: #595959;
     font-size: 14px;
-    margin-bottom: 4px;
     transition: all 0.2s;
-
-    &:hover {
-      background: #f5f5f5;
-      color: #262626;
-    }
-
-    &.active {
-      background: #e6f4ff;
-      color: #1677ff;
-      font-weight: 500;
-    }
+  }
+  
+  :global(.ant-tree-treenode:hover .ant-tree-node-content-wrapper):not(.ant-tree-node-selected) {
+    background: #f5f5f5;
+    color: #262626;
+  }
+  
+  :global(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
+    background: #e6f4ff;
+    color: #1677ff;
+    font-weight: 500;
+  }
+  
+  :global(.ant-tree-indent-unit) {
+    width: 16px;
   }
 }
 

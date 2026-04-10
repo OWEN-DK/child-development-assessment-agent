@@ -9,11 +9,17 @@ import {
   WarningOutlined,
   UnorderedListOutlined,
   QuestionCircleOutlined,
+  BookOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { useRagEvaluation } from '../hooks/useRagEvaluation';
 import { TestCaseTable } from '../components/TestCaseTable';
 import { EvaluationReport } from '../components/EvaluationReport';
 import { BadCaseList } from '../components/BadCaseList';
+import ImportJsonModal from '../components/ImportJsonModal';
+import UploadDocumentModal from '../components/UploadDocumentModal';
+import TestSetManager from '../components/TestSetManager';
+import TestCaseReviewTable from '../components/TestCaseReviewTable';
 import { ConfigDiffView } from '../../../components/config/ConfigDiffView';
 import { useConfigStore } from '@/store/configStore';
 import styles from './RagEvaluationPage.module.scss';
@@ -68,18 +74,23 @@ export const RagEvaluationPage: React.FC = () => {
     loadTestCases,
     loadTestRuns,
     runAllTests,
+    drafts,
+    loadDrafts,
   } = useRagEvaluation();
 
   const { configFields, setRunning, setLastResult, loadConfig } = useConfigStore();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [latestRun, setLatestRun] = useState<TestRun | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   useEffect(() => {
     loadTestCases();
     loadTestRuns();
     loadConfig();
-  }, [loadTestCases, loadTestRuns, loadConfig]);
+    loadDrafts();
+  }, [loadTestCases, loadTestRuns, loadConfig, loadDrafts]);
 
   useEffect(() => {
     if (testRuns.length > 0) {
@@ -102,7 +113,20 @@ export const RagEvaluationPage: React.FC = () => {
   };
 
   const handleImportTestCases = () => {
-    message.info('导入测试用例功能开发中');
+    setImportModalOpen(true);
+  };
+
+  const handleUploadDocument = () => {
+    setUploadModalOpen(true);
+  };
+
+  const handleImportSuccess = () => {
+    loadTestCases();
+  };
+
+  const handleUploadSuccess = () => {
+    message.success('文档上传成功，可前往草稿审核');
+    loadDrafts();
   };
 
   const handleExportReport = () => {
@@ -144,7 +168,10 @@ export const RagEvaluationPage: React.FC = () => {
               运行所有测试
             </Button>
             <Button icon={<ImportOutlined />} onClick={handleImportTestCases}>
-              导入测试用例
+              JSON导入
+            </Button>
+            <Button icon={<BookOutlined />} onClick={handleUploadDocument}>
+              书籍导入
             </Button>
             <Button icon={<ExportOutlined />} onClick={handleExportReport}>
               导出报告
@@ -284,6 +311,32 @@ export const RagEvaluationPage: React.FC = () => {
               ),
               children: <BadCaseList testRuns={testRuns} />,
             },
+            {
+              key: 'drafts',
+              label: (
+                <span>
+                  <BookOutlined />
+                  草稿审核
+                </span>
+              ),
+              children: (
+                <TestCaseReviewTable
+                  drafts={drafts}
+                  loading={loading}
+                  onRefresh={loadDrafts}
+                />
+              ),
+            },
+            {
+              key: 'testsets',
+              label: (
+                <span>
+                  <DatabaseOutlined />
+                  测试集管理
+                </span>
+              ),
+              children: <TestSetManager testSets={[]} loading={false} onRefresh={() => {}} />,
+            },
           ]}
         />
 
@@ -299,6 +352,17 @@ export const RagEvaluationPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <ImportJsonModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
+      <UploadDocumentModal
+        open={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onSuccess={handleUploadSuccess}
+      />
     </div>
   );
 };

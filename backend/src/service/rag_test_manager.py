@@ -4,8 +4,11 @@ import threading
 import shutil
 import time
 import math
-from typing import Dict, List, Optional
+import hashlib
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from filelock import FileLock
+from jsonschema import validate, ValidationError
 
 from src.model.rag_test import (
     TestCase,
@@ -14,15 +17,56 @@ from src.model.rag_test import (
     TestRun,
     KnowledgeSnapshot,
     TestResultItem,
+    SourceDocument,
+    SourceDocumentStore,
+    DocumentStatus,
+    TestCaseDraft,
+    TestCaseDraftStore,
+    DraftStatus,
+    GenerationParams,
+    TestSet,
+    TestSetStore,
+    QualityReport,
+    ChapterInfo,
 )
-from src.service.rag_service import rag_service, STORAGE_DIR
+from src.service.rag_service import rag_service
+from src.config import settings, config_manager
 from src.service.document_manager import document_manager
-from src.config.config_manager import config_manager
 from src.utils.logger import logger
+from src.constants.test_case import TEST_CASE_DOMAINS, TEST_CASE_REQUIRED_FIELDS
+from src.core.prompts import TEST_CASE_DRAFT_GENERATION_PROMPT
+from llama_index.llms.dashscope import DashScope
+import asyncio
 
+STORAGE_DIR = settings.rag_storage_dir
 TEST_CASE_STORE_PATH = "./storage/test_cases.json"
 TEST_RUNS_DIR = "./storage/test_runs"
 SNAPSHOTS_DIR = "./storage/snapshots"
+SOURCE_DOCUMENTS_DIR = "./storage/source_documents"
+TEST_CASE_DRAFTS_DIR = "./storage/test_case_drafts"
+TEST_SETS_DIR = "./storage/test_sets"
+TEST_CASES_HISTORY_DIR = "./storage/test_cases_history"
+
+# JSON导入Schema
+TEST_CASE_IMPORT_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": TEST_CASE_REQUIRED_FIELDS,
+        "properties": {
+            "query": {"type": "string", "minLength": 1},
+            "age": {"type": "integer", "minimum": 0, "maximum": 18},
+            "domain": {"type": "string", "enum": TEST_CASE_DOMAINS + ["未知"]},
+            "expected_knowledge_ids": {"type": "array", "items": {"type": "string"}},
+            "expected_keywords": {"type": "array", "items": {"type": "string"}},
+            "description": {"type": "string"},
+            "answer_points": {"type": "array", "items": {"type": "string"}},
+            "professional_terms": {"type": "array", "items": {"type": "string"}},
+            "age_requirement": {"type": "string"},
+        },
+        "additionalProperties": False
+    }
+}
 
 
 class RagTestManager:
@@ -45,12 +89,26 @@ class RagTestManager:
         self.test_runs_dir = TEST_RUNS_DIR
         self.snapshots_dir = SNAPSHOTS_DIR
         self.test_case_store = TestCaseStore()
+        self._lock = FileLock(TEST_CASE_STORE_PATH + ".lock")
+        self.source_document_store = SourceDocumentStore()
+        self.test_case_draft_store = TestCaseDraftStore()
+        self.test_set_store = TestSetStore()
 
         # Ensure directories exist
         os.makedirs(self.test_runs_dir, exist_ok=True)
         os.makedirs(self.snapshots_dir, exist_ok=True)
+        for dir_path in [
+            SOURCE_DOCUMENTS_DIR,
+            TEST_CASE_DRAFTS_DIR,
+            TEST_SETS_DIR,
+            TEST_CASES_HISTORY_DIR,
+        ]:
+            os.makedirs(dir_path, exist_ok=True)
 
         self._load_test_cases()
+        self._load_source_documents()
+        self._load_drafts()
+        self._load_test_sets()
         self._initialized = True
 
     def _load_test_cases(self):
@@ -65,6 +123,84 @@ class RagTestManager:
                 logger.error(f"Failed to load test cases: {e}")
         else:
             logger.info("No existing test cases found. Starting fresh.")
+
+    def _load_source_documents(self):
+        """加载源文档"""
+        store_path = os.path.join(SOURCE_DOCUMENTS_DIR, "documents.json")
+        if os.path.exists(store_path):
+            try:
+                with open(store_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.source_document_store = SourceDocumentStore(**data)
+                logger.info(f"Loaded {len(self.source_document_store.documents)} source documents")
+            except Exception as e:
+                logger.error(f"Failed to load source documents: {e}")
+        else:
+            logger.info("No existing source documents found.")
+
+    def _save_source_documents(self):
+        """保存源文档"""
+        store_path = os.path.join(SOURCE_DOCUMENTS_DIR, "documents.json")
+        try:
+            tmp_path = store_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(self.source_document_store.model_dump_json(indent=2, ensure_ascii=False))
+            os.replace(tmp_path, store_path)
+            logger.info("Source documents saved")
+        except Exception as e:
+            logger.error(f"Failed to save source documents: {e}")
+
+    def _load_drafts(self):
+        """加载草稿"""
+        store_path = os.path.join(TEST_CASE_DRAFTS_DIR, "drafts.json")
+        if os.path.exists(store_path):
+            try:
+                with open(store_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.test_case_draft_store = TestCaseDraftStore(**data)
+                logger.info(f"Loaded {len(self.test_case_draft_store.drafts)} drafts")
+            except Exception as e:
+                logger.error(f"Failed to load drafts: {e}")
+        else:
+            logger.info("No existing drafts found.")
+
+    def _save_drafts(self):
+        """保存草稿"""
+        store_path = os.path.join(TEST_CASE_DRAFTS_DIR, "drafts.json")
+        try:
+            tmp_path = store_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(self.test_case_draft_store.model_dump_json(indent=2, ensure_ascii=False))
+            os.replace(tmp_path, store_path)
+            logger.info("Drafts saved")
+        except Exception as e:
+            logger.error(f"Failed to save drafts: {e}")
+
+    def _load_test_sets(self):
+        """加载测试集"""
+        store_path = os.path.join(TEST_SETS_DIR, "test_sets.json")
+        if os.path.exists(store_path):
+            try:
+                with open(store_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.test_set_store = TestSetStore(**data)
+                logger.info(f"Loaded {len(self.test_set_store.test_sets)} test sets")
+            except Exception as e:
+                logger.error(f"Failed to load test sets: {e}")
+        else:
+            logger.info("No existing test sets found.")
+
+    def _save_test_sets(self):
+        """保存测试集"""
+        store_path = os.path.join(TEST_SETS_DIR, "test_sets.json")
+        try:
+            tmp_path = store_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(self.test_set_store.model_dump_json(indent=2, ensure_ascii=False))
+            os.replace(tmp_path, store_path)
+            logger.info("Test sets saved")
+        except Exception as e:
+            logger.error(f"Failed to save test sets: {e}")
 
     def _save_test_cases(self):
         """保存测试用例"""
@@ -111,6 +247,103 @@ class RagTestManager:
     def list_test_cases(self) -> List[TestCase]:
         """列出所有测试用例"""
         return list(self.test_case_store.test_cases.values())
+    
+    def preview_import_cases(self, import_data: List[dict]) -> Tuple[List[dict], List[dict], List[dict]]:
+        """预览导入的测试用例，返回有效/无效/重复数据"""
+        valid_cases = []
+        invalid_cases = []
+        duplicates = []
+        
+        # 1. Schema校验
+        try:
+            validate(instance=import_data, schema=TEST_CASE_IMPORT_SCHEMA)
+        except ValidationError as e:
+            return [], [{"index": 0, "data": import_data[0] if import_data else {}, "error": str(e)}], []
+        
+        # 2. 业务规则校验和重复检测
+        for i, case_data in enumerate(import_data):
+            # 校验age范围
+            if case_data["age"] < 0 or case_data["age"] > 18:
+                invalid_cases.append({
+                    "index": i,
+                    "data": case_data,
+                    "error": f"年龄超出范围: {case_data['age']}，必须在0-18之间"
+                })
+                continue
+            
+            # 校验domain
+            if case_data.get("domain") and case_data["domain"] not in TEST_CASE_DOMAINS + ["未知"]:
+                invalid_cases.append({
+                    "index": i,
+                    "data": case_data,
+                    "error": f"无效的领域: {case_data['domain']}，可选值: {TEST_CASE_DOMAINS}"
+                })
+                continue
+            
+            # 检测重复（query + age + domain）
+            duplicate_found = False
+            for existing_case in self.test_case_store.test_cases.values():
+                if (existing_case.query == case_data["query"] and 
+                    existing_case.age == case_data["age"] and 
+                    existing_case.domain == case_data.get("domain", "未知")):
+                    duplicates.append({
+                        "index": i,
+                        "data": case_data,
+                        "existing_id": existing_case.id
+                    })
+                    duplicate_found = True
+                    break
+            
+            if not duplicate_found:
+                valid_cases.append({
+                    "index": i,
+                    "data": case_data
+                })
+        
+        return valid_cases, invalid_cases, duplicates
+    
+    def batch_import_cases(self, cases_data: List[dict], test_set_id: Optional[str] = None) -> Dict:
+        """批量导入测试用例（事务性操作）"""
+        # 阶段1：预校验所有数据
+        test_cases = []
+        for case_data in cases_data:
+            try:
+                test_case = TestCase(**case_data)
+                test_cases.append(test_case)
+            except Exception as e:
+                raise ValueError(f"测试用例数据无效: {str(e)}")
+        
+        # 阶段2：原子写入
+        with self._lock:
+            # 重新加载数据，避免并发修改
+            self._load_test_cases()
+            
+            # 再次检测重复
+            for test_case in test_cases:
+                for existing_case in self.test_case_store.test_cases.values():
+                    if (existing_case.query == test_case.query and 
+                        existing_case.age == test_case.age and 
+                        existing_case.domain == test_case.domain):
+                        raise ValueError(f"测试用例重复: {test_case.query} (age: {test_case.age}, domain: {test_case.domain})")
+            
+            # 添加到存储
+            imported_ids = []
+            for test_case in test_cases:
+                self.test_case_store.test_cases[test_case.id] = test_case
+                imported_ids.append(test_case.id)
+            
+            # 保存到文件
+            tmp_path = TEST_CASE_STORE_PATH + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(self.test_case_store.model_dump_json(indent=2, ensure_ascii=False))
+            os.replace(tmp_path, TEST_CASE_STORE_PATH)
+        
+        return {
+            "imported_count": len(imported_ids),
+            "failed_count": 0,
+            "test_case_ids": imported_ids,
+            "errors": []
+        }
 
     async def run_test_case(self, test_case: TestCase, limit: int = 10) -> TestResult:
         """执行单个测试用例"""
@@ -416,26 +649,17 @@ class RagTestManager:
 
             # 恢复快照中的 index
             snapshot_index_dir = os.path.join(snapshot.storage_path, "index")
-            # 兼容旧版本快照中可能存在的嵌套路径
-            old_snapshot_index_dir = os.path.join(snapshot.storage_path, "storage", "index")
             
             if os.path.exists(snapshot_index_dir):
                 shutil.copytree(snapshot_index_dir, current_index_dir)
-            elif os.path.exists(old_snapshot_index_dir):
-                shutil.copytree(old_snapshot_index_dir, current_index_dir)
 
             # 恢复文档存储
             snapshot_doc_store = os.path.join(
                 snapshot.storage_path, "document_store.json"
             )
-            old_snapshot_doc_store = os.path.join(
-                snapshot.storage_path, "storage", "document_store.json"
-            )
             
             if os.path.exists(snapshot_doc_store):
                 shutil.copy2(snapshot_doc_store, current_doc_store)
-            elif os.path.exists(old_snapshot_doc_store):
-                shutil.copy2(old_snapshot_doc_store, current_doc_store)
                 
             # 重新加载文档管理器
             document_manager._load_store()
@@ -591,6 +815,391 @@ class RagTestManager:
                 "passed_count_change": run2.passed_test_cases - run1.passed_test_cases,
             },
         }
+
+    def _compute_file_hash(self, file_path: str) -> str:
+        """计算文件SHA256哈希"""
+        sha256 = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+
+    def upload_source_document(self, file_path: str, title: str, file_type: str) -> SourceDocument:
+        """上传源文档"""
+        file_hash = self._compute_file_hash(file_path)
+
+        for doc in self.source_document_store.documents.values():
+            if doc.file_hash == file_hash:
+                logger.info(f"文档已存在，直接复用: {doc.id} - {doc.title}")
+                return doc
+
+        dest_path = os.path.join(SOURCE_DOCUMENTS_DIR, f"{file_hash}_{os.path.basename(file_path)}")
+        shutil.copy2(file_path, dest_path)
+
+        doc = SourceDocument(
+            title=title,
+            file_type=file_type,
+            file_path=dest_path,
+            file_hash=file_hash,
+        )
+
+        self.source_document_store.documents[doc.id] = doc
+        self._save_source_documents()
+        logger.info(f"Source document uploaded: {doc.id} - {title}")
+        return doc
+
+    def list_source_documents(self) -> List[SourceDocument]:
+        """列出所有源文档"""
+        return list(self.source_document_store.documents.values())
+
+    def get_source_document(self, doc_id: str) -> Optional[SourceDocument]:
+        """获取单个源文档"""
+        return self.source_document_store.documents.get(doc_id)
+
+    def delete_source_document(self, doc_id: str) -> bool:
+        """删除源文档"""
+        if doc_id not in self.source_document_store.documents:
+            return False
+
+        doc = self.source_document_store.documents[doc_id]
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+
+        del self.source_document_store.documents[doc_id]
+        self._save_source_documents()
+        logger.info(f"Source document deleted: {doc_id}")
+        return True
+
+    async def generate_test_case_drafts(
+        self,
+        source_document_id: str,
+        params: GenerationParams,
+    ) -> List[TestCaseDraft]:
+        """根据源文档生成测试用例草稿"""
+        doc = self.source_document_store.documents.get(source_document_id)
+        if not doc:
+            raise ValueError(f"源文档不存在: {source_document_id}")
+
+        # 尝试读取完整文档内容而不是只使用摘要
+        content_to_use = doc.content_summary or "暂无摘要内容"
+        try:
+            if os.path.exists(doc.file_path):
+                with open(doc.file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    full_content = f.read()
+                    # 如果内容太长，取前4000字符
+                    if len(full_content) > 4000:
+                        content_to_use = full_content[:4000] + "..."
+                    else:
+                        content_to_use = full_content
+                    logger.info(f"Loaded full document content, length: {len(content_to_use)}")
+        except Exception as e:
+            logger.warning(f"Failed to load full document content, using summary: {e}")
+
+        # 分批生成，每次生成3个，避免LLM输出截断
+        batch_size = 3
+        total_needed = params.count
+        all_drafts = []
+        generated_count = 0
+
+        try:
+            if not settings.dashscope_api_key:
+                raise ValueError("DASHSCOPE_API_KEY 未配置，无法调用大模型")
+
+            llm = DashScope(
+                model=params.llm_model,
+                api_key=settings.dashscope_api_key,
+                temperature=params.temperature,
+            )
+
+            import re
+            import json_repair
+
+            # 确保即使模型返回的是字符串也能被容错为列表
+            def ensure_list(val):
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, str):
+                    return [val] if val else []
+                return []
+
+            while generated_count < total_needed:
+                current_batch_count = min(batch_size, total_needed - generated_count)
+                logger.info(f"Generating batch {generated_count//batch_size + 1}, count: {current_batch_count}")
+                
+                prompt = TEST_CASE_DRAFT_GENERATION_PROMPT.format(
+                    count=current_batch_count,
+                    text=content_to_use,
+                    domains=",".join(params.target_domains) if params.target_domains else "通用领域",
+                    age_range_min=params.age_range[0],
+                    age_range_max=params.age_range[1],
+                )
+
+                try:
+                    response = await llm.acomplete(prompt)
+                    response_text = str(response.text).strip()
+
+                    json_match = re.search(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                    else:
+                        start = response_text.find("{")
+                        end = response_text.rfind("}")
+                        if start != -1 and end != -1:
+                            json_str = response_text[start : end + 1]
+                        else:
+                            json_str = response_text
+
+                    try:
+                        data = json.loads(json_str)
+                    except json.JSONDecodeError as je:
+                        logger.warning(f"Standard JSON decode failed, attempting repair: {je}")
+                        data = json_repair.loads(json_str)
+                        
+                    if not isinstance(data, dict):
+                        # 如果 json_repair 修复后依然不是 dict，可能是被解析成了字符串或其他类型
+                        # 我们尝试重新包装一下
+                        if isinstance(data, list):
+                            data = {"drafts": data}
+                        else:
+                            raise ValueError("LLM response did not parse into a JSON object")
+
+                    draft_list = data.get("drafts", [])
+                    if not isinstance(draft_list, list):
+                        # 某些情况下，大模型可能直接返回了草稿列表而没有包裹在 drafts 里
+                        if isinstance(data, list):
+                            draft_list = data
+                        else:
+                            raise ValueError("'drafts' field is missing or not a list")
+                    
+                    for item in draft_list:
+                        if generated_count >= total_needed:
+                            break
+                        draft = TestCaseDraft(
+                            source_document_id=source_document_id,
+                            query=item.get("query", ""),
+                            age=params.age_range[0],
+                            domain=params.target_domains[0] if params.target_domains else "",
+                            description=item.get("description", ""),
+                            expected_knowledge_ids=[],
+                            expected_keywords=ensure_list(item.get("expected_keywords", [])),
+                            answer_points=ensure_list(item.get("answer_points", [])),
+                            professional_terms=ensure_list(item.get("professional_terms", [])),
+                            age_requirement=f"{params.age_range[0]}-{params.age_range[1]}岁",
+                            generation_params=params,
+                            status=DraftStatus.DRAFT,
+                        )
+                        all_drafts.append(draft)
+                        self.test_case_draft_store.drafts[draft.id] = draft
+                        generated_count += 1
+
+                except Exception as batch_e:
+                    logger.error(f"Batch generation failed: {batch_e}")
+                    # 如果批次生成失败，尝试跳过这个批次，避免完全失败
+                    if generated_count == 0:
+                        # 如果还没生成任何内容，就抛出错误
+                        raise
+                    break
+
+            self._save_drafts()
+            logger.info(f"Generated {len(all_drafts)} drafts for document {source_document_id}")
+
+            return all_drafts
+
+        except Exception as e:
+            logger.error(f"Failed to generate drafts using LLM: {e}")
+            raise ValueError(f"生成测试用例草稿失败: {str(e)}")
+
+    def list_drafts(self, source_document_id: Optional[str] = None) -> List[TestCaseDraft]:
+        """列出草稿（仅显示待审核状态）"""
+        drafts = list(self.test_case_draft_store.drafts.values())
+        # 只返回待审核的草稿，已导入的不再显示在草稿列表
+        drafts = [d for d in drafts if d.status == DraftStatus.DRAFT]
+        if source_document_id:
+            drafts = [d for d in drafts if d.source_document_id == source_document_id]
+        return drafts
+
+    def get_draft(self, draft_id: str) -> Optional[TestCaseDraft]:
+        """获取单个草稿"""
+        return self.test_case_draft_store.drafts.get(draft_id)
+
+    def update_draft(self, draft_id: str, updates: Dict) -> Optional[TestCaseDraft]:
+        """更新草稿"""
+        draft = self.test_case_draft_store.drafts.get(draft_id)
+        if not draft:
+            return None
+
+        for key, value in updates.items():
+            if hasattr(draft, key):
+                setattr(draft, key, value)
+        draft.updated_at = datetime.now()
+
+        self._save_drafts()
+        return draft
+
+    def review_draft(self, draft_id: str, action: str) -> Optional[TestCaseDraft]:
+        """审核草稿: action = reviewed/rejected"""
+        draft = self.test_case_draft_store.drafts.get(draft_id)
+        if not draft:
+            return None
+
+        if action == "reviewed":
+            draft.status = DraftStatus.REVIEWED
+            draft.updated_at = datetime.now()
+            # 审核通过后自动导入为正式测试用例
+            test_case = TestCase(
+                query=draft.query,
+                age=draft.age,
+                domain=draft.domain,
+                expected_knowledge_ids=draft.expected_knowledge_ids,
+                expected_keywords=draft.expected_keywords,
+                description=draft.description,
+                answer_points=draft.answer_points,
+                professional_terms=draft.professional_terms,
+                age_requirement=draft.age_requirement,
+                source_document_id=draft.source_document_id,
+            )
+            self.test_case_store.test_cases[test_case.id] = test_case
+            draft.status = DraftStatus.IMPORTED
+            self._save_test_cases()
+            self._save_drafts()
+            logger.info(f"Draft {draft_id} reviewed and imported as test case {test_case.id}")
+        elif action == "rejected":
+            # 拒绝后自动删除草稿
+            del self.test_case_draft_store.drafts[draft_id]
+            self._save_drafts()
+            logger.info(f"Draft {draft_id} rejected and deleted")
+            return None
+        else:
+            raise ValueError(f"无效的审核操作: {action}")
+
+        return draft
+
+    def import_reviewed_drafts(self, draft_ids: List[str]) -> Dict:
+        """将已审核的草稿导入为正式测试用例"""
+        imported_ids = []
+        failed_ids = []
+
+        for draft_id in draft_ids:
+            draft = self.test_case_draft_store.drafts.get(draft_id)
+            if not draft:
+                failed_ids.append({"draft_id": draft_id, "error": "草稿不存在"})
+                continue
+
+            if draft.status != DraftStatus.REVIEWED:
+                failed_ids.append({"draft_id": draft_id, "error": "草稿未通过审核"})
+                continue
+
+            test_case = TestCase(
+                query=draft.query,
+                age=draft.age,
+                domain=draft.domain,
+                expected_knowledge_ids=draft.expected_knowledge_ids,
+                expected_keywords=draft.expected_keywords,
+                description=draft.description,
+                answer_points=draft.answer_points,
+                professional_terms=draft.professional_terms,
+                age_requirement=draft.age_requirement,
+                source_document_id=draft.source_document_id,
+            )
+
+            self.test_case_store.test_cases[test_case.id] = test_case
+            draft.status = DraftStatus.IMPORTED
+            draft.updated_at = datetime.now()
+            imported_ids.append(test_case.id)
+
+        self._save_test_cases()
+        self._save_drafts()
+
+        return {
+            "imported_count": len(imported_ids),
+            "failed_count": len(failed_ids),
+            "test_case_ids": imported_ids,
+            "errors": failed_ids,
+        }
+
+    def create_test_set(self, name: str, description: str = "", source_type: str = "manual") -> TestSet:
+        """创建测试集"""
+        test_set = TestSet(
+            name=name,
+            description=description,
+            source_type=source_type,
+        )
+        self.test_set_store.test_sets[test_set.id] = test_set
+        self._save_test_sets()
+        logger.info(f"Test set created: {test_set.id} - {name}")
+        return test_set
+
+    def list_test_sets(self) -> List[TestSet]:
+        """列出所有测试集"""
+        return list(self.test_set_store.test_sets.values())
+
+    def get_test_set(self, test_set_id: str) -> Optional[TestSet]:
+        """获取单个测试集"""
+        return self.test_set_store.test_sets.get(test_set_id)
+
+    def update_test_set(self, test_set_id: str, updates: Dict) -> Optional[TestSet]:
+        """更新测试集"""
+        test_set = self.test_set_store.test_sets.get(test_set_id)
+        if not test_set:
+            return None
+
+        for key, value in updates.items():
+            if hasattr(test_set, key):
+                setattr(test_set, key, value)
+        test_set.updated_at = datetime.now()
+
+        self._save_test_sets()
+        return test_set
+
+    def delete_test_set(self, test_set_id: str) -> bool:
+        """删除测试集"""
+        if test_set_id not in self.test_set_store.test_sets:
+            return False
+
+        del self.test_set_store.test_sets[test_set_id]
+        self._save_test_sets()
+        logger.info(f"Test set deleted: {test_set_id}")
+        return True
+
+    def add_test_cases_to_set(self, test_set_id: str, case_ids: List[str]) -> Optional[TestSet]:
+        """添加测试用例到测试集"""
+        test_set = self.test_set_store.test_sets.get(test_set_id)
+        if not test_set:
+            return None
+
+        for case_id in case_ids:
+            if case_id not in test_set.test_case_ids:
+                test_set.test_case_ids.append(case_id)
+        test_set.updated_at = datetime.now()
+
+        self._save_test_sets()
+        return test_set
+
+    def remove_test_cases_from_set(self, test_set_id: str, case_ids: List[str]) -> Optional[TestSet]:
+        """从测试集移除测试用例"""
+        test_set = self.test_set_store.test_sets.get(test_set_id)
+        if not test_set:
+            return None
+
+        test_set.test_case_ids = [cid for cid in test_set.test_case_ids if cid not in case_ids]
+        test_set.updated_at = datetime.now()
+
+        self._save_test_sets()
+        return test_set
+
+    def export_test_set(self, test_set_id: str) -> Optional[List[Dict]]:
+        """导出测试集为JSON"""
+        test_set = self.test_set_store.test_sets.get(test_set_id)
+        if not test_set:
+            return None
+
+        cases = []
+        for case_id in test_set.test_case_ids:
+            case = self.test_case_store.test_cases.get(case_id)
+            if case:
+                cases.append(case.model_dump())
+
+        return cases
 
 
 # 单例实例

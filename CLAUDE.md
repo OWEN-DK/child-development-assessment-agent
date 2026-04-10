@@ -209,6 +209,8 @@ graph TB
 ## 项目概览
 **儿童发展评估 Agent (Child Development Assessment Agent)** 是一个基于 AI 的系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用 **ReAct** 架构，并集成了 **LangChain** 和 **LlamaIndex**。
 
+- **项目状态**: 开发中，尚未上线
+- **部署策略**: 当前无需任何迁移设计，仅关注本地开发和功能实现
 - **目标**: 根据用户输入自动生成专业的评估报告。
 - **架构**: 多 Agent 系统 (预处理 -> 校验 -> 评估 -> 检索 -> 评分 -> 报告)。
 - **前端**: React + TypeScript (已初始化)。
@@ -281,7 +283,7 @@ graph TB
 │   │   ├── controller/  # API 控制器
 │   │   │   ├── task_controller.py   # 任务管理
 │   │   │   ├── rag_controller.py    # RAG 管理
-│   │   │   ├── rag_test_controller.py # RAG 测试
+│   │   │   ├── rag_test_controller.py # RAG 测试 (含测试集导入/文档上传/草稿审核/测试集管理)
 │   │   │   └── config_controller.py # 配置管理
 │   │   ├── core/        # Agent 核心逻辑
 │   │   │   ├── nodes/   # LangGraph 节点
@@ -295,6 +297,8 @@ graph TB
 │   │   │   ├── prompt_injection_guard.py # 提示词注入防护
 │   │   │   └── [其他核心模块...]
 │   │   ├── model/       # 数据模型 (Pydantic)
+│   │   ├── constants/   # 领域常量
+│   │   │   └── test_case.py     # 测试用例领域枚举
 │   │   ├── service/     # 业务服务
 │   │   │   ├── rag_service.py           # RAG 门面服务
 │   │   │   ├── retrieval_service.py     # 检索服务
@@ -303,7 +307,7 @@ graph TB
 │   │   │   ├── cache_service.py         # 缓存服务
 │   │   │   ├── content_audit_service.py # 内容审核
 │   │   │   ├── document_manager.py      # 文档管理
-│   │   │   ├── rag_test_manager.py      # RAG 测试管理
+│   │   │   ├── rag_test_manager.py      # RAG 测试管理 (含测试集导入/文档上传/草稿审核/测试集管理)
 │   │   │   └── monitoring_service.py    # 监控服务
 │   │   ├── data/        # 静态数据
 │   │   │   ├── test_sets/ # RAG 评估测试集
@@ -315,7 +319,8 @@ graph TB
 │   │   ├── debug/       # 调试脚本
 │   │   ├── maintenance/ # 维护脚本
 │   │   ├── performance/ # 性能测试
-│   │   └── rag/         # RAG 评估脚本
+│   │   ├── rag/         # RAG 评估脚本
+│   │   └── migrate_test_cases.py # 测试用例数据迁移
 │   ├── tests/           # 后端测试
 │   ├── logs/            # 后端日志
 │   ├── reports/         # 评估报告输出
@@ -336,6 +341,19 @@ graph TB
 │   │   │   ├── documents/  # 知识库管理
 │   │   │   ├── knowledge/  # 知识搜索
 │   │   │   └── rag-evaluation/ # RAG 评估
+│   │   │   │   ├── components/ # 评估组件
+│   │   │   │   │   ├── TestCaseTable.tsx        # 测试用例表格
+│   │   │   │   │   ├── TestCaseModal.tsx        # 测试用例弹窗
+│   │   │   │   │   ├── EvaluationReport.tsx     # 评估报告
+│   │   │   │   │   ├── BadCaseList.tsx          # Bad Case 列表
+│   │   │   │   │   ├── ImportJsonModal.tsx      # JSON 导入弹窗
+│   │   │   │   │   ├── UploadDocumentModal.tsx  # 文档上传弹窗
+│   │   │   │   │   ├── TestCaseReviewTable.tsx  # 草稿审核表格
+│   │   │   │   │   └── TestSetManager.tsx       # 测试集管理
+│   │   │   │   ├── hooks/       # 评估逻辑 Hook
+│   │   │   │   │   └── useRagEvaluation.ts      # 评估主 Hook
+│   │   │   │   └── pages/       # 评估页面
+│   │   │   │       └── RagEvaluationPage.tsx    # 评估主页面
 │   │   ├── pages/       # 页面
 │   │   ├── store/       # 状态管理 (Zustand)
 │   │   ├── hooks/       # 自定义 Hooks
@@ -446,7 +464,7 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | 动态年龄过滤器 | `backend/src/core/age_filter.py` | 根据儿童发展阶段动态调整过滤 |
 | 分层内容生成器 | `backend/src/core/layered_content_generator.py` | L0摘要/L1概览/L2详情三层生成 |
 | 上下文压缩器 | `backend/src/core/context_compressor.py` | 检索后上下文压缩，Token预算控制 |
-| PageIndex 包装器 | `backend/src/core/pageindex_wrapper.py` | 外部知识图谱检索，含熔断/重试/降级 |
+| PageIndex 包装器 | `backend/src/core/pageindex_wrapper.py` | 无向量推理式层级树索引检索，含熔断/重试/降级 |
 | 结果融合器 | `backend/src/core/result_fusion.py` | PageIndex 与混合检索结果融合 |
 | 向量存储工厂 | `backend/src/core/vector_store_factory.py` | 向量存储抽象层，支持多种向量库 |
 | Embedding 封装 | `backend/src/core/embedding.py` | DashScope Embedding 安全包装器 |
@@ -498,29 +516,70 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/rag/chunks/{chunk_id}` | GET | 获取分块详情 |
 | `/rag/layered-progress/{task_id}` | GET | 分层内容生成进度 |
 
+路由前缀: `/rag/test`
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/rag/test/cases` | POST/GET | 创建/列出测试用例 |
+| `/rag/test/cases/{case_id}` | GET/PUT/DELETE | 获取/更新/删除测试用例 |
+| `/rag/test/cases/import/preview` | POST | 预览JSON导入的测试用例 |
+| `/rag/test/cases/batch` | POST | 批量导入测试用例 |
+| `/rag/test/run` | POST | 运行所有测试用例 |
+| `/rag/test/run/{case_id}` | POST | 运行单个测试用例 |
+| `/rag/test/runs` | GET | 列出所有测试运行 |
+| `/rag/test/runs/{run_id}` | GET | 获取单个测试运行 |
+| `/rag/test/compare` | GET | 比较两个测试运行 |
+| `/rag/test/snapshots` | POST/GET | 创建/列出快照 |
+| `/rag/test/snapshots/{snapshot_id}` | GET | 获取单个快照 |
+| `/rag/test/snapshots/{snapshot_id}/restore` | POST | 恢复快照 |
+| `/rag/test/compare-configs/{v1}/{v2}` | GET | 对比配置版本 |
+| `/rag/test/documents/upload` | POST | 上传源文档（默认自动生成草稿） |
+| `/rag/test/documents` | GET | 列出所有源文档 |
+| `/rag/test/documents/{doc_id}` | GET/DELETE | 获取/删除源文档 |
+| `/rag/test/documents/{doc_id}/generate-drafts` | POST | 手动生成测试用例草稿 |
+| `/rag/test/drafts` | GET | 列出草稿 |
+| `/rag/test/drafts/{draft_id}` | GET/PUT | 获取/更新草稿 |
+| `/rag/test/drafts/{draft_id}/review` | POST | 审核草稿 |
+| `/rag/test/drafts/import` | POST | 导入已审核草稿 |
+| `/rag/test/sets` | POST/GET | 创建/列出测试集 |
+| `/rag/test/sets/{set_id}` | GET/PUT/DELETE | 获取/更新/删除测试集 |
+| `/rag/test/sets/{set_id}/cases` | POST/DELETE | 添加/移除测试用例 |
+| `/rag/test/sets/{set_id}/export` | GET | 导出测试集为JSON |
+
 ## 配置系统架构
 
 配置系统采用模块化设计，支持热重载和版本控制。
 
-### 配置模块
+### 配置模块（三层架构）
 
+#### 基础设施层 core/
 | 模块 | 文件 | 职责 |
 |------|------|------|
-| 配置管理器 | `config_manager.py` | 配置加载、热重载、版本管理 |
-| 配置仓库 | `config_repository.py` | 配置持久化存储 |
-| 配置事件 | `config_events.py` | 配置变更事件发布/订阅 |
-| 应用配置 | `app_settings.py` | 应用基础配置 (host, port, debug) |
-| 模型配置 | `model_settings.py` | LLM 模型配置 (qwen-plus, qwen3-omni-flash) |
-| Embedding 配置 | `embedding_settings.py` | DashScope Embedding 配置 |
-| RAG 配置 | `rag_settings.py` | RAG 系统核心配置 |
-| 向量存储配置 | `vector_store_settings.py` | 向量存储工厂配置 |
-| 分块配置 | `semantic_splitter_settings.py` | 语义分块器配置 |
-| PageIndex 配置 | `pageindex_settings.py` | 外部知识图谱配置 |
-| 查询融合配置 | `query_fusion_settings.py` | 查询结果融合配置 |
-| ML 评分配置 | `ml_scoring_settings.py` | ML 评分模型配置 |
-| 路径配置 | `path_settings.py` | 文件路径配置 |
-| 日志配置 | `log_settings.py` | 日志级别和格式配置 |
-| 业务规则 | `rules.py` | 业务规则定义 |
+| 配置管理器 | `core/manager.py` | 配置加载、热重载、版本管理 |
+| 配置仓库 | `core/repository.py` | 配置持久化存储 |
+| 配置事件 | `core/events.py` | 配置变更事件发布/订阅 |
+
+#### 配置模块层 modules/
+| 分类 | 模块 | 文件 | 职责 |
+|------|------|------|------|
+| **基础配置** | 应用配置 | `modules/app.py` | 应用基础配置 (host, port, debug) |
+| | 日志配置 | `modules/logging.py` | 日志级别和格式配置 |
+| | 路径配置 | `modules/paths.py` | 文件路径配置 |
+| **AI模型配置** | LLM模型 | `modules/models/llm.py` | LLM 模型配置 |
+| | Embedding配置 | `modules/models/embedding.py` | DashScope Embedding 配置 |
+| | ML评分配置 | `modules/models/ml_scoring.py` | ML 评分模型配置 |
+| **RAG配置** | RAG核心 | `modules/rag/core.py` | RAG 系统核心配置 |
+| | 检索配置 | `modules/rag/retrieval.py` | 检索、重排序、查询路由配置 |
+| | 分块配置 | `modules/rag/chunking.py` | 语义分块器配置 |
+| | 向量存储 | `modules/rag/vector_store.py` | 向量存储工厂配置 |
+| | PageIndex配置 | `modules/rag/pageindex.py` | PageIndex索引配置 |
+| | 导入流水线 | `modules/rag/pipeline.py` | 文档导入流水线配置 |
+
+#### 业务规则层 rules/
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 业务规则 | `rules/rules.py` | 业务规则定义 |
+| 规则数据 | `rules/rules.json` | 规则配置数据 |
 
 ### 配置特性
 
@@ -536,9 +595,10 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 
 - **Dependency Management**: All backend dependencies must be explicitly configured in `backend/pyproject.toml`. Do not rely on implicit dependencies or manual installation without updating the configuration file.
 - **Configuration Management**: 
-  - 所有可配置参数必须在 `backend/src/config/settings.py` 中定义，并支持通过 `.env.dev` 环境变量覆盖
-  - 禁止在业务代码中硬编码任何配置值，必须从 settings 对象读取
+  - 所有可配置参数必须在 `backend/src/config/` 下的对应模块中定义，并支持通过 `.env.dev` 环境变量覆盖
+  - 禁止在业务代码中硬编码任何配置值，必须从 `from src.config import settings` 统一读取
   - 新增配置项时必须同时添加到 `.env.dev.example` 作为示例
+  - 配置系统采用三层架构：core（基础设施）、modules（功能模块）、rules（业务规则）
 - **代码规范**:
   - 所有配置相关的修改必须同步更新配置文件，不得直接在代码中写死数值
 - **RAG 系统修改规范**:

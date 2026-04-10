@@ -1,10 +1,13 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // 加载对应环境的环境变量
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
   plugins: [react()],
   test: {
     globals: true,
@@ -24,20 +27,23 @@ export default defineConfig({
     },
   },
   server: {
-    host: '127.0.0.1',
+    host: env.VITE_DEV_SERVER_HOST || '127.0.0.1',
+    port: Number(env.VITE_DEV_SERVER_PORT) || 5173,
     proxy: {
       '/assess': {
-        target: 'http://127.0.0.1:8000',
+        target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
-      '/rag': {
-        target: 'http://127.0.0.1:8000',
+      // 匹配所有/rag/开头的API路径，不会匹配前端路由/rag-evaluation
+      '^/rag/': {
+        target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
-      }
-    }
+      },
+    },
+  },
   }
 })

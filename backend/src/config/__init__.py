@@ -18,21 +18,23 @@ except ImportError:
     FileSystemEventHandler = object
     WATCHDOG_AVAILABLE = False
 
-# 导入各个配置类
-from .app_settings import AppSettings
-from .model_settings import ModelSettings
-from .rag_settings import RAGSettings
-from .log_settings import LogSettings
-from .path_settings import PathSettings
-from .pageindex_settings import PageIndexSettings
-from .query_fusion_settings import QueryFusionSettings
-from .embedding_settings import EmbeddingSettings
-from .vector_store_settings import VectorStoreSettings
-from .semantic_splitter_settings import SemanticSplitterSettings
-from .ml_scoring_settings import MLScoringSettings
+# 导入各个配置模块（新路径）
+from .modules.app import AppSettings
+from .modules.logging import LogSettings
+from .modules.paths import PathSettings
+from .modules.models.llm import ModelSettings
+from .modules.models.embedding import EmbeddingSettings
+from .modules.models.ml_scoring import MLScoringSettings
+from .modules.rag.core import RagCoreSettings
+from .modules.rag.retrieval import RagRetrievalSettings
+from .modules.rag.chunking import RagChunkingSettings
+from .modules.rag.vector_store import VectorStoreSettings
+from .modules.rag.pageindex import PageIndexSettings
+from .modules.rag.pipeline import RagPipelineSettings
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent.parent.resolve()
+
 
 @dataclass
 class ConfigFieldMetadata:
@@ -48,16 +50,17 @@ class ConfigFieldMetadata:
 
 class Settings(
     AppSettings,
-    ModelSettings,
-    RAGSettings,
     LogSettings,
     PathSettings,
-    PageIndexSettings,
-    QueryFusionSettings,
+    ModelSettings,
     EmbeddingSettings,
-    VectorStoreSettings,
-    SemanticSplitterSettings,
     MLScoringSettings,
+    RagCoreSettings,
+    RagRetrievalSettings,
+    RagChunkingSettings,
+    VectorStoreSettings,
+    PageIndexSettings,
+    RagPipelineSettings,
 ):
     """统一的配置类，聚合所有拆分后的配置"""
     
@@ -85,42 +88,42 @@ class Settings(
     )
 
     def _infer_category(self, field_name: str) -> str:
-        if field_name.startswith(("rag_hybrid_", "rag_search_", "rag_cache_")):
-            return "混合检索配置"
+        if field_name.startswith(("rag_hybrid_", "rag_search_", "rag_cache_", "rag_reranker_", "rag_age_filter_", "query_router_", "fusion_", "rag_similarity_threshold", "rag_min_result_count")):
+            return "rag.retrieval"
         elif field_name.startswith("model_"):
-            return "模型设置"
-        elif field_name.startswith("rag_reranker_"):
-            return "重排序配置"
-        elif field_name.startswith(("rag_chunk_", "semantic_splitter_")):
-            return "分块配置"
+            return "models.llm"
+        elif field_name.startswith(("rag_chunk_", "semantic_splitter_", "rag_pdf_chunk_size", "rag_epub_chunk_target_size")):
+            return "rag.chunking"
         elif field_name.startswith("embedding_"):
-            return "Embedding配置"
+            return "models.embedding"
         elif field_name.startswith("pageindex_"):
-            return "PageIndex配置"
+            return "rag.pageindex"
+        elif field_name.startswith(("rag_vector_store_", "rag_vector_base_threshold", "rag_auto_persist_")):
+            return "rag.vector_store"
+        elif field_name.startswith(("rag_upload_", "rag_temp_upload_dir", "rag_metadata_extraction_concurrency", "rag_vl_max_workers", "rag_layered_content_", "rag_pipeline_")):
+            return "rag.pipeline"
         elif field_name.startswith("rag_"):
-            return "RAG配置"
+            return "rag.core"
         elif field_name.startswith("ml_"):
-            return "ML评分配置"
-        elif field_name.startswith("query_router_") or field_name.startswith("fusion_"):
-            return "查询与融合配置"
-        elif field_name.startswith("rule_metadata_"):
-            return "规则元数据配置"
+            return "models.ml_scoring"
         elif field_name.startswith("log_"):
-            return "日志配置"
-        elif field_name.startswith("data_dir") or field_name.startswith("rag_storage_dir"):
-            return "路径配置"
+            return "logging"
+        elif field_name.startswith("data_dir") or field_name.startswith("rag_storage_dir") or field_name.startswith("path_"):
+            return "paths"
         elif field_name.startswith("rule_validation_"):
-            return "校验规则配置"
+            return "rules.validation"
         elif field_name.startswith("rule_assessment_"):
-            return "评估规则配置"
+            return "rules.assessment"
         elif field_name.startswith("rule_scoring_"):
-            return "评分规则配置"
+            return "rules.scoring"
         elif field_name.startswith("rule_preprocessing_"):
-            return "预处理规则配置"
+            return "rules.preprocessing"
         elif field_name.startswith("rule_metadata_"):
-            return "元数据提取规则配置"
+            return "rules.metadata"
+        elif field_name.startswith(("app_", "host", "port", "debug")):
+            return "app"
         else:
-            return "其他配置"
+            return "other"
 
     def _is_hot_reloadable(self, field_name: str) -> bool:
         hot_reload_prefixes = (
@@ -268,7 +271,9 @@ def reload_settings() -> Settings:
                 changed_fields = compare_config_changes(old_settings, new_settings)
                 if changed_fields:
                     logger.info(f"配置变更字段: {list(changed_fields.keys())}")
-                    # TODO: 集成事件总线，派发ConfigChangedEvent
+                    # 通过公共方法同步更新 ConfigManager 缓存
+            from .core.manager import config_manager
+            config_manager.sync_cache_from_settings(new_settings)
                     
             return new_settings
         except Exception as e:
@@ -341,12 +346,28 @@ def init_embedding_model():
 # 自动初始化嵌入模型
 init_embedding_model()
 
+# 业务规则（独立单例）
+from .rules.rules import rules
+
+# 配置基础设施（按需导入）
+from .core.manager import ConfigManager, config_manager
+from .core.repository import ConfigRepository, JsonConfigRepository
+from .core.events import ConfigChangedEvent, ConfigRollbackEvent, ConfigResetEvent
+
 
 __all__ = [
-    "Settings",
     "settings",
+    "rules",
+    "Settings",
     "get_settings",
     "reload_settings",
     "start_config_watcher",
     "ConfigFieldMetadata",
+    "config_manager",
+    "ConfigManager",
+    "ConfigRepository",
+    "JsonConfigRepository",
+    "ConfigChangedEvent",
+    "ConfigRollbackEvent",
+    "ConfigResetEvent",
 ]
