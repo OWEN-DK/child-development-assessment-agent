@@ -6,6 +6,8 @@ import os
 import asyncio
 from pathlib import Path
 
+from src.config import settings
+
 
 class ConfigRepository(ABC):
 
@@ -36,7 +38,9 @@ class ConfigRepository(ABC):
 
 class JsonConfigRepository(ConfigRepository):
 
-    def __init__(self, base_dir: str = "./data/configs"):
+    def __init__(self, base_dir: Optional[str] = None):
+        if base_dir is None:
+            base_dir = f"{settings.data_dir}/configs"
         self.base_dir = Path(base_dir)
         self.versions_dir = self.base_dir / "versions"
         self.active_version_file = self.base_dir / "active_version.json"

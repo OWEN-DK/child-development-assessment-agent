@@ -10,7 +10,6 @@ class RagPipelineSettings(BaseSettings):
     # 解析并发
     rag_vl_max_workers: int = Field(default=2, validation_alias="RAG_VL_MAX_WORKERS", description="VL 解析器最大并发线程数")
     rag_upload_max_concurrent_tasks: int = Field(default=5, validation_alias="RAG_UPLOAD_MAX_CONCURRENT_TASKS", description="文档上传最大并发任务数")
-    rag_temp_upload_dir: str = Field(default="./temp_uploads", validation_alias="RAG_TEMP_UPLOAD_DIR", description="临时上传文件存储目录")
 
     # 元数据提取
     rag_metadata_extraction_concurrency: int = Field(default=20, validation_alias="RAG_METADATA_EXTRACTION_CONCURRENCY", description="元数据提取最大并发数")

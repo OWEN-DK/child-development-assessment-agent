@@ -274,7 +274,7 @@ async def get_rag_status():
 
     return {
         "index_ready": index_ready,
-        "storage_dir": os.path.abspath("./storage"),
+        "storage_dir": os.path.abspath(settings.rag_storage_dir),
         "document_count": len(document_manager.list_documents()),
     }
 

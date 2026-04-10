@@ -10,7 +10,7 @@ class VectorStoreSettings(BaseSettings):
     )
     vector_store_config: dict = Field(
         default_factory=lambda: {
-            "persist_dir": "./storage/vector_store",
+            "persist_dir": "../.cache/storage/vector_store",
             "collection_name": "child_development"
         },
         validation_alias="VECTOR_STORE_CONFIG",

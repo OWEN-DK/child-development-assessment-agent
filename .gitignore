@@ -46,9 +46,11 @@ build/
 !**/__pycache__
 
 requirement-planner/.gitignore
-.venv/Scripts/python.exe
-.venv/Scripts/pythonw.exe
-.venv/pyvenv.cfg
+# Python virtual environment
+.venv/
+venv/
+ENV/
+env/
 requirement-planner/poetry.lock
 
 temp_uploads/
@@ -64,6 +66,7 @@ build/
 __pycache__/
 *.py[cod]
 *$py.class
+.ruff_cache/
 
 # Node.js
 node_modules/
@@ -99,6 +102,7 @@ logs/
 
 # Storage
 storage/
+/.cache/
 
 # Chroma DB
 chroma/

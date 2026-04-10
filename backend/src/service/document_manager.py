@@ -6,8 +6,9 @@ from datetime import datetime
 
 from src.model.document import DocumentStore, DocumentRecord
 from src.utils.logger import logger
+from src.config import settings
 
-DOCUMENT_STORE_PATH = "./storage/document_store.json"
+DOCUMENT_STORE_PATH = f"{settings.rag_storage_dir}/document_store.json"
 
 
 class DocumentManager:

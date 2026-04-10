@@ -39,13 +39,13 @@ from llama_index.llms.dashscope import DashScope
 import asyncio
 
 STORAGE_DIR = settings.rag_storage_dir
-TEST_CASE_STORE_PATH = "./storage/test_cases.json"
-TEST_RUNS_DIR = "./storage/test_runs"
-SNAPSHOTS_DIR = "./storage/snapshots"
-SOURCE_DOCUMENTS_DIR = "./storage/source_documents"
-TEST_CASE_DRAFTS_DIR = "./storage/test_case_drafts"
-TEST_SETS_DIR = "./storage/test_sets"
-TEST_CASES_HISTORY_DIR = "./storage/test_cases_history"
+TEST_CASE_STORE_PATH = f"{settings.rag_storage_dir}/test_cases.json"
+TEST_RUNS_DIR = f"{settings.rag_storage_dir}/test_runs"
+SNAPSHOTS_DIR = f"{settings.rag_storage_dir}/snapshots"
+SOURCE_DOCUMENTS_DIR = f"{settings.rag_storage_dir}/source_documents"
+TEST_CASE_DRAFTS_DIR = f"{settings.rag_storage_dir}/test_case_drafts"
+TEST_SETS_DIR = f"{settings.rag_storage_dir}/test_sets"
+TEST_CASES_HISTORY_DIR = f"{settings.rag_storage_dir}/test_cases_history"
 
 # JSON导入Schema
 TEST_CASE_IMPORT_SCHEMA = {
@@ -1065,10 +1065,11 @@ class RagTestManager:
             logger.info(f"Draft {draft_id} reviewed and imported as test case {test_case.id}")
         elif action == "rejected":
             # 拒绝后自动删除草稿
+            deleted_draft = draft.model_copy()
             del self.test_case_draft_store.drafts[draft_id]
             self._save_drafts()
             logger.info(f"Draft {draft_id} rejected and deleted")
-            return None
+            return deleted_draft
         else:
             raise ValueError(f"无效的审核操作: {action}")
 

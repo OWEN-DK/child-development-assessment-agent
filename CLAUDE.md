@@ -87,9 +87,9 @@ graph TB
     end
     
     subgraph 数据层
-        Chroma[(Chroma 向量库)]
-        ConfigDB[(配置存储)]
-        Files[(文件存储)]
+        Chroma[(Chroma 向量库<br/>存储位置: /.cache/storage/vector_store)]
+        ConfigDB[(配置存储<br/>存储位置: /.cache/data/configs)]
+        Files[(文件存储<br/>存储位置: /.cache/storage)]
         Logs[(日志系统)]
     end
     
