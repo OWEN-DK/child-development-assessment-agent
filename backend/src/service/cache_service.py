@@ -2,6 +2,8 @@ import hashlib
 import json
 import time
 import asyncio
+import os
+from pathlib import Path
 from typing import Any, Optional, List, Set
 from collections import defaultdict
 from functools import wraps
@@ -56,7 +58,7 @@ except ImportError:
 
 
 class CacheService(ICacheService):
-    """生产级统一缓存服务，支持多级缓存、细粒度失效、穿透/击穿/雪崩防护"""
+    """生产级统一缓存服务，支持多级缓存、细粒度失效、穿透/击穿/雪崩防护、磁盘持久化"""
     
     def __init__(self):
         self.enabled = settings.rag_config["cache"]["enabled"]
@@ -64,6 +66,10 @@ class CacheService(ICacheService):
         self.memory_cache = LRU(maxsize=settings.rag_config["cache"]["max_size"] or 10000)
         # Redis缓存（分布式全量数据）
         self.redis_client = self._init_redis_client()
+        # 磁盘持久化
+        self.disk_cache_enabled = getattr(settings, 'rag_cache_disk_enabled', True)
+        self.disk_cache_dir = self._init_disk_cache_dir()
+        self.disk_cache = self._load_disk_cache()
         # 布隆过滤器（防穿透），这里使用空结果缓存作为主要防穿透手段
         self.bloom_filter = None
         # 互斥锁（防击穿）
@@ -74,6 +80,123 @@ class CacheService(ICacheService):
         self.tag_map = defaultdict(set)
         # 默认TTL
         self.default_ttl = settings.rag_config["cache"]["ttl_seconds"]
+        # 磁盘持久化间隔（秒）
+        self.disk_persist_interval = getattr(settings, 'rag_cache_disk_persist_interval', 300)
+        self._persist_task = None
+        self._start_auto_persist()
+    
+    def _init_disk_cache_dir(self) -> Optional[str]:
+        """初始化磁盘缓存目录"""
+        if not self.disk_cache_enabled:
+            return None
+        
+        # 优先使用配置的路径
+        cache_dir = getattr(settings, 'rag_cache_disk_dir', None)
+        if not cache_dir:
+            # 使用 app_data 目录
+            base_dir = Path(__file__).parent.parent.parent.parent.parent
+            cache_dir = str(base_dir / "app_data" / "cache")
+        
+        cache_path = Path(cache_dir)
+        try:
+            cache_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"磁盘缓存目录已创建: {cache_dir}")
+            return cache_dir
+        except Exception as e:
+            logger.error(f"创建磁盘缓存目录失败: {e}")
+            return None
+    
+    def _load_disk_cache(self) -> dict:
+        """从磁盘加载缓存数据"""
+        if not self.disk_cache_enabled or not self.disk_cache_dir:
+            return {}
+        
+        cache_file = Path(self.disk_cache_dir) / "cache.json"
+        if not cache_file.exists():
+            logger.info("磁盘缓存文件不存在，将创建新缓存")
+            return {}
+        
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 过滤过期缓存
+            current_time = time.time()
+            valid_cache = {}
+            expired_count = 0
+            
+            for key, item in data.items():
+                if current_time < item.get('expire_at', 0):
+                    valid_cache[key] = item['value']
+                else:
+                    expired_count += 1
+            
+            logger.info(f"从磁盘加载缓存: {len(valid_cache)} 条有效, {expired_count} 条已过期")
+            return valid_cache
+        except Exception as e:
+            logger.warning(f"加载磁盘缓存失败: {e}")
+            return {}
+    
+    def _persist_cache_to_disk(self):
+        """将内存缓存持久化到磁盘"""
+        if not self.disk_cache_enabled or not self.disk_cache_dir:
+            return
+        
+        cache_file = Path(self.disk_cache_dir) / "cache.json"
+        temp_file = cache_file.with_suffix('.tmp')
+        
+        try:
+            # 构建持久化数据
+            persist_data = {}
+            current_time = time.time()
+            
+            # 从内存缓存中提取
+            memory_cache = getattr(self.memory_cache, 'cache', self.memory_cache)
+            timestamps = getattr(self.memory_cache, 'timestamps', {})
+            
+            for key, value in memory_cache.items():
+                expire_at = current_time + self.default_ttl
+                if key in timestamps:
+                    expire_at = timestamps[key] + self.default_ttl
+                
+                persist_data[key] = {
+                    'value': value,
+                    'expire_at': expire_at,
+                    'updated_at': current_time
+                }
+            
+            # 原子写入：先写临时文件，再重命名
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(persist_data, f, ensure_ascii=False, indent=2)
+            
+            temp_file.replace(cache_file)
+            logger.debug(f"缓存已持久化到磁盘: {len(persist_data)} 条")
+        except Exception as e:
+            logger.error(f"持久化缓存到磁盘失败: {e}")
+            # 清理临时文件
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except:
+                    pass
+    
+    def _start_auto_persist(self):
+        """启动自动持久化后台线程"""
+        if not self.disk_cache_enabled or not self.disk_cache_dir:
+            return
+        
+        def persist_loop():
+            while True:
+                time.sleep(self.disk_persist_interval)
+                try:
+                    self._persist_cache_to_disk()
+                except Exception as e:
+                    logger.error(f"自动持久化缓存异常: {e}")
+        
+        import threading
+        thread = threading.Thread(target=persist_loop, daemon=True, name="cache-persist")
+        thread.start()
+        logger.info(f"缓存自动持久化已启动，间隔: {self.disk_persist_interval}秒")
     
     def _init_redis_client(self):
         """初始化Redis客户端连接池（暂时注释不引入）"""
@@ -102,7 +225,7 @@ class CacheService(ICacheService):
         return f"rag:cache:{key_prefix}:{key_hash}"
     
     async def get(self, key: str, default: Any = None) -> Any:
-        """获取缓存，优先内存，再Redis"""
+        """获取缓存，优先内存，再磁盘，最后Redis"""
         if not self.enabled:
             return default
             
@@ -111,7 +234,15 @@ class CacheService(ICacheService):
             logger.debug(f"Cache hit (memory): {key}")
             return self.memory_cache[key]
         
-        # 再查Redis
+        # 再查磁盘缓存
+        if self.disk_cache_enabled and key in self.disk_cache:
+            value = self.disk_cache[key]
+            # 回写到内存
+            self.memory_cache[key] = value
+            logger.debug(f"Cache hit (disk): {key}")
+            return value
+        
+        # 最后查Redis
         if self.redis_client:
             try:
                 redis_value = await self.redis_client.get(key)
@@ -148,6 +279,10 @@ class CacheService(ICacheService):
             self.memory_cache[key] = value
         else:
             self.memory_cache.set(key, value, expire=expire)
+        
+        # 写入磁盘缓存
+        if self.disk_cache_enabled:
+            self.disk_cache[key] = value
         
         # 写入Redis
         if self.redis_client:
@@ -285,6 +420,12 @@ class CacheService(ICacheService):
         self.doc_hash_map.clear()
         self.tag_map.clear()
         self.locks.clear()
+        
+        # 清空磁盘缓存
+        if self.disk_cache_enabled:
+            self.disk_cache.clear()
+            self._persist_cache_to_disk()
+        
         logger.info("All cache cleared")
     
     def get_cache_stats(self) -> dict:
@@ -292,6 +433,9 @@ class CacheService(ICacheService):
         return {
             "enabled": self.enabled,
             "memory_cache_size": len(getattr(self.memory_cache, 'cache', self.memory_cache)),
+            "disk_cache_size": len(self.disk_cache) if self.disk_cache_enabled else 0,
+            "disk_cache_enabled": self.disk_cache_enabled,
+            "disk_cache_dir": self.disk_cache_dir,
             "max_size": settings.rag_config["cache"]["max_size"],
             "default_ttl": self.default_ttl,
             "redis_enabled": self.redis_client is not None,

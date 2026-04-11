@@ -16,6 +16,9 @@ class RagCoreSettings(BaseSettings):
     rag_cache_enabled: bool = Field(default=True, validation_alias="RAG_CACHE_ENABLED", description="是否启用缓存")
     rag_cache_max_size: int = Field(default=1000, validation_alias="RAG_CACHE_MAX_SIZE", description="缓存最大条目数")
     rag_cache_ttl_seconds: int = Field(default=3600, validation_alias="RAG_CACHE_TTL_SECONDS", description="缓存过期时间（秒）")
+    rag_cache_disk_enabled: bool = Field(default=True, validation_alias="RAG_CACHE_DISK_ENABLED", description="是否启用磁盘缓存持久化")
+    rag_cache_disk_dir: str = Field(default="", validation_alias="RAG_CACHE_DISK_DIR", description="磁盘缓存目录路径，为空时使用 app_data/cache")
+    rag_cache_disk_persist_interval: int = Field(default=300, validation_alias="RAG_CACHE_DISK_PERSIST_INTERVAL", description="磁盘缓存持久化间隔（秒）")
 
     # 监控配置
     rag_monitoring_enabled: bool = Field(default=True, validation_alias="RAG_MONITORING_ENABLED", description="是否启用监控")

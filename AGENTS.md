@@ -78,9 +78,9 @@ graph TB
     end
     
     subgraph 数据层 Data
-        Chroma[(Chroma 向量库<br/>本地持久化<br/>存储位置: /.cache/storage/vector_store)]
-        ConfigStore[(配置存储<br/>JSON 文件<br/>存储位置: /.cache/data/configs)]
-        Files[(文件存储<br/>PDF/EPUB<br/>存储位置: /.cache/storage)]
+        Chroma[(Chroma 向量库<br/>本地持久化<br/>存储位置: /app_data/storage/vector_store)]
+        ConfigStore[(配置存储<br/>JSON 文件<br/>存储位置: /app_data/data/configs)]
+        Files[(文件存储<br/>PDF/EPUB<br/>存储位置: /app_data/storage)]
         Logs[(Loguru 日志系统)]
     end
     
