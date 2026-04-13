@@ -4,6 +4,8 @@ import { HomePage } from '../features/assessment';
 import { KnowledgeBasePage } from '../features/documents';
 import { RagEvaluationPage } from '../features/rag-evaluation';
 import { KnowledgeSearchPage } from '../features/knowledge';
+import { PromptManagementPage } from '../features/prompts';
+import { LLMMonitoringDashboard } from '../features/monitoring';
 import BookChunksPage from '../pages/BookChunksPage';
 import { SystemConfigPage } from '../pages/SystemConfigPage';
 
@@ -35,6 +37,14 @@ export const router = createBrowserRouter([
       {
         path: 'system-config',
         element: <SystemConfigPage />,
+      },
+      {
+        path: 'prompt-management',
+        element: <PromptManagementPage />,
+      },
+      {
+        path: 'monitoring',
+        element: <LLMMonitoringDashboard />,
       },
     ],
   },

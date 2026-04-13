@@ -41,6 +41,15 @@ dependencies = [
     "filelock>=3.13.1",
     "jsonschema>=4.21.0",
     "json-repair>=0.58.7",
+    "sqlalchemy>=2.0.29",
+    "alembic>=1.13.1",
+    "aiomysql>=0.2.0",
+    "pymysql>=1.1.0",
+    "redis>=5.0.3",
+    "hiredis>=2.3.2",
+    "cachetools>=5.3.0",
+    "pybloom-live>=4.0.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [project.scripts]

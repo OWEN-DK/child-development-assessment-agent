@@ -1,157 +1,175 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
-from src.config import settings, ConfigFieldMetadata, config_manager, rules
+from pydantic_core import PydanticUndefined
+from typing import Any, Optional
+from src.config import config_manager, settings
+from src.core.auth import get_current_user
 from src.utils.logger import logger
+
+
+def _sanitize_for_json(value: Any) -> Any:
+    """将 PydanticUndefined 等不可序列化类型转换为 None"""
+    if value is PydanticUndefined:
+        return None
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_json(item) for item in value]
+    return value
+
 
 router = APIRouter(prefix="/api/v1/config", tags=["Configuration"])
 
 
-class ConfigUpdateRequest(BaseModel):
-    config: Dict[str, Any]
-    description: str = ""
-    created_by: str = "user"
+class ConfigSaveRequest(BaseModel):
+    """配置保存请求"""
+
+    config_snapshot: dict[str, Any]
+    description: str
+
+
+class ConfigRollbackRequest(BaseModel):
+    """配置回滚请求"""
+
+    version_id: str
 
 
 class ConfigVersionResponse(BaseModel):
-    version_id: str
+    """配置版本响应"""
+
+    id: str
     created_at: str
-    created_by: str
-    description: str
-    is_active: bool
-    parent_version_id: Optional[str] = None
+    created_by: Optional[str]
+    description: Optional[str]
+    parent_version_id: Optional[str]
+    is_factory_reset: bool
 
 
-@router.get("/")
-async def get_config():
-    current_config = config_manager.get_full_config()
-    metadata = settings.get_all_config_metadata()
-    
-    # Add rule config metadata
-    rule_configs = [
-        ("validation", rules.validation),
-        ("assessment", rules.assessment),
-        ("scoring", rules.scoring),
-        ("preprocessing", rules.preprocessing),
-        ("metadata", rules.metadata),
-    ]
-    
-    for rule_name, rule_instance in rule_configs:
-        for field_name, field_info in rule_instance.model_fields.items():
-            full_field_name = f"rule_{rule_name}_{field_name}"
-            
-            # Infer category
-            if full_field_name.startswith("rule_validation_"):
-                category = "rules.validation"
-            elif full_field_name.startswith("rule_assessment_"):
-                category = "rules.assessment"
-            elif full_field_name.startswith("rule_scoring_"):
-                category = "rules.scoring"
-            elif full_field_name.startswith("rule_preprocessing_"):
-                category = "rules.preprocessing"
-            elif full_field_name.startswith("rule_metadata_"):
-                category = "rules.metadata"
-            else:
-                category = "other"
-            
-            annotation = field_info.annotation
-            type_name = annotation.__name__ if hasattr(annotation, '__name__') else str(annotation)
-            current_value = current_config.get(full_field_name, getattr(rule_instance, field_name))
-            
-            metadata[full_field_name] = ConfigFieldMetadata(
-                key=full_field_name,
-                category=category,
-                description=field_info.description or "",
-                hot_reloadable=True,
-                requires_restart=False,
-                affected_components=["规则引擎"],
-                field_type=type_name,
-                default_value=getattr(rule_instance, field_name)
+# 初始化加载配置
+@router.on_event("startup")
+async def startup_load_config():
+    await config_manager.load_latest_version()
+
+
+@router.get("/current", response_model=dict[str, Any])
+async def get_current_config():
+    """获取当前配置及其元数据"""
+    try:
+        # Fallback: load config if not already loaded
+        if config_manager.current_config is None:
+            await config_manager.load_latest_version()
+
+        current_config = config_manager.current_config
+        metadata = settings.get_all_config_metadata()
+
+        # Transform metadata to match frontend expectations
+        config_fields = []
+        for field_name, field_meta in metadata.items():
+            default_val = _sanitize_for_json(field_meta.default_value)
+            current_val = _sanitize_for_json(
+                current_config.get(field_name, field_meta.default_value)
+            )
+            config_fields.append(
+                {
+                    "key": field_meta.key,
+                    "type": field_meta.field_type,
+                    "default_value": default_val,
+                    "current_value": current_val,
+                    "description": field_meta.description,
+                    "category": field_meta.category,
+                    "hot_reloadable": field_meta.hot_reloadable,
+                    "requires_restart": field_meta.requires_restart,
+                    "affected_components": field_meta.affected_components,
+                }
             )
 
-    result = []
-    for key, meta in metadata.items():
-        result.append({
-            "key": key,
-            "type": meta.field_type,
-            "default_value": meta.default_value,
-            "current_value": current_config.get(key, meta.default_value),
-            "description": meta.description,
-            "category": meta.category,
-            "hot_reloadable": meta.hot_reloadable,
-            "requires_restart": meta.requires_restart,
-            "affected_components": meta.affected_components
-        })
-
-    return {
-        "active_version": config_manager.get_active_version(),
-        "config": result
-    }
-
-
-@router.put("/")
-async def update_config(request: ConfigUpdateRequest):
-    try:
-        result = await config_manager.update_config(
-            config_updates=request.config,
-            description=request.description,
-            created_by=request.created_by
-        )
         return {
-            "status": "success",
-            "version_id": result["version_id"],
-            "previous_version": result["previous_version"],
-            "changed_keys": result["changed_keys"]
+            "active_version": config_manager.current_version_id,
+            "config": config_fields,
         }
-    except Exception as e:
-        logger.error(f"Failed to update config: {e}")
+    except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/versions")
-async def list_versions(limit: int = 50):
-    versions = config_manager.list_versions(limit=limit)
-    active_version = config_manager.get_active_version()
-
+@router.get("/versions", response_model=list[ConfigVersionResponse])
+async def list_config_versions(limit: int = 50):
+    """列出配置版本"""
+    versions = await config_manager.list_versions(limit)
     return [
-        {
-            "version_id": v["version_id"],
-            "created_at": v["created_at"],
-            "created_by": v.get("created_by", "system"),
-            "description": v.get("description", ""),
-            "is_active": v["version_id"] == active_version,
-            "parent_version_id": v.get("parent_version_id"),
-            "is_factory_reset": v.get("is_factory_reset", False)
-        }
+        ConfigVersionResponse(
+            id=v["id"],
+            created_at=v["created_at"].isoformat()
+            if hasattr(v["created_at"], "isoformat")
+            else str(v["created_at"]),
+            created_by=v.get("created_by"),
+            description=v.get("description"),
+            parent_version_id=v.get("parent_version_id"),
+            is_factory_reset=v.get("is_factory_reset", False),
+        )
         for v in versions
     ]
 
 
-@router.post("/rollback/{version_id}")
-async def rollback_to_version(version_id: str):
+@router.get("/versions/{version_id}", response_model=dict[str, Any])
+async def get_config_version(version_id: str):
+    """获取指定版本配置"""
+    version = await config_manager.get_version(version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail=f"配置版本不存在: {version_id}")
+    return version["config_snapshot"]
+
+
+@router.post("/save", response_model=ConfigVersionResponse)
+async def save_new_config(
+    request: ConfigSaveRequest, current_user=Depends(get_current_user)
+):
+    """保存新配置版本"""
     try:
-        result = await config_manager.rollback_to_version(version_id)
-        return {
-            "status": "success",
-            "version_id": result["version_id"],
-            "previous_version": result["previous_version"]
-        }
+        created_by = current_user.username if current_user else "system"
+        new_version = await config_manager.save_new_version(
+            config_snapshot=request.config_snapshot,
+            description=request.description,
+            created_by=created_by,
+        )
+        return ConfigVersionResponse(
+            id=new_version.id,
+            created_at=new_version.created_at.isoformat(),
+            created_by=new_version.created_by,
+            description=new_version.description,
+            parent_version_id=new_version.parent_version_id,
+            is_factory_reset=new_version.is_factory_reset,
+        )
+    except Exception as e:
+        logger.error(f"保存配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存配置失败: {str(e)}")
+
+
+@router.post("/rollback", response_model=ConfigVersionResponse)
+async def rollback_config(
+    request: ConfigRollbackRequest, current_user=Depends(get_current_user)
+):
+    """回滚到指定配置版本"""
+    try:
+        created_by = current_user.username if current_user else "system"
+        rollback_version = await config_manager.rollback_to_version(
+            version_id=request.version_id, created_by=created_by
+        )
+        return ConfigVersionResponse(
+            id=rollback_version.id,
+            created_at=rollback_version.created_at.isoformat(),
+            created_by=rollback_version.created_by,
+            description=rollback_version.description,
+            parent_version_id=rollback_version.parent_version_id,
+            is_factory_reset=rollback_version.is_factory_reset,
+        )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Failed to rollback config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"回滚配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"回滚配置失败: {str(e)}")
 
 
-@router.post("/reset")
-async def reset_to_factory():
-    try:
-        result = await config_manager.reset_to_factory()
-        return {
-            "status": "success",
-            "version_id": result["version_id"],
-            "message": "已恢复到出厂设置"
-        }
-    except Exception as e:
-        logger.error(f"Failed to reset config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/schema", response_model=dict[str, Any])
+async def get_config_schema():
+    """获取配置JSON Schema，用于前端动态渲染表单"""
+    return settings.model_json_schema()

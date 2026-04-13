@@ -1,12 +1,13 @@
 from typing import Dict, Any, List, Optional
 import json
-from llama_index.llms.dashscope import DashScope
 from src.config import settings
 from src.config.rules import rules
 from src.model.schemas import AgentState, ChildState, DevelopmentStatus
 from src.core.nodes.base import BaseNode
 from src.core.prompts import ASSESSMENT_SYSTEM_PROMPT
 from src.utils.logger import logger
+from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.base import LLMRequest, LLMMessage
 
 
 class AssessmentNode(BaseNode):
@@ -51,12 +52,35 @@ class AssessmentNode(BaseNode):
         # 4. 调用 LLM (评估使用qwen-plus模型，专业推理能力)
         if settings.dashscope_api_key:
             try:
-                llm = DashScope(
-                    model=settings.llm_models["assessment"],
-                    api_key=settings.dashscope_api_key,
+                # 使用工厂创建 LLM 实例
+                llm = LLMServiceFactory.create(
+                    framework=LLMFramework.LLAMAINDEX,
+                    model_name=settings.llm_models["assessment"],
+                    scenario="assessment",
+                    temperature=0.5,
                 )
-                response = await llm.acomplete(prompt)
-                response_text = response.text.strip()
+
+                # 构建提示词
+                messages = [
+                    LLMMessage(
+                        role="system",
+                        content="你是一个专业的儿童发展评估专家，根据提供的儿童信息和发展里程碑生成结构化的评估结果。",
+                    ),
+                    LLMMessage(role="user", content=prompt),
+                ]
+
+                # 调用 LLM
+                response = await llm.chat(
+                    LLMRequest(
+                        messages=messages,
+                        model_name=settings.llm_models["assessment"],
+                        temperature=0.5,
+                        max_tokens=1024,
+                        scenario="assessment",
+                        prompt_key="assessment",
+                    )
+                )
+                response_text = response.content.strip()
                 logger.debug(f"LLM Assessment Raw Response: {response_text}")
 
                 # 清理可能的 Markdown 标记

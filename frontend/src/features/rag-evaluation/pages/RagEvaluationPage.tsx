@@ -74,6 +74,10 @@ export const RagEvaluationPage: React.FC = () => {
     loadTestCases,
     loadTestRuns,
     runAllTests,
+    deleteTestCase,
+    batchDeleteTestCases,
+    deleteDraft,
+    batchDeleteDrafts,
     drafts,
     loadDrafts,
   } = useRagEvaluation();
@@ -277,15 +281,26 @@ export const RagEvaluationPage: React.FC = () => {
                       message.error('测试运行失败');
                     }
                   }}
-                  onDelete={async (_caseId: string) => {
+                  onDelete={async (caseId: string) => {
                     try {
                       message.loading('正在删除...', 0);
-                      await loadTestCases();
+                      await deleteTestCase(caseId);
                       message.destroy();
                       message.success('删除成功');
                     } catch (err) {
                       message.destroy();
                       message.error('删除失败');
+                    }
+                  }}
+                  onBatchDelete={async (caseIds: string[]) => {
+                    try {
+                      message.loading('正在批量删除...', 0);
+                      const result = await batchDeleteTestCases(caseIds);
+                      message.destroy();
+                      message.success(result.message);
+                    } catch (err) {
+                      message.destroy();
+                      message.error('批量删除失败');
                     }
                   }}
                 />
@@ -324,6 +339,28 @@ export const RagEvaluationPage: React.FC = () => {
                   drafts={drafts}
                   loading={loading}
                   onRefresh={loadDrafts}
+                  onDelete={async (draftId: string) => {
+                    try {
+                      message.loading('正在删除...', 0);
+                      await deleteDraft(draftId);
+                      message.destroy();
+                      message.success('删除成功');
+                    } catch (err) {
+                      message.destroy();
+                      message.error('删除失败');
+                    }
+                  }}
+                  onBatchDelete={async (draftIds: string[]) => {
+                    try {
+                      message.loading('正在批量删除...', 0);
+                      const result = await batchDeleteDrafts(draftIds);
+                      message.destroy();
+                      message.success(result.message);
+                    } catch (err) {
+                      message.destroy();
+                      message.error('批量删除失败');
+                    }
+                  }}
                 />
               ),
             },

@@ -1,11 +1,12 @@
 from typing import Dict, Any, List
-from llama_index.llms.dashscope import DashScope
 from src.config import settings
 from src.model.schemas import AgentState, Activity
 from src.config.rules import rules
 from src.core.nodes.base import BaseNode
 from src.core.prompts import INTENSITY_INFERENCE_PROMPT, CATEGORY_INFERENCE_PROMPT
 from src.utils.logger import logger
+from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.base import LLMRequest, LLMMessage
 
 
 class ValidationNode(BaseNode):
@@ -42,15 +43,40 @@ class ValidationNode(BaseNode):
                 # If no match, use LLM
                 if not matched and settings.dashscope_api_key:
                     try:
-                        llm = DashScope(
-                            model=settings.llm_models["validation"],
-                            api_key=settings.dashscope_api_key,
+                        # 使用工厂创建 LLM 实例
+                        llm = LLMServiceFactory.create(
+                            framework=LLMFramework.LLAMAINDEX,
+                            model_name=settings.llm_models["validation"],
+                            scenario="validation",
+                            temperature=0.3,
                         )
-                        prompt = INTENSITY_INFERENCE_PROMPT.format(
-                            age=child_profile.age, activity_name=activity.name
+
+                        # 构建提示词
+                        messages = [
+                            LLMMessage(
+                                role="system",
+                                content="你是一个儿童运动活动分类专家，根据活动名称和儿童年龄推断活动的强度级别（low/medium/high），直接返回结果即可，不需要额外解释。",
+                            ),
+                            LLMMessage(
+                                role="user",
+                                content=INTENSITY_INFERENCE_PROMPT.format(
+                                    age=child_profile.age, activity_name=activity.name
+                                ),
+                            ),
+                        ]
+
+                        # 调用 LLM
+                        response = await llm.chat(
+                            LLMRequest(
+                                messages=messages,
+                                model_name=settings.llm_models["validation"],
+                                temperature=0.3,
+                                max_tokens=512,
+                                scenario="validation",
+                                prompt_key="intensity_inference",
+                            )
                         )
-                        response = await llm.acomplete(prompt)
-                        llm_intensity = response.text.strip().lower()
+                        llm_intensity = response.content.strip().lower()
                         if llm_intensity in ["low", "medium", "high"]:
                             inferred_intensity = llm_intensity
                             logger.info(
@@ -81,15 +107,40 @@ class ValidationNode(BaseNode):
                 # If no match, use LLM
                 if not matched and settings.dashscope_api_key:
                     try:
-                        llm = DashScope(
-                            model=settings.llm_models["validation"],
-                            api_key=settings.dashscope_api_key,
+                        # 使用工厂创建 LLM 实例
+                        llm = LLMServiceFactory.create(
+                            framework=LLMFramework.LLAMAINDEX,
+                            model_name=settings.llm_models["validation"],
+                            scenario="validation",
+                            temperature=0.3,
                         )
-                        prompt = CATEGORY_INFERENCE_PROMPT.format(
-                            age=child_profile.age, activity_name=activity.name
+
+                        # 构建提示词
+                        messages = [
+                            LLMMessage(
+                                role="system",
+                                content="你是一个儿童运动活动分类专家，根据活动名称和儿童年龄推断活动的类别（vestibular/proprioception/tactile/fine_motor/gross_motor/cardio/other），直接返回结果即可，不需要额外解释。",
+                            ),
+                            LLMMessage(
+                                role="user",
+                                content=CATEGORY_INFERENCE_PROMPT.format(
+                                    age=child_profile.age, activity_name=activity.name
+                                ),
+                            ),
+                        ]
+
+                        # 调用 LLM
+                        response = await llm.chat(
+                            LLMRequest(
+                                messages=messages,
+                                model_name=settings.llm_models["validation"],
+                                temperature=0.3,
+                                max_tokens=512,
+                                scenario="validation",
+                                prompt_key="category_inference",
+                            )
                         )
-                        response = await llm.acomplete(prompt)
-                        llm_category = response.text.strip().lower()
+                        llm_category = response.content.strip().lower()
                         # Simple validation
                         if llm_category in [
                             "vestibular",

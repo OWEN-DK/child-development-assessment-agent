@@ -11,11 +11,12 @@ export interface ConfigFieldMetadata {
 }
 
 export interface ConfigVersion {
-  version_id: string;
+  id: string;
+  version_id?: string; // For backward compatibility
   created_at: string;
   created_by: string;
   description: string;
-  is_active: boolean;
+  is_active?: boolean;
   parent_version_id: string | null;
   is_factory_reset: boolean;
 }

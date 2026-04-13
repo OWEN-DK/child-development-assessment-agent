@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List, Button, Space, Typography, App } from 'antd';
+import { Card, Button, Space, Typography, App, Flex, Spin, Empty } from 'antd';
 import { DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { DocumentRecord } from '../../api/documents/types';
 import { deleteDocument } from '../../api/documents';
@@ -42,46 +42,53 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     doc => !excludeFilenames.has(doc.file_name)
   );
 
+  if (loading) {
+    return <div style={{ padding: '40px 0', textAlign: 'center' }}><Spin size="large" /></div>;
+  }
+
+  if (filteredDocuments.length === 0) {
+    return <Empty description="暂无上传的文档" />;
+  }
+
   return (
-    <List
-      loading={loading}
-      dataSource={filteredDocuments}
-      renderItem={(doc) => (
-        <List.Item
-          actions={[
-            <Button
-              type="link"
-              icon={<FileTextOutlined />}
-              onClick={() => navigate(`/book-chunks/${doc.file_hash}/${encodeURIComponent(doc.file_name)}`)}
-            >
-              查看分块
-            </Button>,
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(doc)}
-            >
-              删除
-            </Button>,
-          ]}
+    <Flex vertical gap={16}>
+      {filteredDocuments.map((doc) => (
+        <Card
+          key={doc.file_hash}
+          styles={{ body: { padding: '16px 24px' } }}
         >
-          <List.Item.Meta
-            title={doc.file_name}
-            description={
+          <Flex justify="space-between" align="center">
+            <div>
+              <Typography.Title level={5} style={{ margin: 0, marginBottom: 8 }}>
+                {doc.file_name}
+              </Typography.Title>
               <Space>
                 <Typography.Text type="secondary">共 {doc.total_pages} 页</Typography.Text>
                 <Typography.Text type="secondary">
                   上传时间: {formatDateTime(doc.uploaded_at)}
                 </Typography.Text>
               </Space>
-            }
-          />
-        </List.Item>
-      )}
-      locale={{
-        emptyText: '暂无上传的文档',
-      }}
-    />
+            </div>
+            <Space>
+              <Button
+                type="link"
+                icon={<FileTextOutlined />}
+                onClick={() => navigate(`/book-chunks/${doc.file_hash}/${encodeURIComponent(doc.file_name)}`)}
+              >
+                查看分块
+              </Button>
+              <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(doc)}
+              >
+                删除
+              </Button>
+            </Space>
+          </Flex>
+        </Card>
+      ))}
+    </Flex>
   );
 };

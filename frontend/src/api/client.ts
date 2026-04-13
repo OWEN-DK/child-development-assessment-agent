@@ -39,3 +39,4 @@ export * from './assessment';
 export * from './documents';
 export * from './knowledge';
 export * from './rag-test';
+export * from './prompts';

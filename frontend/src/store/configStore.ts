@@ -57,7 +57,11 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
   loadVersions: async () => {
     try {
       const versions = await configApi.listVersions();
-      set({ versions: Array.isArray(versions) ? versions : [] });
+      const state = get();
+      set({ 
+        versions: Array.isArray(versions) ? versions : [],
+        activeVersion: state.activeVersion || (versions.length > 0 ? versions[0].id : null)
+      });
     } catch (error) {
       console.error('Failed to load versions:', error);
       set({ versions: [] });

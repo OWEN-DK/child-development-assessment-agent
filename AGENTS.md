@@ -31,13 +31,15 @@
 
 ```mermaid
 graph TB
-    subgraph 前端层 Frontend
+    subgraph 前端展示层 Frontend
         UI[React 19 + TypeScript]
         Assessment[评估功能<br/>AssessmentForm/ReportViewer]
         Documents[知识库管理<br/>DocumentUploader/DocumentList]
         Knowledge[知识搜索<br/>SearchInput/SearchResultList]
-        RAGEval[RAG 评估<br/>TestCaseTable/EvaluationReport]
-        SysConfig[系统配置<br/>DynamicConfigForm/ConfigVersionSelector]
+        RAGEval[RAG 评估与测试<br/>导入/草稿审核/批量执行]
+        SysConfig[系统配置页 /system-config<br/>动态Schema表单]
+        PromptUI[提示词管理页 /prompts<br/>版本管理/A/B配置/变量预览]
+        LLMMonitorUI[LLM监控页 /monitor/llm<br/>调用统计/效果分析/告警]
     end
     
     subgraph API 网关层 API Gateway
@@ -47,6 +49,8 @@ graph TB
         RagCtrl[RagController]
         RagTestCtrl[RagTestController]
         ConfigCtrl[ConfigController]
+        PromptCtrl[PromptController]
+        MonitorCtrl[MonitoringController]
     end
     
     subgraph 业务服务层 Services
@@ -55,9 +59,22 @@ graph TB
         RetrievSvc[RetrievalService<br/>检索服务]
         IndexMgr[IndexManagerService<br/>索引管理服务]
         CacheSvc[CacheService<br/>缓存服务]
-        ConfigMgr[ConfigManager<br/>配置管理器]
+        TestMgr[RagTestManager<br/>并发批量测试/生成/评分]
     end
     
+    subgraph 核心配置与状态层
+        ConfigMgr[ConfigManager 配置管理器<br/>支持热更新与版本控制]
+        PromptMgr[PromptManager 提示词管理器<br/>JSON持久化/A/B分发]
+        EventBus[EventBus 事件总线<br/>配置变更/LLM调用事件广播]
+    end
+
+    subgraph 模型适配与路由层
+        LLMFactory[LLMServiceFactory 工厂<br/>9大独立业务场景模型]
+        LangChainAdapter[LangChain 适配器]
+        LlamaIndexAdapter[LlamaIndex 适配器]
+        PipelineOrch[PipelineOrchestrator<br/>YAML驱动查询流水线编排]
+    end
+
     subgraph Agent 核心层 LangGraph
         Graph[LangGraph 工作流<br/>create_agent_graph]
         PreNode[PreprocessingNode<br/>预处理与上下文压缩]
@@ -68,18 +85,23 @@ graph TB
         ReportNode[ReportingNode<br/>报告生成]
     end
     
-    subgraph 基础设施层 Infrastructure
+    subgraph 监控与基础设施层 Infrastructure
+        LLMMonitor[LLM调用监控器<br/>统计收集/效果分析/告警]
         DI[Injector 依赖注入]
-        EventBus[EventBus 事件总线]
-        Cache[CacheService 缓存]
+        Cache[CacheService 三级缓存<br/>Memory + Redis + Disk]
         Memory[MemoryManager 记忆管理]
         Security[PromptInjectionGuard<br/>ContentAuditService]
         ABTest[ABTestFramework]
+        Repo[Repository 数据访问层<br/>BaseRepository + 专属Repository]
+        DB[SQLAlchemy 数据库<br/>异步连接池]
+        Redis[Redis 客户端<br/>分布式锁/会话/熔断]
+        Bloom[BloomFilter 布隆过滤器]
     end
     
     subgraph 数据层 Data
+        MySQL[(MySQL 8.0<br/>唯一持久化数据源<br/>配置/测试/文档/监控/提示词)]
+        RedisDB[(Redis 7.0<br/>三级缓存/消息队列/锁/会话)]
         Chroma[(Chroma 向量库<br/>本地持久化<br/>存储位置: /app_data/storage/vector_store)]
-        ConfigStore[(配置存储<br/>JSON 文件<br/>存储位置: /app_data/data/configs)]
         Files[(文件存储<br/>PDF/EPUB<br/>存储位置: /app_data/storage)]
         Logs[(Loguru 日志系统)]
     end
@@ -89,31 +111,42 @@ graph TB
     UI --> Knowledge
     UI --> RAGEval
     UI --> SysConfig
+    UI --> PromptUI
+    UI --> LLMMonitorUI
     
     Assessment --> FastAPI
     Documents --> FastAPI
     Knowledge --> FastAPI
     RAGEval --> FastAPI
     SysConfig --> FastAPI
+    PromptUI --> FastAPI
+    LLMMonitorUI --> FastAPI
     
     FastAPI --> CORS
     CORS --> TaskCtrl
     CORS --> RagCtrl
     CORS --> RagTestCtrl
     CORS --> ConfigCtrl
+    CORS --> PromptCtrl
+    CORS --> MonitorCtrl
     
     TaskCtrl --> Graph
     RagCtrl --> DocIngestion
     RagCtrl --> RagSvc
-    RagTestCtrl --> RetrievSvc
+    RagTestCtrl --> TestMgr
     ConfigCtrl --> ConfigMgr
+    PromptCtrl --> PromptMgr
+    MonitorCtrl --> LLMMonitor
     
-    RagSvc --> PreNode
-    RagSvc --> ValNode
-    RagSvc --> AssessNode
-    RagSvc --> RetrievNode
-    RagSvc --> ScoreNode
-    RagSvc --> ReportNode
+    TestMgr --> PipelineOrch
+    RagSvc --> PipelineOrch
+    
+    PipelineOrch --> PreNode
+    PipelineOrch --> ValNode
+    PipelineOrch --> AssessNode
+    PipelineOrch --> RetrievNode
+    PipelineOrch --> ScoreNode
+    PipelineOrch --> ReportNode
     
     Graph --> DI
     Graph --> EventBus
@@ -121,17 +154,26 @@ graph TB
     Graph --> Memory
     Graph --> Security
     Graph --> ABTest
+    Graph --> Repo
+    
+    ConfigMgr --触发--> EventBus
+    EventBus --更新模型实例--> LLMFactory
+    EventBus --LLM调用日志--> LLMMonitor
+    
+    LLMFactory --> LangChainAdapter
+    LLMFactory --> LlamaIndexAdapter
     
     DocIngestion --> Chroma
-    RetrievSvc --> Chroma
-    ConfigMgr --> ConfigStore
+    DocIngestion --> MySQL
+    RetrievNode --> Chroma
+    RetrievNode --> Cache
+    ConfigMgr --> Repo
+    PromptMgr --> Repo
+    LLMMonitor --> Repo
     RagSvc --> Files
-    PreNode --> Logs
-    ValNode --> Logs
-    AssessNode --> Logs
-    RetrievNode --> Logs
-    ScoreNode --> Logs
-    ReportNode --> Logs
+    CacheSvc --> RedisDB
+    Repo --> DB
+    Repo --> RedisDB
 ```
 
 ### 评估工作流架构 (Mermaid)
@@ -183,7 +225,7 @@ graph TB
         Synonym[步骤4: 同义词扩展<br/>LLM 生成 + 质量验证]
         AgeFilter[步骤5: 动态年龄过滤<br/>根据发展阶段调整]
         Hybrid[步骤6: 混合检索<br/>BM25 + Vector<br/>并行执行]
-        Rerank[步骤7: Cross-Encoder<br/>重排序<br/>BAAI/bge-reranker-v2-m3]
+        Rerank[步骤7: Cross-Encoder 重排序<br/>BAAI/bge-reranker-v2-m3]
         Dedup[步骤8: 内容去重<br/>精确匹配 + 相似度]
         PageIndex[步骤9: PageIndex 增强<br/>无向量推理式层级树索引<br/>熔断/重试机制]
         Fusion[结果融合<br/>分数归一化<br/>动态权重]
@@ -244,13 +286,13 @@ graph TB
     
     subgraph 业务规则层 rules/
         Rules[rules.py<br/>规则定义]
-        RulesJson[rules.json<br/>规则数据]
+        RulesJson[rules.json<br/>规则数据(静态)]
     end
     
     subgraph 配置特性
-        HotReload[热重载<br/>文件监听自动生效]
-        VersionCtrl[版本控制<br/>切换/回滚]
-        DiffView[差异对比<br/>可视化变更]
+        HotReload[热重载<br/>事件驱动生效]
+        VersionCtrl[版本控制<br/>MySQL持久化]
+        RedisCache[Redis缓存<br/>加速读取]
         EnvOverride[环境变量覆盖<br/>.env.dev]
     end
     
@@ -276,7 +318,7 @@ graph TB
     
     ConfigMgr --> HotReload
     ConfigMgr --> VersionCtrl
-    ConfigMgr --> DiffView
+    ConfigMgr --> RedisCache
     ConfigMgr --> EnvOverride
     
     ConfigEvents -.事件通知.-> HotReload
@@ -287,7 +329,7 @@ graph TB
 本系统是一个由专用 Agent/节点组成的有向循环图 (DAG)，负责处理用户输入并生成全面的儿童发展评估报告。
 
 - **项目状态**: 开发中，尚未上线
-- **部署策略**: 当前无需任何迁移设计，仅关注本地开发和功能实现
+- **部署策略**: 采用 MySQL 8.0 + Redis 7.0 架构，取代了原有的本地 JSON 存储。MySQL 负责核心数据的唯一持久化，Redis 承担三级缓存、消息队列、分布式锁和会话存储。
 
 ### 核心工作流
 `网关 (Gateway)` -> `预处理 (Preprocessing)` -> `校验 (Validation)` -> `评估 (Assessment)` -> `检索 (Retrieval)` -> `评分 (Scoring)` -> `报告生成 (Report Generation)`
@@ -555,6 +597,16 @@ class AgentState(BaseModel):
 - **版本管理**: 配置版本切换和回滚
 - **差异对比**: 可视化展示配置变更
 
+### 5.6 提示词管理 (Prompt Management)
+- **版本管理**: 创建/查看/对比提示词版本
+- **在线编辑**: 支持提示词内容编辑和元数据配置
+- **A/B 测试**: 创建和管理提示词 A/B 测试，支持流量分配
+
+### 5.7 LLM 监控与分析 (LLM Monitoring)
+- **总览仪表盘**: 全系统 LLM 调用统计、消耗趋势、错误率概览
+- **多维度分析**: 支持按提示词、按场景统计消耗与质量
+- **告警配置**: 异常率升高、耗时突增、Token消耗超阈值告警
+
 ## 6. 核心基础设施
 
 ### 6.1 配置系统
@@ -576,6 +628,7 @@ class AgentState(BaseModel):
 - **发布/订阅**: 组件间解耦的事件通信
 - **配置事件**: 配置变更事件通知
 - **业务事件**: 业务流程事件触发
+- **Redis Pub/Sub**: 支持分布式事件传播，跨进程/跨实例通信
 
 ### 6.4 安全防护
 - **提示词注入防护**: PromptInjectionGuard 检测和阻止恶意注入
@@ -591,3 +644,60 @@ class AgentState(BaseModel):
 - **ABTestFramework**: 支持不同策略的对比测试
 - **流量分配**: 支持流量分组和实验配置
 - **效果分析**: 实验结果统计和显著性检验
+
+### 6.7 数据库基础设施
+- **SQLAlchemy ORM**: 异步数据库引擎/会话管理，内置慢查询检测，连接池配置
+- **Alembic 迁移**: 数据库版本控制和迁移管理
+- **数据模型**: `src/models/` 包含配置(版本与审计)、测试用例(用例/草稿/测试集/运行结果)、文档(源文档/导入记录)、监控(A/B指标/LLM日志)、提示词模型
+- **配置模块**: `src/config/modules/database.py` 数据库配置
+
+### 6.8 Redis 基础设施
+- **Redis 客户端**: 异步 Redis 连接管理，连接池配置，懒加载机制
+- **分布式锁**: 基于 Redis 的分布式锁实现 (带看门狗自动续期)
+- **会话管理**: 用户会话存储和管理 (Redis Hash 结构)
+- **熔断器**: CircuitBreaker 模式实现服务保护
+- **布隆过滤器**: pybloom-live 实现的高效去重过滤器
+- **三级缓存**: Memory (cachetools LRU) + Redis + Disk 三级缓存架构
+- **配置模块**: `src/config/modules/redis.py` Redis 配置
+
+### 6.9 提示词管理系统
+- **PromptManager**: 提示词版本控制和 MySQL 存储 + Redis 缓存
+  - 位置: `src/core/prompt/manager.py`
+  - 功能: 版本管理、A/B 测试分流、缓存失效
+- **PromptController**: 提示词 API 控制器
+  - 位置: `src/controller/prompt_controller.py`
+  - 路由前缀: `/api/v1/prompts`
+- **数据模型**: `src/models/prompt.py`
+  - `PromptVersion`: 提示词版本 (id, prompt_key, version, content, content_hash, description, created_by, variables, tags, fallback)
+  - `PromptABTest`: A/B 测试配置 (id, prompt_key, name, is_active, variant_a_version, variant_b_version, variant_a_ratio)
+- **前端页面**: `src/features/prompts/PromptManagementPage.tsx`
+  - 路由: `/prompt-management`
+  - 功能: 版本列表、在线编辑、版本对比、A/B 测试配置
+
+### 6.10 数据访问层 (Repository Layer)
+- **架构**: 基于泛型的 BaseRepository 基类 + 模型专属 Repository 类
+- **位置**: `src/repository/`
+- **设计要点**:
+  - Repository 接收 `async_session_factory` 而非单个 session，每个方法内部通过 `async with` 创建独立 session
+  - 过滤查询时校验字段有效性，防止 SQL 注入
+  - create/update 方法接收 `Dict[str, Any]`，由调用方负责数据校验
+- **BaseRepository 通用方法**: `get_by_id`, `get_all`, `create`, `update`, `delete`, `get_by_filter`, `get_one_by_filter`, `count_by_filter`
+- **专属 Repository**:
+  - `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
+  - `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
+  - `TestCaseRepository`, `TestCaseDraftRepository`, `TestSetRepository`, `TestSetCaseRepository`, `TestRunRepository`, `TestRunResultRepository` - 测试用例管理
+  - `PromptVersionRepository`, `PromptABTestRepository` - 提示词管理
+  - `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
+- **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器 (`src/core/di_container.py`)
+- **已迁移模块**: ConfigManager, PromptManager, MonitoringService, RagTestManager (部分 CRUD)
+
+### 6.11 模型适配与路由 (LLM Factory)
+- **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`
+- **场景隔离**: 9 大独立业务场景（报告生成、评估、重写、解析、评分等），独立配置模型参数
+- **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例
+- **热切换**: 监听配置变更事件，安全清理（dispose）旧模型实例，支持 0 停机动态重载
+
+### 6.12 RAG 查询流水线编排 (Pipeline Orchestrator)
+- **声明式编排**: 基于 `query_pipeline.yaml` 驱动，消除硬编码的 RAG 查询逻辑
+- **分支路由**: 根据 `QueryRouter` 分类结果动态选择 `simple` (事实性) 或 `complex` (分析性) 流水线
+- **安全与可观测性**: 流水线首节点强制集成 `prompt_injection_guard` 拦截恶意输入，并提供全链路监控耗时与步骤结果

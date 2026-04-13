@@ -28,10 +28,12 @@ function App() {
             menuDataRender={() => [
               { path: '/', name: '首页' },
               { path: '/knowledge-base', name: '知识库' },
-              { path: '/knowledge-search', name: '内容搜索' },
-              { path: '/rag-evaluation', name: '回撤测试' },
-              { path: '/system-config', name: '系统配置' },
-              // { path: '/history', name: '历史记录' },
+               { path: '/knowledge-search', name: '内容搜索' },
+               { path: '/rag-evaluation', name: '回撤测试' },
+               { path: '/prompt-management', name: '提示词管理' },
+               { path: '/monitoring', name: 'LLM监控' },
+               { path: '/system-config', name: '系统配置' },
+               // { path: '/history', name: '历史记录' },
             ]}
             menuItemRender={(item, dom) => (
               <Link to={item.path || '/'} key={item.path}>

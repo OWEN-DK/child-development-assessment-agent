@@ -1,51 +1,52 @@
 import json
 import os
-import threading
 import shutil
 import time
 import math
 import hashlib
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable, Awaitable
 from datetime import datetime
-from filelock import FileLock
 from jsonschema import validate, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
+import uuid
 
-from src.model.rag_test import (
+from src.models.test_case import (
     TestCase,
-    TestCaseStore,
-    TestResult,
     TestRun,
     KnowledgeSnapshot,
     TestResultItem,
     SourceDocument,
-    SourceDocumentStore,
     DocumentStatus,
     TestCaseDraft,
-    TestCaseDraftStore,
     DraftStatus,
     GenerationParams,
     TestSet,
-    TestSetStore,
-    QualityReport,
-    ChapterInfo,
+    TestSetCase,
+    TestRunResult,
+    TestRunStatus,
+    TestDomain,
+    DifficultyLevel,
 )
+from src.models.document import SourceDocument, DocumentStatus
+from src.model.rag_test import TestResult
 from src.service.rag_service import rag_service
 from src.config import settings, config_manager
 from src.service.document_manager import document_manager
 from src.utils.logger import logger
 from src.constants.test_case import TEST_CASE_DOMAINS, TEST_CASE_REQUIRED_FIELDS
 from src.core.prompts import TEST_CASE_DRAFT_GENERATION_PROMPT
-from llama_index.llms.dashscope import DashScope
+from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.base import LLMRequest, LLMMessage
+from src.core.database import db_session_factory
+from src.core.distributed_lock import DistributedLock
 import asyncio
 
 STORAGE_DIR = settings.rag_storage_dir
-TEST_CASE_STORE_PATH = f"{settings.rag_storage_dir}/test_cases.json"
-TEST_RUNS_DIR = f"{settings.rag_storage_dir}/test_runs"
 SNAPSHOTS_DIR = f"{settings.rag_storage_dir}/snapshots"
 SOURCE_DOCUMENTS_DIR = f"{settings.rag_storage_dir}/source_documents"
-TEST_CASE_DRAFTS_DIR = f"{settings.rag_storage_dir}/test_case_drafts"
-TEST_SETS_DIR = f"{settings.rag_storage_dir}/test_sets"
-TEST_CASES_HISTORY_DIR = f"{settings.rag_storage_dir}/test_cases_history"
+TEST_RUNS_DIR = f"{settings.rag_storage_dir}/test_runs"
 
 # JSON导入Schema
 TEST_CASE_IMPORT_SCHEMA = {
@@ -64,286 +65,683 @@ TEST_CASE_IMPORT_SCHEMA = {
             "professional_terms": {"type": "array", "items": {"type": "string"}},
             "age_requirement": {"type": "string"},
         },
-        "additionalProperties": False
-    }
+        "additionalProperties": False,
+    },
 }
 
 
 class RagTestManager:
     _instance = None
-    _lock = threading.Lock()
+    _lock = asyncio.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super(RagTestManager, cls).__new__(cls)
-                    cls._instance._initialized = False
+            cls._instance = super(RagTestManager, cls).__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
         if self._initialized:
             return
 
-        self.test_case_store_path = TEST_CASE_STORE_PATH
-        self.test_runs_dir = TEST_RUNS_DIR
         self.snapshots_dir = SNAPSHOTS_DIR
-        self.test_case_store = TestCaseStore()
-        self._lock = FileLock(TEST_CASE_STORE_PATH + ".lock")
-        self.source_document_store = SourceDocumentStore()
-        self.test_case_draft_store = TestCaseDraftStore()
-        self.test_set_store = TestSetStore()
+        self.test_runs_dir = TEST_RUNS_DIR
+        self.db_session_factory = db_session_factory
 
         # Ensure directories exist
-        os.makedirs(self.test_runs_dir, exist_ok=True)
         os.makedirs(self.snapshots_dir, exist_ok=True)
-        for dir_path in [
-            SOURCE_DOCUMENTS_DIR,
-            TEST_CASE_DRAFTS_DIR,
-            TEST_SETS_DIR,
-            TEST_CASES_HISTORY_DIR,
-        ]:
-            os.makedirs(dir_path, exist_ok=True)
+        os.makedirs(SOURCE_DOCUMENTS_DIR, exist_ok=True)
+        os.makedirs(self.test_runs_dir, exist_ok=True)
 
-        self._load_test_cases()
-        self._load_source_documents()
-        self._load_drafts()
-        self._load_test_sets()
         self._initialized = True
 
-    def _load_test_cases(self):
-        """加载测试用例"""
-        if os.path.exists(self.test_case_store_path):
-            try:
-                with open(self.test_case_store_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.test_case_store = TestCaseStore(**data)
-                logger.info(f"Loaded {len(self.test_case_store.test_cases)} test cases")
-            except Exception as e:
-                logger.error(f"Failed to load test cases: {e}")
-        else:
-            logger.info("No existing test cases found. Starting fresh.")
+    async def create_test_run(
+        self,
+        name: str,
+        description: str = None,
+        test_case_ids: list[str] = None,
+        test_set_id: str = None,
+    ) -> str:
+        """创建测试运行"""
+        async with self.db_session_factory() as session:
+            run_id = str(uuid.uuid4())
 
-    def _load_source_documents(self):
-        """加载源文档"""
-        store_path = os.path.join(SOURCE_DOCUMENTS_DIR, "documents.json")
-        if os.path.exists(store_path):
-            try:
-                with open(store_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.source_document_store = SourceDocumentStore(**data)
-                logger.info(f"Loaded {len(self.source_document_store.documents)} source documents")
-            except Exception as e:
-                logger.error(f"Failed to load source documents: {e}")
-        else:
-            logger.info("No existing source documents found.")
+            # 获取测试用例列表
+            if test_case_ids:
+                stmt = select(TestCase).where(TestCase.id.in_(test_case_ids))
+                result = await session.execute(stmt)
+                test_cases = result.scalars().all()
+            elif test_set_id:
+                # 从测试集获取
+                stmt = (
+                    select(TestCase)
+                    .join(TestSetCase)
+                    .where(TestSetCase.test_set_id == test_set_id)
+                    .options(selectinload(TestSetCase.test_case))
+                )
+                result = await session.execute(stmt)
+                test_cases = result.scalars().all()
+            else:
+                # 默认所有测试用例
+                stmt = select(TestCase)
+                result = await session.execute(stmt)
+                test_cases = result.scalars().all()
 
-    def _save_source_documents(self):
-        """保存源文档"""
-        store_path = os.path.join(SOURCE_DOCUMENTS_DIR, "documents.json")
-        try:
-            tmp_path = store_path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(self.source_document_store.model_dump_json(indent=2, ensure_ascii=False))
-            os.replace(tmp_path, store_path)
-            logger.info("Source documents saved")
-        except Exception as e:
-            logger.error(f"Failed to save source documents: {e}")
+            # 创建测试运行
+            test_run = TestRun(
+                id=run_id,
+                name=name,
+                description=description,
+                total_test_cases=len(test_cases),
+                passed_test_cases=0,
+                status=TestRunStatus.RUNNING,
+            )
 
-    def _load_drafts(self):
-        """加载草稿"""
-        store_path = os.path.join(TEST_CASE_DRAFTS_DIR, "drafts.json")
-        if os.path.exists(store_path):
-            try:
-                with open(store_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.test_case_draft_store = TestCaseDraftStore(**data)
-                logger.info(f"Loaded {len(self.test_case_draft_store.drafts)} drafts")
-            except Exception as e:
-                logger.error(f"Failed to load drafts: {e}")
-        else:
-            logger.info("No existing drafts found.")
+            session.add(test_run)
+            await session.commit()
 
-    def _save_drafts(self):
-        """保存草稿"""
-        store_path = os.path.join(TEST_CASE_DRAFTS_DIR, "drafts.json")
-        try:
-            tmp_path = store_path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(self.test_case_draft_store.model_dump_json(indent=2, ensure_ascii=False))
-            os.replace(tmp_path, store_path)
-            logger.info("Drafts saved")
-        except Exception as e:
-            logger.error(f"Failed to save drafts: {e}")
+            logger.info(f"测试运行已创建：{run_id}, 共 {len(test_cases)} 个用例")
+            return run_id
 
-    def _load_test_sets(self):
-        """加载测试集"""
-        store_path = os.path.join(TEST_SETS_DIR, "test_sets.json")
-        if os.path.exists(store_path):
-            try:
-                with open(store_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.test_set_store = TestSetStore(**data)
-                logger.info(f"Loaded {len(self.test_set_store.test_sets)} test sets")
-            except Exception as e:
-                logger.error(f"Failed to load test sets: {e}")
-        else:
-            logger.info("No existing test sets found.")
-
-    def _save_test_sets(self):
-        """保存测试集"""
-        store_path = os.path.join(TEST_SETS_DIR, "test_sets.json")
-        try:
-            tmp_path = store_path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(self.test_set_store.model_dump_json(indent=2, ensure_ascii=False))
-            os.replace(tmp_path, store_path)
-            logger.info("Test sets saved")
-        except Exception as e:
-            logger.error(f"Failed to save test sets: {e}")
-
-    def _save_test_cases(self):
-        """保存测试用例"""
-        try:
-            os.makedirs(os.path.dirname(self.test_case_store_path), exist_ok=True)
-            with open(self.test_case_store_path, "w", encoding="utf-8") as f:
-                f.write(self.test_case_store.model_dump_json(indent=2))
-            logger.info("Test cases saved")
-        except Exception as e:
-            logger.error(f"Failed to save test cases: {e}")
-
-    def add_test_case(self, test_case: TestCase) -> TestCase:
+    async def add_test_case(self, test_case: TestCase) -> TestCase:
         """添加测试用例"""
-        with self._lock:
-            self.test_case_store.test_cases[test_case.id] = test_case
-            self._save_test_cases()
-            return test_case
+        from src.repository import TestCaseRepository
 
-    def update_test_case(
+        repo = TestCaseRepository(self.db_session_factory)
+        case_data = {
+            "id": test_case.id or str(uuid.uuid4()),
+            "query": test_case.query,
+            "age": test_case.age,
+            "domain": test_case.domain,
+            "description": test_case.description,
+            "expected_knowledge_count": test_case.expected_knowledge_count,
+            "answer_points_summary": test_case.answer_points_summary,
+            "min_age_requirement": test_case.min_age_requirement,
+            "max_age_requirement": test_case.max_age_requirement,
+            "difficulty_level": test_case.difficulty_level,
+            "expected_knowledge_ids": test_case.expected_knowledge_ids,
+            "expected_keywords": test_case.expected_keywords,
+            "professional_terms": test_case.professional_terms,
+            "relevance_scores": test_case.relevance_scores,
+            "source_document_id": test_case.source_document_id,
+            "version": test_case.version,
+        }
+        created = await repo.create(case_data)
+        logger.info(f"Test case added: {created.id}")
+        return created
+
+    async def execute_test_case(
+        self,
+        run_id: str,
+        test_case: TestCase,
+        progress_callback: Optional[Callable] = None,
+    ) -> TestRunResult:
+        """执行单个测试用例"""
+        async with self.db_session_factory() as session:
+            # 执行检索
+            from src.service.retrieval_service import RetrievalService
+
+            retrieval_service = RetrievalService()
+
+            start_time = datetime.now()
+            try:
+                results = await retrieval_service.search(
+                    query=test_case.query,
+                    age=test_case.age,
+                    limit=5,
+                )
+
+                # 计算指标
+                matched_count = 0
+                actual_knowledge_ids = []
+
+                for result in results:
+                    actual_knowledge_ids.append(result.id)
+                    if (
+                        test_case.expected_knowledge_ids
+                        and result.id in test_case.expected_knowledge_ids
+                    ):
+                        matched_count += 1
+
+                expected_count = (
+                    len(test_case.expected_knowledge_ids)
+                    if test_case.expected_knowledge_ids
+                    else 0
+                )
+                actual_count = len(actual_knowledge_ids)
+
+                precision = matched_count / actual_count if actual_count > 0 else 0.0
+                recall = matched_count / expected_count if expected_count > 0 else 0.0
+                f1 = (
+                    2 * precision * recall / (precision + recall)
+                    if (precision + recall) > 0
+                    else 0.0
+                )
+                passed = recall >= 0.8  # 召回率 >= 80% 视为通过
+
+                # 创建结果
+                test_result = TestRunResult(
+                    run_id=run_id,
+                    test_case_id=test_case.id,
+                    query=test_case.query,
+                    precision=precision,
+                    recall=recall,
+                    f1=f1,
+                    passed=passed,
+                    matched_count=matched_count,
+                    expected_count=expected_count,
+                    actual_count=actual_count,
+                    expected_knowledge_ids=test_case.expected_knowledge_ids,
+                    actual_knowledge_ids=actual_knowledge_ids,
+                    execution_time_ms=int(
+                        (datetime.now() - start_time).total_seconds() * 1000
+                    ),
+                )
+
+                session.add(test_result)
+                await session.commit()
+
+                # 进度回调
+                if progress_callback:
+                    await progress_callback(test_result)
+
+                return test_result
+
+            except Exception as e:
+                logger.error(f"测试用例执行失败：{test_case.id}: {e}")
+
+                test_result = TestRunResult(
+                    run_id=run_id,
+                    test_case_id=test_case.id,
+                    query=test_case.query,
+                    passed=False,
+                    error_message=str(e),
+                    execution_time_ms=int(
+                        (datetime.now() - start_time).total_seconds() * 1000
+                    ),
+                )
+
+                session.add(test_result)
+                await session.commit()
+
+                return test_result
+
+    async def complete_test_run(self, run_id: str):
+        """完成测试运行，计算聚合指标"""
+        async with self.db_session_factory() as session:
+            # 获取所有结果
+            stmt = select(TestRunResult).where(TestRunResult.run_id == run_id)
+            result = await session.execute(stmt)
+            test_results = result.scalars().all()
+
+            # 计算聚合指标
+            total = len(test_results)
+            passed = sum(1 for r in test_results if r.passed)
+
+            avg_precision = (
+                sum(r.precision for r in test_results if r.precision is not None)
+                / total
+                if total > 0
+                else 0.0
+            )
+            avg_recall = (
+                sum(r.recall for r in test_results if r.recall is not None) / total
+                if total > 0
+                else 0.0
+            )
+            avg_f1 = (
+                sum(r.f1 for r in test_results if r.f1 is not None) / total
+                if total > 0
+                else 0.0
+            )
+
+            # 更新测试运行
+            stmt = select(TestRun).where(TestRun.id == run_id)
+            result = await session.execute(stmt)
+            test_run = result.scalar_one()
+
+            test_run.status = TestRunStatus.COMPLETED
+            test_run.completed_at = datetime.now()
+            test_run.passed_test_cases = passed
+            test_run.overall_precision = avg_precision
+            test_run.overall_recall = avg_recall
+            test_run.overall_f1 = avg_f1
+
+            await session.commit()
+
+            logger.info(
+                f"测试运行已完成：{run_id}, 通过率={passed}/{total}={passed / total:.2%}"
+            )
+
+    async def execute_batch(
+        self,
+        run_id: str,
+        concurrency: int = 5,
+        progress_callback: Optional[Callable] = None,
+    ) -> list:
+        """批量执行测试用例（带分布式锁）"""
+
+        lock_name = f"rag:test_run:{run_id}"
+
+        async def _execute_with_lock():
+            """在分布式锁保护下执行"""
+            async with self.db_session_factory() as session:
+                # 获取测试用例
+                stmt = select(TestRun).where(TestRun.id == run_id)
+                result = await session.execute(stmt)
+                test_run = result.scalar_one()
+
+                # 获取未执行的测试用例
+                stmt = (
+                    select(TestCase)
+                    .outerjoin(
+                        TestRunResult,
+                        and_(
+                            TestCase.id == TestRunResult.test_case_id,
+                            TestRunResult.run_id == run_id,
+                        ),
+                    )
+                    .where(TestRunResult.id.is_(None))  # 未执行的
+                )
+                result = await session.execute(stmt)
+                test_cases = result.scalars().all()
+
+            # 并发执行
+            semaphore = asyncio.Semaphore(concurrency)
+
+            async def execute_single(test_case):
+                async with semaphore:
+                    return await self.execute_test_case(
+                        run_id, test_case, progress_callback
+                    )
+
+            tasks = [execute_single(tc) for tc in test_cases]
+            results = await asyncio.gather(*tasks)
+
+            # 完成运行
+            await self.complete_test_run(run_id)
+
+            return results
+
+        # 使用分布式锁执行
+        results = await DistributedLock.execute_with_lock(
+            lock_name,
+            _execute_with_lock,
+            timeout=3600,  # 1 小时超时
+        )
+
+        return results
+
+    async def update_test_case(
         self, test_case_id: str, test_case: TestCase
     ) -> Optional[TestCase]:
         """更新测试用例"""
-        with self._lock:
-            if test_case_id not in self.test_case_store.test_cases:
-                return None
-            test_case.updated_at = datetime.now()
-            self.test_case_store.test_cases[test_case_id] = test_case
-            self._save_test_cases()
-            return test_case
+        from src.repository import TestCaseRepository
 
-    def delete_test_case(self, test_case_id: str) -> bool:
+        repo = TestCaseRepository(self.db_session_factory)
+        existing = await repo.get_by_id(test_case_id)
+        if not existing:
+            return None
+
+        update_data = {}
+        for key, value in test_case.model_dump(exclude_unset=True).items():
+            if hasattr(existing, key):
+                update_data[key] = value
+        update_data["updated_at"] = datetime.now()
+
+        updated = await repo.update(test_case_id, update_data)
+        logger.info(f"Test case updated: {test_case_id}")
+        return updated
+
+    async def delete_test_case(self, test_case_id: str) -> bool:
         """删除测试用例"""
-        with self._lock:
-            if test_case_id in self.test_case_store.test_cases:
-                del self.test_case_store.test_cases[test_case_id]
-                self._save_test_cases()
-                return True
+        from src.repository import TestCaseRepository
+
+        repo = TestCaseRepository(self.db_session_factory)
+        existing = await repo.get_by_id(test_case_id)
+        if not existing:
             return False
+        result = await repo.delete(test_case_id)
+        if result:
+            logger.info(f"Test case deleted: {test_case_id}")
+        return result
 
-    def get_test_case(self, test_case_id: str) -> Optional[TestCase]:
+    async def batch_delete_test_cases(self, case_ids: List[str]) -> int:
+        """批量删除测试用例"""
+        from src.repository import TestCaseRepository
+        
+        repo = TestCaseRepository(self.db_session_factory)
+        deleted_count = 0
+        for case_id in case_ids:
+            if await repo.delete(case_id):
+                deleted_count += 1
+                logger.info(f"Test case deleted: {case_id}")
+        return deleted_count
+
+    async def batch_delete_test_runs(self, run_ids: List[str]) -> int:
+        """批量删除测试运行（评估报告）"""
+        from src.repository import TestRunRepository
+        
+        repo = TestRunRepository(self.db_session_factory)
+        deleted_count = 0
+        for run_id in run_ids:
+            if await repo.delete(run_id):
+                deleted_count += 1
+                # 删除本地存储的测试运行文件
+                run_dir = f"{self.test_runs_dir}/{run_id}"
+                if os.path.exists(run_dir):
+                    shutil.rmtree(run_dir)
+                logger.info(f"Test run deleted: {run_id}")
+        return deleted_count
+
+    async def delete_draft(self, draft_id: str) -> bool:
+        """删除草稿"""
+        from src.repository import TestCaseDraftRepository
+        
+        repo = TestCaseDraftRepository(self.db_session_factory)
+        existing = await repo.get_by_id(draft_id)
+        if not existing:
+            return False
+        result = await repo.delete(draft_id)
+        if result:
+            logger.info(f"Draft deleted: {draft_id}")
+        return result
+
+    async def batch_delete_drafts(self, draft_ids: List[str]) -> int:
+        """批量删除草稿"""
+        from src.repository import TestCaseDraftRepository
+        
+        repo = TestCaseDraftRepository(self.db_session_factory)
+        deleted_count = 0
+        for draft_id in draft_ids:
+            if await repo.delete(draft_id):
+                deleted_count += 1
+                logger.info(f"Draft deleted: {draft_id}")
+        return deleted_count
+
+    async def get_test_case(self, test_case_id: str) -> Optional[TestCase]:
         """获取单个测试用例"""
-        return self.test_case_store.test_cases.get(test_case_id)
+        from src.repository import TestCaseRepository
 
-    def list_test_cases(self) -> List[TestCase]:
+        repo = TestCaseRepository(self.db_session_factory)
+        return await repo.get_by_id(test_case_id)
+
+    async def list_test_cases(self) -> List[TestCase]:
         """列出所有测试用例"""
-        return list(self.test_case_store.test_cases.values())
-    
-    def preview_import_cases(self, import_data: List[dict]) -> Tuple[List[dict], List[dict], List[dict]]:
+        from src.repository import TestCaseRepository
+
+        repo = TestCaseRepository(self.db_session_factory)
+        return await repo.get_all(limit=10000)
+
+    async def analyze_test_run(self, run_id: str) -> dict:
+        """分析测试运行结果"""
+        async with self.db_session_factory() as session:
+            # 获取运行信息
+            stmt = select(TestRun).where(TestRun.id == run_id)
+            result = await session.execute(stmt)
+            test_run = result.scalar_one()
+
+            # 获取结果
+            stmt = select(TestRunResult).where(TestRunResult.run_id == run_id)
+            result = await session.execute(stmt)
+            test_results = result.scalars().all()
+
+            # 按领域分析
+            domain_stats = {}
+            for test_result in test_results:
+                test_case = await session.get(TestCase, test_result.test_case_id)
+                domain = test_case.domain.value
+
+                if domain not in domain_stats:
+                    domain_stats[domain] = {
+                        "total": 0,
+                        "passed": 0,
+                        "precision_sum": 0.0,
+                        "recall_sum": 0.0,
+                    }
+
+                domain_stats[domain]["total"] += 1
+                if test_result.passed:
+                    domain_stats[domain]["passed"] += 1
+                if test_result.precision:
+                    domain_stats[domain]["precision_sum"] += test_result.precision
+                if test_result.recall:
+                    domain_stats[domain]["recall_sum"] += test_result.recall
+
+            # 计算平均值
+            for domain in domain_stats:
+                total = domain_stats[domain]["total"]
+                domain_stats[domain]["avg_precision"] = (
+                    domain_stats[domain]["precision_sum"] / total
+                )
+                domain_stats[domain]["avg_recall"] = (
+                    domain_stats[domain]["recall_sum"] / total
+                )
+                domain_stats[domain]["pass_rate"] = (
+                    domain_stats[domain]["passed"] / total
+                )
+
+            return {
+                "run_id": run_id,
+                "name": test_run.name,
+                "status": test_run.status,
+                "total": test_run.total_test_cases,
+                "passed": test_run.passed_test_cases,
+                "overall_precision": test_run.overall_precision,
+                "overall_recall": test_run.overall_recall,
+                "overall_f1": test_run.overall_f1,
+                "domain_stats": domain_stats,
+            }
+
+    async def compare_test_runs(self, run_id_1: str, run_id_2: str) -> dict:
+        """对比两个测试运行"""
+        stats_1 = await self.analyze_test_run(run_id_1)
+        stats_2 = await self.analyze_test_run(run_id_2)
+
+        return {
+            "run_1": stats_1,
+            "run_2": stats_2,
+            "comparison": {
+                "precision_diff": stats_2["overall_precision"]
+                - stats_1["overall_precision"],
+                "recall_diff": stats_2["overall_recall"] - stats_1["overall_recall"],
+                "f1_diff": stats_2["overall_f1"] - stats_1["overall_f1"],
+                "pass_rate_diff": (stats_2["passed"] / stats_2["total"])
+                - (stats_1["passed"] / stats_1["total"]),
+            },
+        }
+
+    async def recalculate_aggregate_scores(self):
+        """全量重新计算聚合评分（放入 BackgroundTasks 异步执行）"""
+        async with self.db_session_factory() as session:
+            # 获取所有已完成的运行
+            stmt = select(TestRun).where(TestRun.status == TestRunStatus.COMPLETED)
+            result = await session.execute(stmt)
+            runs = result.scalars().all()
+
+            for run in runs:
+                # 重新计算该运行的聚合指标
+                results_stmt = select(TestRunResult).where(
+                    TestRunResult.run_id == run.id
+                )
+                results_result = await session.execute(results_stmt)
+                results = results_result.scalars().all()
+
+                if not results:
+                    continue
+
+                total = len(results)
+                passed = sum(1 for r in results if r.passed)
+                run.passed_test_cases = passed
+                run.overall_precision = (
+                    sum(r.precision for r in results if r.precision) / total
+                )
+                run.overall_recall = sum(r.recall for r in results if r.recall) / total
+                run.overall_f1 = sum(r.f1 for r in results if r.f1) / total
+
+            await session.commit()
+            logger.info(f"聚合评分已重算：{len(runs)} 个运行")
+
+    async def preview_import_cases(
+        self, import_data: List[dict]
+    ) -> Tuple[List[dict], List[dict], List[dict]]:
         """预览导入的测试用例，返回有效/无效/重复数据"""
         valid_cases = []
         invalid_cases = []
         duplicates = []
-        
+
         # 1. Schema校验
         try:
             validate(instance=import_data, schema=TEST_CASE_IMPORT_SCHEMA)
         except ValidationError as e:
-            return [], [{"index": 0, "data": import_data[0] if import_data else {}, "error": str(e)}], []
-        
+            return (
+                [],
+                [
+                    {
+                        "index": 0,
+                        "data": import_data[0] if import_data else {},
+                        "error": str(e),
+                    }
+                ],
+                [],
+            )
+
+        # Get all existing test cases for duplicate check
+        async def _get_existing():
+            async with self.db_session_factory() as session:
+                stmt = select(TestCase)
+                result = await session.execute(stmt)
+                return list(result.scalars().all())
+
+        existing_cases = await _get_existing()
+
         # 2. 业务规则校验和重复检测
         for i, case_data in enumerate(import_data):
             # 校验age范围
             if case_data["age"] < 0 or case_data["age"] > 18:
-                invalid_cases.append({
-                    "index": i,
-                    "data": case_data,
-                    "error": f"年龄超出范围: {case_data['age']}，必须在0-18之间"
-                })
-                continue
-            
-            # 校验domain
-            if case_data.get("domain") and case_data["domain"] not in TEST_CASE_DOMAINS + ["未知"]:
-                invalid_cases.append({
-                    "index": i,
-                    "data": case_data,
-                    "error": f"无效的领域: {case_data['domain']}，可选值: {TEST_CASE_DOMAINS}"
-                })
-                continue
-            
-            # 检测重复（query + age + domain）
-            duplicate_found = False
-            for existing_case in self.test_case_store.test_cases.values():
-                if (existing_case.query == case_data["query"] and 
-                    existing_case.age == case_data["age"] and 
-                    existing_case.domain == case_data.get("domain", "未知")):
-                    duplicates.append({
+                invalid_cases.append(
+                    {
                         "index": i,
                         "data": case_data,
-                        "existing_id": existing_case.id
-                    })
+                        "error": f"年龄超出范围: {case_data['age']}，必须在0-18之间",
+                    }
+                )
+                continue
+
+            # 校验domain
+            domain = case_data.get("domain", "未知")
+            if domain not in [d.value for d in TestDomain] + ["未知"]:
+                invalid_cases.append(
+                    {
+                        "index": i,
+                        "data": case_data,
+                        "error": f"无效的领域: {domain}，可选值: {[d.value for d in TestDomain]}",
+                    }
+                )
+                continue
+
+            # 检测重复（query + age + domain）
+            duplicate_found = False
+            for existing_case in existing_cases:
+                if (
+                    existing_case.query == case_data["query"]
+                    and existing_case.age == case_data["age"]
+                    and existing_case.domain.value == domain
+                ):
+                    duplicates.append(
+                        {"index": i, "data": case_data, "existing_id": existing_case.id}
+                    )
                     duplicate_found = True
                     break
-            
+
             if not duplicate_found:
-                valid_cases.append({
-                    "index": i,
-                    "data": case_data
-                })
-        
+                valid_cases.append({"index": i, "data": case_data})
+
         return valid_cases, invalid_cases, duplicates
-    
-    def batch_import_cases(self, cases_data: List[dict], test_set_id: Optional[str] = None) -> Dict:
+
+    async def batch_import_cases(
+        self, cases_data: List[dict], test_set_id: Optional[str] = None
+    ) -> Dict:
         """批量导入测试用例（事务性操作）"""
         # 阶段1：预校验所有数据
         test_cases = []
         for case_data in cases_data:
             try:
+                # Convert domain string to enum
+                if "domain" in case_data and isinstance(case_data["domain"], str):
+                    if case_data["domain"] == "未知":
+                        case_data["domain"] = (
+                            TestDomain.SENSORY_INTEGRATION
+                        )  # Default value for unknown
+                    else:
+                        case_data["domain"] = TestDomain(case_data["domain"])
+
                 test_case = TestCase(**case_data)
+                if not test_case.id:
+                    test_case.id = str(uuid.uuid4())
                 test_cases.append(test_case)
             except Exception as e:
                 raise ValueError(f"测试用例数据无效: {str(e)}")
-        
-        # 阶段2：原子写入
-        with self._lock:
-            # 重新加载数据，避免并发修改
-            self._load_test_cases()
-            
-            # 再次检测重复
-            for test_case in test_cases:
-                for existing_case in self.test_case_store.test_cases.values():
-                    if (existing_case.query == test_case.query and 
-                        existing_case.age == test_case.age and 
-                        existing_case.domain == test_case.domain):
-                        raise ValueError(f"测试用例重复: {test_case.query} (age: {test_case.age}, domain: {test_case.domain})")
-            
-            # 添加到存储
-            imported_ids = []
-            for test_case in test_cases:
-                self.test_case_store.test_cases[test_case.id] = test_case
-                imported_ids.append(test_case.id)
-            
-            # 保存到文件
-            tmp_path = TEST_CASE_STORE_PATH + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(self.test_case_store.model_dump_json(indent=2, ensure_ascii=False))
-            os.replace(tmp_path, TEST_CASE_STORE_PATH)
-        
-        return {
-            "imported_count": len(imported_ids),
-            "failed_count": 0,
-            "test_case_ids": imported_ids,
-            "errors": []
-        }
+
+        # 阶段2：原子写入到数据库
+        async def _import():
+            async with self.db_session_factory() as session:
+                imported_ids = []
+                try:
+                    # 再次检测重复
+                    for test_case in test_cases:
+                        stmt = select(TestCase).where(
+                            TestCase.query == test_case.query,
+                            TestCase.age == test_case.age,
+                            TestCase.domain == test_case.domain,
+                        )
+                        result = await session.execute(stmt)
+                        if result.scalar_one_or_none():
+                            raise ValueError(
+                                f"测试用例重复: {test_case.query} (age: {test_case.age}, domain: {test_case.domain.value})"
+                            )
+
+                    # Add all test cases
+                    for test_case in test_cases:
+                        session.add(test_case)
+                        imported_ids.append(test_case.id)
+
+                    # If test set ID is provided, add all cases to the test set
+                    if test_set_id:
+                        test_set = await session.get(TestSet, test_set_id)
+                        if test_set:
+                            # Get existing case IDs
+                            stmt = select(TestSetCase.test_case_id).where(
+                                TestSetCase.test_set_id == test_set_id
+                            )
+                            result = await session.execute(stmt)
+                            existing_ids = [row[0] for row in result.all()]
+
+                            # Add new cases
+                            for case_id in imported_ids:
+                                if case_id not in existing_ids:
+                                    ts_case = TestSetCase(
+                                        test_set_id=test_set_id, test_case_id=case_id
+                                    )
+                                    session.add(ts_case)
+
+                    await session.commit()
+                    return imported_ids
+                except Exception as e:
+                    await session.rollback()
+                    raise e
+
+        try:
+            imported_ids = await _import()
+
+            return {
+                "imported_count": len(imported_ids),
+                "failed_count": 0,
+                "test_case_ids": imported_ids,
+                "errors": [],
+            }
+        except Exception as e:
+            raise e
 
     async def run_test_case(self, test_case: TestCase, limit: int = 10) -> TestResult:
         """执行单个测试用例"""
@@ -403,9 +801,11 @@ class RagTestManager:
             else 0.0
         )
         mrr = 1.0 / first_relevant_rank if first_relevant_rank is not None else 0.0
-        
+
         # 计算 NDCG@K
-        ndcg_at_k = self._calculate_ndcg(test_result_items, test_case.expected_knowledge_ids)
+        ndcg_at_k = self._calculate_ndcg(
+            test_result_items, test_case.expected_knowledge_ids
+        )
 
         return TestResult(
             test_case_id=test_case.id,
@@ -424,7 +824,7 @@ class RagTestManager:
         self, name: str = "", description: str = "", limit: int = 10
     ) -> TestRun:
         """执行所有测试用例"""
-        test_cases = self.list_test_cases()
+        test_cases = await self.list_test_cases()
         if not test_cases:
             raise ValueError("No test cases available")
 
@@ -432,7 +832,9 @@ class RagTestManager:
         config_snapshot = config_manager.get_full_config()
 
         previous_run = self._get_last_test_run()
-        previous_config_version = previous_run.config_version_id if previous_run else None
+        previous_config_version = (
+            previous_run.config_version_id if previous_run else None
+        )
 
         test_run = TestRun(
             name=name or f"Test Run {datetime.now().strftime('%Y-%m-%d %H:%M')}",
@@ -628,9 +1030,9 @@ class RagTestManager:
             # 停止当前服务
             if rag_service.index_manager.is_index_available():
                 rag_service.index_manager.index = None
-                if hasattr(rag_service.retrieval_service, 'bm25_retriever'):
+                if hasattr(rag_service.retrieval_service, "bm25_retriever"):
                     rag_service.retrieval_service.bm25_retriever = None
-                if hasattr(rag_service.retrieval_service, 'vector_retriever'):
+                if hasattr(rag_service.retrieval_service, "vector_retriever"):
                     rag_service.retrieval_service.vector_retriever = None
 
             # 备份当前状态（仅备份 index 目录和 document_store.json，不移动整个 STORAGE_DIR 以免丢失测试用例等）
@@ -638,18 +1040,20 @@ class RagTestManager:
                 f"{STORAGE_DIR}_backup_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
             os.makedirs(backup_dir, exist_ok=True)
-            
+
             current_index_dir = os.path.join(STORAGE_DIR, "index")
             if os.path.exists(current_index_dir):
                 shutil.move(current_index_dir, os.path.join(backup_dir, "index"))
-                
+
             current_doc_store = os.path.join(STORAGE_DIR, "document_store.json")
             if os.path.exists(current_doc_store):
-                shutil.move(current_doc_store, os.path.join(backup_dir, "document_store.json"))
+                shutil.move(
+                    current_doc_store, os.path.join(backup_dir, "document_store.json")
+                )
 
             # 恢复快照中的 index
             snapshot_index_dir = os.path.join(snapshot.storage_path, "index")
-            
+
             if os.path.exists(snapshot_index_dir):
                 shutil.copytree(snapshot_index_dir, current_index_dir)
 
@@ -657,10 +1061,10 @@ class RagTestManager:
             snapshot_doc_store = os.path.join(
                 snapshot.storage_path, "document_store.json"
             )
-            
+
             if os.path.exists(snapshot_doc_store):
                 shutil.copy2(snapshot_doc_store, current_doc_store)
-                
+
             # 重新加载文档管理器
             document_manager._load_store()
 
@@ -679,13 +1083,13 @@ class RagTestManager:
                     if os.path.exists(current_index_dir):
                         shutil.rmtree(current_index_dir)
                     shutil.move(backup_index, current_index_dir)
-                    
+
                 backup_doc = os.path.join(backup_dir, "document_store.json")
                 if os.path.exists(backup_doc):
                     if os.path.exists(current_doc_store):
                         os.remove(current_doc_store)
                     shutil.move(backup_doc, current_doc_store)
-                    
+
                 rag_service.index_manager._initialize_index()
                 document_manager._load_store()
             return False
@@ -708,12 +1112,16 @@ class RagTestManager:
         if not runs_for_v2:
             raise ValueError(f"No test runs found for config version {version_id2}")
 
-        avg_v1_precision = sum(r.overall_precision for r in runs_for_v1) / len(runs_for_v1)
+        avg_v1_precision = sum(r.overall_precision for r in runs_for_v1) / len(
+            runs_for_v1
+        )
         avg_v1_recall = sum(r.overall_recall for r in runs_for_v1) / len(runs_for_v1)
         avg_v1_f1 = sum(r.overall_f1 for r in runs_for_v1) / len(runs_for_v1)
         avg_v1_mrr = sum(r.overall_mrr for r in runs_for_v1) / len(runs_for_v1)
 
-        avg_v2_precision = sum(r.overall_precision for r in runs_for_v2) / len(runs_for_v2)
+        avg_v2_precision = sum(r.overall_precision for r in runs_for_v2) / len(
+            runs_for_v2
+        )
         avg_v2_recall = sum(r.overall_recall for r in runs_for_v2) / len(runs_for_v2)
         avg_v2_f1 = sum(r.overall_f1 for r in runs_for_v2) / len(runs_for_v2)
         avg_v2_mrr = sum(r.overall_mrr for r in runs_for_v2) / len(runs_for_v2)
@@ -743,37 +1151,41 @@ class RagTestManager:
             },
         }
 
-    def _calculate_ndcg(self, results: List[TestResultItem], expected_ids: List[str], k: int = 3) -> float:
+    def _calculate_ndcg(
+        self, results: List[TestResultItem], expected_ids: List[str], k: int = 3
+    ) -> float:
         """计算 NDCG@K
-        
+
         Args:
             results: 检索结果列表
             expected_ids: 预期知识ID列表
             k: 截断位置
-            
+
         Returns:
             NDCG@K 值（0-1 之间）
         """
         if not results or not expected_ids:
             return 0.0
-        
+
         # 取前 k 个结果
         top_k = results[:k]
-        
+
         # 计算 DCG
         dcg = 0.0
         for i, item in enumerate(top_k):
             # 相关性：预期结果得分为 1，否则为 0
             rel = 1.0 if item.knowledge_id in expected_ids else 0.0
             dcg += rel / math.log2(i + 2)  # i+2 因为排名从 1 开始
-        
+
         # 计算理想 DCG (IDCG)
-        ideal_rels = [1.0] * min(len(expected_ids), k) + [0.0] * max(0, k - len(expected_ids))
+        ideal_rels = [1.0] * min(len(expected_ids), k) + [0.0] * max(
+            0, k - len(expected_ids)
+        )
         idcg = sum(rel / math.log2(i + 2) for i, rel in enumerate(ideal_rels[:k]))
-        
+
         if idcg == 0:
             return 0.0
-        
+
         return dcg / idcg
 
     def compare_test_runs(self, run_id1: str, run_id2: str) -> Dict:
@@ -824,59 +1236,112 @@ class RagTestManager:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def upload_source_document(self, file_path: str, title: str, file_type: str) -> SourceDocument:
+    async def upload_source_document(
+        self, file_path: str, title: str, file_type: str
+    ) -> SourceDocument:
         """上传源文档"""
         file_hash = self._compute_file_hash(file_path)
 
-        for doc in self.source_document_store.documents.values():
-            if doc.file_hash == file_hash:
-                logger.info(f"文档已存在，直接复用: {doc.id} - {doc.title}")
-                return doc
+        # Check if document already exists in database
+        async def _check_existing():
+            async with self.db_session_factory() as session:
+                stmt = select(SourceDocument).where(
+                    SourceDocument.file_hash == file_hash
+                )
+                result = await session.execute(stmt)
+                return result.scalar_one_or_none()
 
-        dest_path = os.path.join(SOURCE_DOCUMENTS_DIR, f"{file_hash}_{os.path.basename(file_path)}")
+        existing_doc = await _check_existing()
+        if existing_doc:
+            logger.info(
+                f"文档已存在，直接复用: {existing_doc.id} - {existing_doc.title}"
+            )
+            return existing_doc
+
+        dest_path = os.path.join(
+            SOURCE_DOCUMENTS_DIR, f"{file_hash}_{os.path.basename(file_path)}"
+        )
         shutil.copy2(file_path, dest_path)
 
         doc = SourceDocument(
+            id=str(uuid.uuid4()),
             title=title,
             file_type=file_type,
             file_path=dest_path,
             file_hash=file_hash,
+            status=DocumentStatus.UPLOADED,
         )
 
-        self.source_document_store.documents[doc.id] = doc
-        self._save_source_documents()
-        logger.info(f"Source document uploaded: {doc.id} - {title}")
+        # Save to database
+        async def _save_doc():
+            async with self.db_session_factory() as session:
+                session.add(doc)
+                await session.commit()
+                await session.refresh(doc)
+                return doc
+
+        saved_doc = await _save_doc()
+
+        logger.info(f"Source document uploaded: {saved_doc.id} - {title}")
+        return saved_doc
+
+    async def list_source_documents(self) -> List[SourceDocument]:
+        """列出所有源文档"""
+
+        async def _get_all():
+            async with self.db_session_factory() as session:
+                stmt = select(SourceDocument).order_by(SourceDocument.created_at.desc())
+                result = await session.execute(stmt)
+                return list(result.scalars().all())
+
+        docs = await _get_all()
+        return docs
+
+    async def get_source_document(self, doc_id: str) -> Optional[SourceDocument]:
+        """获取单个源文档"""
+
+        async def _get_one():
+            async with self.db_session_factory() as session:
+                return await session.get(SourceDocument, doc_id)
+
+        doc = await _get_one()
         return doc
 
-    def list_source_documents(self) -> List[SourceDocument]:
-        """列出所有源文档"""
-        return list(self.source_document_store.documents.values())
-
-    def get_source_document(self, doc_id: str) -> Optional[SourceDocument]:
-        """获取单个源文档"""
-        return self.source_document_store.documents.get(doc_id)
-
-    def delete_source_document(self, doc_id: str) -> bool:
+    async def delete_source_document(self, doc_id: str) -> bool:
         """删除源文档"""
-        if doc_id not in self.source_document_store.documents:
-            return False
 
-        doc = self.source_document_store.documents[doc_id]
-        if os.path.exists(doc.file_path):
-            os.remove(doc.file_path)
+        async def _delete():
+            async with self.db_session_factory() as session:
+                doc = await session.get(SourceDocument, doc_id)
+                if not doc:
+                    return False
 
-        del self.source_document_store.documents[doc_id]
-        self._save_source_documents()
-        logger.info(f"Source document deleted: {doc_id}")
-        return True
+                # Delete file
+                if os.path.exists(doc.file_path):
+                    os.remove(doc.file_path)
+
+                # Delete from database
+                await session.delete(doc)
+                await session.commit()
+                return True
+
+        success = await _delete()
+
+        if success:
+            logger.info(f"Source document deleted: {doc_id}")
+        return success
 
     async def generate_test_case_drafts(
         self,
         source_document_id: str,
         params: GenerationParams,
+        progress_callback: Optional[Callable[[int, int, str], Awaitable[None]]] = None,
     ) -> List[TestCaseDraft]:
         """根据源文档生成测试用例草稿"""
-        doc = self.source_document_store.documents.get(source_document_id)
+        async with self.db_session_factory() as session:
+            stmt = select(SourceDocument).where(SourceDocument.id == source_document_id)
+            result = await session.execute(stmt)
+            doc = result.scalar_one_or_none()
         if not doc:
             raise ValueError(f"源文档不存在: {source_document_id}")
 
@@ -891,9 +1356,15 @@ class RagTestManager:
                         content_to_use = full_content[:4000] + "..."
                     else:
                         content_to_use = full_content
-                    logger.info(f"Loaded full document content, length: {len(content_to_use)}")
+                    logger.info(
+                f"Loaded full document content, length: {len(content_to_use)}"
+            )
         except Exception as e:
             logger.warning(f"Failed to load full document content, using summary: {e}")
+
+        # 通知前端：文档加载完成，开始生成
+        if progress_callback:
+            await progress_callback(0, params.count, "已加载文档内容，开始生成测试用例")
 
         # 分批生成，每次生成3个，避免LLM输出截断
         batch_size = 3
@@ -904,12 +1375,6 @@ class RagTestManager:
         try:
             if not settings.dashscope_api_key:
                 raise ValueError("DASHSCOPE_API_KEY 未配置，无法调用大模型")
-
-            llm = DashScope(
-                model=params.llm_model,
-                api_key=settings.dashscope_api_key,
-                temperature=params.temperature,
-            )
 
             import re
             import json_repair
@@ -924,21 +1389,63 @@ class RagTestManager:
 
             while generated_count < total_needed:
                 current_batch_count = min(batch_size, total_needed - generated_count)
-                logger.info(f"Generating batch {generated_count//batch_size + 1}, count: {current_batch_count}")
-                
+                batch_num = generated_count // batch_size + 1
+                total_batch = (total_needed + batch_size - 1) // batch_size
+                logger.info(
+                    f"Generating batch {batch_num}/{total_batch}, count: {current_batch_count}"
+                )
+                # 通知前端：开始生成当前批次
+                if progress_callback:
+                    await progress_callback(
+                        generated_count,
+                        params.count,
+                        f"正在生成第 {batch_num}/{total_batch} 批测试用例"
+                    )
+
                 prompt = TEST_CASE_DRAFT_GENERATION_PROMPT.format(
                     count=current_batch_count,
                     text=content_to_use,
-                    domains=",".join(params.target_domains) if params.target_domains else "通用领域",
+                    domains=",".join(params.target_domains)
+                    if params.target_domains
+                    else "通用领域",
                     age_range_min=params.age_range[0],
                     age_range_max=params.age_range[1],
                 )
 
                 try:
-                    response = await llm.acomplete(prompt)
-                    response_text = str(response.text).strip()
+                    # 使用工厂创建 LLM 实例
+                    llm = LLMServiceFactory.create(
+                        framework=LLMFramework.LLAMAINDEX,
+                        model_name=params.llm_model,
+                        scenario="test_case_generation",
+                        temperature=params.temperature,
+                    )
 
-                    json_match = re.search(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
+                    # 构建提示词
+                    messages = [
+                        LLMMessage(
+                            role="system",
+                            content="你是一个专业的测试用例生成专家，根据文档内容生成相关的测试用例。",
+                        ),
+                        LLMMessage(role="user", content=prompt),
+                    ]
+
+                    # 调用 LLM
+                    response = await llm.chat(
+                        LLMRequest(
+                            messages=messages,
+                            model_name=params.llm_model,
+                            temperature=params.temperature,
+                            max_tokens=4096,
+                            scenario="test_case_generation",
+                            prompt_key="test_case_draft_generation",
+                        )
+                    )
+                    response_text = response.content.strip()
+
+                    json_match = re.search(
+                        r"```json\s*(.*?)\s*```", response_text, re.DOTALL
+                    )
                     if json_match:
                         json_str = json_match.group(1)
                     else:
@@ -952,16 +1459,20 @@ class RagTestManager:
                     try:
                         data = json.loads(json_str)
                     except json.JSONDecodeError as je:
-                        logger.warning(f"Standard JSON decode failed, attempting repair: {je}")
+                        logger.warning(
+                            f"Standard JSON decode failed, attempting repair: {je}"
+                        )
                         data = json_repair.loads(json_str)
-                        
+
                     if not isinstance(data, dict):
                         # 如果 json_repair 修复后依然不是 dict，可能是被解析成了字符串或其他类型
                         # 我们尝试重新包装一下
                         if isinstance(data, list):
                             data = {"drafts": data}
                         else:
-                            raise ValueError("LLM response did not parse into a JSON object")
+                            raise ValueError(
+                                "LLM response did not parse into a JSON object"
+                            )
 
                     draft_list = data.get("drafts", [])
                     if not isinstance(draft_list, list):
@@ -970,27 +1481,58 @@ class RagTestManager:
                             draft_list = data
                         else:
                             raise ValueError("'drafts' field is missing or not a list")
-                    
+
                     for item in draft_list:
                         if generated_count >= total_needed:
                             break
+                        
+                        # map domain from prompt target_domains to TestDomain enum
+                        # Default to sensory_integration if not matching
+                        domain_mapping = {
+                            "粗大动作": TestDomain.GROSS_MOTOR,
+                            "精细动作": TestDomain.FINE_MOTOR,
+                            "语言发展": TestDomain.LANGUAGE,
+                            "认知能力": TestDomain.COGNITIVE,
+                            "社交情感": TestDomain.SOCIAL_EMOTIONAL,
+                            "感觉统合": TestDomain.SENSORY_INTEGRATION,
+                        }
+                        
+                        try:
+                            target_domain_str = params.target_domains[0] if params.target_domains else "感觉统合"
+                            test_domain = domain_mapping.get(target_domain_str, TestDomain.SENSORY_INTEGRATION)
+                        except Exception:
+                            test_domain = TestDomain.SENSORY_INTEGRATION
+                            
                         draft = TestCaseDraft(
+                            id=str(uuid.uuid4()),
                             source_document_id=source_document_id,
                             query=item.get("query", ""),
                             age=params.age_range[0],
-                            domain=params.target_domains[0] if params.target_domains else "",
+                            domain=test_domain,
                             description=item.get("description", ""),
                             expected_knowledge_ids=[],
-                            expected_keywords=ensure_list(item.get("expected_keywords", [])),
+                            expected_keywords=ensure_list(
+                                item.get("expected_keywords", [])
+                            ),
                             answer_points=ensure_list(item.get("answer_points", [])),
-                            professional_terms=ensure_list(item.get("professional_terms", [])),
+                            professional_terms=ensure_list(
+                                item.get("professional_terms", [])
+                            ),
                             age_requirement=f"{params.age_range[0]}-{params.age_range[1]}岁",
-                            generation_params=params,
+                            generation_params=params.model_dump(mode="json", exclude_unset=True)
+                            if hasattr(params, "model_dump")
+                            else {k: str(v) for k, v in params.__dict__.items() if not k.startswith("_")},
                             status=DraftStatus.DRAFT,
                         )
                         all_drafts.append(draft)
-                        self.test_case_draft_store.drafts[draft.id] = draft
                         generated_count += 1
+                        # 通知前端：当前批次生成完成
+                        if progress_callback:
+                            await progress_callback(
+                                generated_count,
+                                params.count,
+                                f"已生成 {generated_count}/{params.count} 个测试用例"
+                            )
 
                 except Exception as batch_e:
                     logger.error(f"Batch generation failed: {batch_e}")
@@ -1000,116 +1542,163 @@ class RagTestManager:
                         raise
                     break
 
-            self._save_drafts()
-            logger.info(f"Generated {len(all_drafts)} drafts for document {source_document_id}")
+            logger.info(
+                f"Generated {len(all_drafts)} drafts for document {source_document_id}"
+            )
+
+            # Save drafts to database
+            async with self.db_session_factory() as session:
+                try:
+                    for draft in all_drafts:
+                        session.add(draft)
+                    await session.commit()
+                    # Refresh to get IDs
+                    for draft in all_drafts:
+                        await session.refresh(draft)
+                except Exception as e:
+                    logger.error(f"Failed to save test case drafts: {str(e)}", exc_info=True)
+                    await session.rollback()
+                    raise
 
             return all_drafts
 
         except Exception as e:
-            logger.error(f"Failed to generate drafts using LLM: {e}")
+            logger.error(f"Failed to generate drafts using LLM: {e}", exc_info=True)
             raise ValueError(f"生成测试用例草稿失败: {str(e)}")
 
-    def list_drafts(self, source_document_id: Optional[str] = None) -> List[TestCaseDraft]:
+    async def list_drafts(
+        self, source_document_id: Optional[str] = None
+    ) -> List[TestCaseDraft]:
         """列出草稿（仅显示待审核状态）"""
-        drafts = list(self.test_case_draft_store.drafts.values())
-        # 只返回待审核的草稿，已导入的不再显示在草稿列表
-        drafts = [d for d in drafts if d.status == DraftStatus.DRAFT]
-        if source_document_id:
-            drafts = [d for d in drafts if d.source_document_id == source_document_id]
-        return drafts
-
-    def get_draft(self, draft_id: str) -> Optional[TestCaseDraft]:
-        """获取单个草稿"""
-        return self.test_case_draft_store.drafts.get(draft_id)
-
-    def update_draft(self, draft_id: str, updates: Dict) -> Optional[TestCaseDraft]:
-        """更新草稿"""
-        draft = self.test_case_draft_store.drafts.get(draft_id)
-        if not draft:
-            return None
-
-        for key, value in updates.items():
-            if hasattr(draft, key):
-                setattr(draft, key, value)
-        draft.updated_at = datetime.now()
-
-        self._save_drafts()
-        return draft
-
-    def review_draft(self, draft_id: str, action: str) -> Optional[TestCaseDraft]:
-        """审核草稿: action = reviewed/rejected"""
-        draft = self.test_case_draft_store.drafts.get(draft_id)
-        if not draft:
-            return None
-
-        if action == "reviewed":
-            draft.status = DraftStatus.REVIEWED
-            draft.updated_at = datetime.now()
-            # 审核通过后自动导入为正式测试用例
-            test_case = TestCase(
-                query=draft.query,
-                age=draft.age,
-                domain=draft.domain,
-                expected_knowledge_ids=draft.expected_knowledge_ids,
-                expected_keywords=draft.expected_keywords,
-                description=draft.description,
-                answer_points=draft.answer_points,
-                professional_terms=draft.professional_terms,
-                age_requirement=draft.age_requirement,
-                source_document_id=draft.source_document_id,
+        async with self.db_session_factory() as session:
+            stmt = select(TestCaseDraft).where(
+                TestCaseDraft.status == DraftStatus.DRAFT
             )
-            self.test_case_store.test_cases[test_case.id] = test_case
-            draft.status = DraftStatus.IMPORTED
-            self._save_test_cases()
-            self._save_drafts()
-            logger.info(f"Draft {draft_id} reviewed and imported as test case {test_case.id}")
-        elif action == "rejected":
-            # 拒绝后自动删除草稿
-            deleted_draft = draft.model_copy()
-            del self.test_case_draft_store.drafts[draft_id]
-            self._save_drafts()
-            logger.info(f"Draft {draft_id} rejected and deleted")
-            return deleted_draft
-        else:
-            raise ValueError(f"无效的审核操作: {action}")
+            if source_document_id:
+                stmt = stmt.where(
+                    TestCaseDraft.source_document_id == source_document_id
+                )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
 
-        return draft
+    async def get_draft(self, draft_id: str) -> Optional[TestCaseDraft]:
+        """获取单个草稿"""
+        async with self.db_session_factory() as session:
+            return await session.get(TestCaseDraft, draft_id)
 
-    def import_reviewed_drafts(self, draft_ids: List[str]) -> Dict:
+    async def update_draft(
+        self, draft_id: str, updates: Dict
+    ) -> Optional[TestCaseDraft]:
+        """更新草稿"""
+        async with self.db_session_factory() as session:
+            draft = await session.get(TestCaseDraft, draft_id)
+            if not draft:
+                return None
+
+            for key, value in updates.items():
+                if hasattr(draft, key):
+                    setattr(draft, key, value)
+            draft.updated_at = datetime.now()
+            await session.commit()
+            await session.refresh(draft)
+            return draft
+
+    async def review_draft(self, draft_id: str, action: str) -> Optional[TestCaseDraft]:
+        """审核草稿: action = reviewed/rejected"""
+        async with self.db_session_factory() as session:
+            try:
+                draft = await session.get(TestCaseDraft, draft_id)
+                if not draft:
+                    return None
+
+                if action == "reviewed":
+                    draft.status = DraftStatus.REVIEWED
+                    draft.updated_at = datetime.now()
+                    # 审核通过后自动导入为正式测试用例
+                    test_case = TestCase(
+                        id=str(uuid.uuid4()),
+                        query=draft.query,
+                        age=draft.age,
+                        domain=draft.domain,
+                        expected_knowledge_ids=draft.expected_knowledge_ids,
+                        expected_keywords=draft.expected_keywords,
+                        description=draft.description,
+                        professional_terms=draft.professional_terms,
+                        source_document_id=draft.source_document_id,
+                        # 补充默认值，避免必填字段缺失
+                        expected_knowledge_count=len(draft.expected_knowledge_ids) if draft.expected_knowledge_ids else 0,
+                        answer_points_summary=draft.answer_points[0] if draft.answer_points and len(draft.answer_points) > 0 else "",
+                        min_age_requirement=draft.age,
+                        max_age_requirement=draft.age + 1,
+                        difficulty_level=DifficultyLevel.MEDIUM
+                    )
+                    session.add(test_case)
+                    draft.status = DraftStatus.IMPORTED
+                    await session.commit()
+                    await session.refresh(draft)
+                    logger.info(
+                        f"Draft {draft_id} reviewed and imported as test case {test_case.id}"
+                    )
+                elif action == "rejected":
+                    # 拒绝后自动删除草稿
+                    deleted_draft = draft.model_copy()
+                    await session.delete(draft)
+                    await session.commit()
+                    logger.info(f"Draft {draft_id} rejected and deleted")
+                    return deleted_draft
+                else:
+                    raise ValueError(f"无效的审核操作: {action}")
+
+                return draft
+            except Exception as e:
+                logger.error(f"审核草稿失败: {str(e)}", exc_info=True)
+                await session.rollback()
+                raise ValueError(f"审核草稿失败: {str(e)}")
+
+    async def import_reviewed_drafts(self, draft_ids: List[str]) -> Dict:
         """将已审核的草稿导入为正式测试用例"""
         imported_ids = []
         failed_ids = []
 
-        for draft_id in draft_ids:
-            draft = self.test_case_draft_store.drafts.get(draft_id)
-            if not draft:
-                failed_ids.append({"draft_id": draft_id, "error": "草稿不存在"})
-                continue
+        async with self.db_session_factory() as session:
+            # 单次查询获取所有草稿，避免N+1问题
+            stmt = select(TestCaseDraft).where(TestCaseDraft.id.in_(draft_ids))
+            result = await session.execute(stmt)
+            drafts = result.scalars().all()
+            
+            # 创建id到draft的映射，方便查找
+            draft_map = {draft.id: draft for draft in drafts}
+            
+            for draft_id in draft_ids:
+                draft = draft_map.get(draft_id)
+                if not draft:
+                    failed_ids.append({"draft_id": draft_id, "error": "草稿不存在"})
+                    continue
 
-            if draft.status != DraftStatus.REVIEWED:
-                failed_ids.append({"draft_id": draft_id, "error": "草稿未通过审核"})
-                continue
+                if draft.status != DraftStatus.REVIEWED:
+                    failed_ids.append({"draft_id": draft_id, "error": "草稿未通过审核"})
+                    continue
 
-            test_case = TestCase(
-                query=draft.query,
-                age=draft.age,
-                domain=draft.domain,
-                expected_knowledge_ids=draft.expected_knowledge_ids,
-                expected_keywords=draft.expected_keywords,
-                description=draft.description,
-                answer_points=draft.answer_points,
-                professional_terms=draft.professional_terms,
-                age_requirement=draft.age_requirement,
-                source_document_id=draft.source_document_id,
-            )
+                test_case = TestCase(
+                    id=str(uuid.uuid4()),
+                    query=draft.query,
+                    age=draft.age,
+                    domain=draft.domain,
+                    expected_knowledge_ids=draft.expected_knowledge_ids,
+                    expected_keywords=draft.expected_keywords,
+                    description=draft.description,
+                    answer_points=draft.answer_points,
+                    professional_terms=draft.professional_terms,
+                    age_requirement=draft.age_requirement,
+                    source_document_id=draft.source_document_id,
+                )
 
-            self.test_case_store.test_cases[test_case.id] = test_case
-            draft.status = DraftStatus.IMPORTED
-            draft.updated_at = datetime.now()
-            imported_ids.append(test_case.id)
+                session.add(test_case)
+                draft.status = DraftStatus.IMPORTED
+                draft.updated_at = datetime.now()
+                imported_ids.append(test_case.id)
 
-        self._save_test_cases()
-        self._save_drafts()
+            await session.commit()
 
         return {
             "imported_count": len(imported_ids),
@@ -1118,88 +1707,250 @@ class RagTestManager:
             "errors": failed_ids,
         }
 
-    def create_test_set(self, name: str, description: str = "", source_type: str = "manual") -> TestSet:
+    def create_test_set(
+        self, name: str, description: str = "", source_type: str = "manual"
+    ) -> TestSet:
         """创建测试集"""
-        test_set = TestSet(
-            name=name,
-            description=description,
-            source_type=source_type,
-        )
-        self.test_set_store.test_sets[test_set.id] = test_set
-        self._save_test_sets()
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _create():
+            async with self.db_session_factory() as session:
+                test_set = TestSet(
+                    id=str(uuid.uuid4()),
+                    name=name,
+                    description=description,
+                    source_type=TestSourceType(source_type),
+                )
+                session.add(test_set)
+                await session.commit()
+                await session.refresh(test_set)
+                return test_set
+
+        test_set = loop.run_until_complete(_create())
+        loop.close()
+
         logger.info(f"Test set created: {test_set.id} - {name}")
         return test_set
 
     def list_test_sets(self) -> List[TestSet]:
         """列出所有测试集"""
-        return list(self.test_set_store.test_sets.values())
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _get_all():
+            async with self.db_session_factory() as session:
+                stmt = select(TestSet).order_by(TestSet.created_at.desc())
+                result = await session.execute(stmt)
+                return list(result.scalars().all())
+
+        sets = loop.run_until_complete(_get_all())
+        loop.close()
+        return sets
 
     def get_test_set(self, test_set_id: str) -> Optional[TestSet]:
         """获取单个测试集"""
-        return self.test_set_store.test_sets.get(test_set_id)
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _get_one():
+            async with self.db_session_factory() as session:
+                test_set = await session.get(TestSet, test_set_id)
+                if test_set:
+                    # Get associated test case IDs
+                    stmt = select(TestSetCase.test_case_id).where(
+                        TestSetCase.test_set_id == test_set_id
+                    )
+                    result = await session.execute(stmt)
+                    test_set.test_case_ids = [row[0] for row in result.all()]
+                return test_set
+
+        test_set = loop.run_until_complete(_get_one())
+        loop.close()
+        return test_set
 
     def update_test_set(self, test_set_id: str, updates: Dict) -> Optional[TestSet]:
         """更新测试集"""
-        test_set = self.test_set_store.test_sets.get(test_set_id)
-        if not test_set:
-            return None
+        import asyncio
 
-        for key, value in updates.items():
-            if hasattr(test_set, key):
-                setattr(test_set, key, value)
-        test_set.updated_at = datetime.now()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        self._save_test_sets()
+        async def _update():
+            async with self.db_session_factory() as session:
+                test_set = await session.get(TestSet, test_set_id)
+                if not test_set:
+                    return None
+
+                for key, value in updates.items():
+                    if hasattr(test_set, key):
+                        setattr(test_set, key, value)
+                test_set.updated_at = datetime.now()
+
+                await session.commit()
+                await session.refresh(test_set)
+
+                # Get associated test case IDs
+                stmt = select(TestSetCase.test_case_id).where(
+                    TestSetCase.test_set_id == test_set_id
+                )
+                result = await session.execute(stmt)
+                test_set.test_case_ids = [row[0] for row in result.all()]
+
+                return test_set
+
+        test_set = loop.run_until_complete(_update())
+        loop.close()
         return test_set
 
     def delete_test_set(self, test_set_id: str) -> bool:
         """删除测试集"""
-        if test_set_id not in self.test_set_store.test_sets:
-            return False
+        import asyncio
 
-        del self.test_set_store.test_sets[test_set_id]
-        self._save_test_sets()
-        logger.info(f"Test set deleted: {test_set_id}")
-        return True
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-    def add_test_cases_to_set(self, test_set_id: str, case_ids: List[str]) -> Optional[TestSet]:
+        async def _delete():
+            async with self.db_session_factory() as session:
+                test_set = await session.get(TestSet, test_set_id)
+                if not test_set:
+                    return False
+
+                await session.delete(test_set)
+                await session.commit()
+                return True
+
+        success = loop.run_until_complete(_delete())
+        loop.close()
+
+        if success:
+            logger.info(f"Test set deleted: {test_set_id}")
+        return success
+
+    def add_test_cases_to_set(
+        self, test_set_id: str, case_ids: List[str]
+    ) -> Optional[TestSet]:
         """添加测试用例到测试集"""
-        test_set = self.test_set_store.test_sets.get(test_set_id)
-        if not test_set:
-            return None
+        import asyncio
 
-        for case_id in case_ids:
-            if case_id not in test_set.test_case_ids:
-                test_set.test_case_ids.append(case_id)
-        test_set.updated_at = datetime.now()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        self._save_test_sets()
+        async def _add():
+            async with self.db_session_factory() as session:
+                test_set = await session.get(TestSet, test_set_id)
+                if not test_set:
+                    return None
+
+                # Get existing case IDs
+                stmt = select(TestSetCase.test_case_id).where(
+                    TestSetCase.test_set_id == test_set_id
+                )
+                result = await session.execute(stmt)
+                existing_ids = [row[0] for row in result.all()]
+
+                # Add new cases
+                for case_id in case_ids:
+                    if case_id not in existing_ids:
+                        ts_case = TestSetCase(
+                            test_set_id=test_set_id, test_case_id=case_id
+                        )
+                        session.add(ts_case)
+
+                await session.commit()
+                await session.refresh(test_set)
+
+                # Get updated case IDs
+                stmt = select(TestSetCase.test_case_id).where(
+                    TestSetCase.test_set_id == test_set_id
+                )
+                result = await session.execute(stmt)
+                test_set.test_case_ids = [row[0] for row in result.all()]
+
+                return test_set
+
+        test_set = loop.run_until_complete(_add())
+        loop.close()
         return test_set
 
-    def remove_test_cases_from_set(self, test_set_id: str, case_ids: List[str]) -> Optional[TestSet]:
+    def remove_test_cases_from_set(
+        self, test_set_id: str, case_ids: List[str]
+    ) -> Optional[TestSet]:
         """从测试集移除测试用例"""
-        test_set = self.test_set_store.test_sets.get(test_set_id)
-        if not test_set:
-            return None
+        import asyncio
 
-        test_set.test_case_ids = [cid for cid in test_set.test_case_ids if cid not in case_ids]
-        test_set.updated_at = datetime.now()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        self._save_test_sets()
+        async def _remove():
+            async with self.db_session_factory() as session:
+                test_set = await session.get(TestSet, test_set_id)
+                if not test_set:
+                    return None
+
+                # Delete specified cases
+                stmt = select(TestSetCase).where(
+                    TestSetCase.test_set_id == test_set_id,
+                    TestSetCase.test_case_id.in_(case_ids),
+                )
+                result = await session.execute(stmt)
+                for ts_case in result.scalars().all():
+                    await session.delete(ts_case)
+
+                await session.commit()
+                await session.refresh(test_set)
+
+                # Get updated case IDs
+                stmt = select(TestSetCase.test_case_id).where(
+                    TestSetCase.test_set_id == test_set_id
+                )
+                result = await session.execute(stmt)
+                test_set.test_case_ids = [row[0] for row in result.all()]
+
+                return test_set
+
+        test_set = loop.run_until_complete(_remove())
+        loop.close()
         return test_set
 
     def export_test_set(self, test_set_id: str) -> Optional[List[Dict]]:
         """导出测试集为JSON"""
-        test_set = self.test_set_store.test_sets.get(test_set_id)
-        if not test_set:
-            return None
+        import asyncio
 
-        cases = []
-        for case_id in test_set.test_case_ids:
-            case = self.test_case_store.test_cases.get(case_id)
-            if case:
-                cases.append(case.model_dump())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
+        async def _export():
+            async with self.db_session_factory() as session:
+                # Get test set
+                test_set = await session.get(TestSet, test_set_id)
+                if not test_set:
+                    return None
+
+                # Get test case IDs
+                stmt = select(TestSetCase.test_case_id).where(
+                    TestSetCase.test_set_id == test_set_id
+                )
+                result = await session.execute(stmt)
+                case_ids = [row[0] for row in result.all()]
+
+                # Get test cases
+                cases = []
+                for case_id in case_ids:
+                    case = await session.get(TestCase, case_id)
+                    if case:
+                        cases.append(case.model_dump())
+
+                return cases
+
+        cases = loop.run_until_complete(_export())
+        loop.close()
         return cases
 
 

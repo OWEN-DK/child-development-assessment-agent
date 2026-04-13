@@ -1,0 +1,106 @@
+# RAG 查询流水线配置
+pipeline:
+  name: "rag_query_pipeline"
+  version: "1.0.0"
+  description: "RAG 查询流水线配置"
+
+# 全局配置
+global:
+  cache_enabled: true
+  cache_ttl: 3600
+  timeout_ms: 30000
+  max_retries: 2
+
+# 双流水线配置（根据查询复杂度路由）
+pipelines:
+  simple:  # 事实性/定义性问题，跳过大模型重写
+    - name: cache_check
+      enabled: true
+      config:
+        cache_key_prefix: "rag:query"
+        ttl: 3600
+    
+    - name: hybrid_retrieval
+      enabled: true
+      config:
+        bm25_top_k: 10
+        vector_top_k: 10
+        bm25_weight: 0.5
+        vector_weight: 0.5
+        fusion_mode: "reciprocal_rank"
+    
+    - name: reranking
+      enabled: true
+      config:
+        model: "BAAI/bge-reranker-v2-m3"
+        initial_k: 30
+        final_k: 5
+    
+    - name: deduplication
+      enabled: true
+      config:
+        similarity_threshold: 0.85
+        use_exact_match: true
+        use_containment: true
+
+  complex:  # 比较分析/多步骤问题，启用全量增强
+    - name: cache_check
+      enabled: true
+      config:
+        cache_key_prefix: "rag:query"
+        ttl: 3600
+    
+    - name: query_rewrite
+      enabled: true
+      config:
+        model: "qwen-plus"
+        temperature: 0.3
+    
+    - name: synonym_expansion
+      enabled: true
+      config:
+        model: "qwen-plus"
+        max_synonyms: 5
+        min_length: 2
+        max_length: 10
+    
+    - name: age_filter
+      enabled: true
+      config:
+        strictness: 0.7
+        tolerance: 2
+    
+    - name: hybrid_retrieval
+      enabled: true
+      config:
+        bm25_top_k: 10
+        vector_top_k: 10
+        bm25_weight: 0.5
+        vector_weight: 0.5
+        fusion_mode: "reciprocal_rank"
+    
+    - name: reranking
+      enabled: true
+      config:
+        model: "BAAI/bge-reranker-v2-m3"
+        initial_k: 30
+        final_k: 5
+    
+    - name: deduplication
+      enabled: true
+      config:
+        similarity_threshold: 0.85
+        use_exact_match: true
+        use_containment: true
+    
+    - name: pageindex_enhancement
+      enabled: true  # 仅复杂查询启用
+      config:
+        fuse_factor: 1.2
+        max_hybrid_supplement: 5
+
+# 错误降级配置
+fallback:
+  on_step_failure: "skip"  # skip: 跳过失败步骤，abort: 中止流水线
+  on_timeout: "return_partial"  # return_partial: 返回部分结果，abort: 中止
+  min_results: 3  # 最少返回结果数

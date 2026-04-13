@@ -2,10 +2,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from src.model.schemas import UserInput, AgentState
 from src.core.graph import agent_app
-from llama_index.llms.dashscope import DashScope
 from src.config import settings
 from src.utils.logger import logger
 import json
+from src.core.llm.factory import LLMServiceFactory, LLMFramework
 import asyncio
 
 router = APIRouter()
@@ -71,43 +71,55 @@ async def stream_report_generation(result: dict):
     yield f"event: data\ndata: {json.dumps(metadata, ensure_ascii=False)}\n\n"
 
     # 2. 流式生成 Markdown 内容
-    logger.info(f"Starting streaming report generation, prompts count: {len(prompts)}, prompt length: {len(prompts[0]) if prompts else 0}")
+    logger.info(
+        f"Starting streaming report generation, prompts count: {len(prompts)}, prompt length: {len(prompts[0]) if prompts else 0}"
+    )
     if settings.dashscope_api_key and prompts:
-        try:
-            llm = DashScope(
-                model=settings.llm_models["report_generation"],
-                api_key=settings.dashscope_api_key,
-                max_tokens=8000,
-                temperature=0.7,
-                top_p=0.8,
-            )
-            logger.info("LLM initialized successfully for streaming")
-        except Exception as e:
-            logger.error(f"Failed to initialize LLM: {e}")
-            error_msg = f"\n[LLM Initialization Error: {str(e)}]\n"
-            yield f"event: message\ndata: {json.dumps(error_msg, ensure_ascii=False)}\n\n"
-
         # 顺序生成所有部分以保证流的顺序
         for i, prompt in enumerate(prompts):
             try:
-                # 使用 stream_complete 方法进行流式生成
-                # Note: LlamaIndex stream_complete returns a generator
-                logger.info(f"Starting LLM stream for prompt {i+1}/{len(prompts)}")
-                response_gen = await llm.astream_complete(prompt)
+                # 使用工厂创建 LLM 实例
+                llm = LLMServiceFactory.create(
+                    framework=LLMFramework.LLAMAINDEX,
+                    model_name=settings.llm_models["report_generation"],
+                    scenario="report_generation_streaming",
+                    temperature=0.7,
+                )
+
+                # 构建提示词
+                from src.core.llm.base import LLMRequest, LLMMessage
+
+                messages = [
+                    LLMMessage(
+                        role="system",
+                        content="你是一个专业的儿童发展评估报告撰写专家，根据提供的评估数据生成清晰、专业、易于家长理解的Markdown格式报告。",
+                    ),
+                    LLMMessage(role="user", content=prompt),
+                ]
+
+                # 使用流式聊天接口
+                logger.info(f"Starting LLM stream for prompt {i + 1}/{len(prompts)}")
                 chunk_count = 0
-                async for chunk in response_gen:
-                    # 获取当前 delta 内容
-                    delta = chunk.delta
-                    if delta:
-                        chunk_count += 1
-                        if chunk_count % 10 == 0:  # 每10个chunk打一次日志
-                            logger.debug(f"Received chunk {chunk_count}, delta length: {len(delta)}")
-                        # 替换换行符以适应 SSE 格式
-                        # SSE format requires "data: <content>\n\n"
-                        # We send JSON string to preserve newlines
-                        safe_delta = json.dumps(delta, ensure_ascii=False)
-                        yield f"event: message\ndata: {safe_delta}\n\n"
-                logger.info(f"Completed LLM stream for prompt {i+1}, total chunks: {chunk_count}")
+                async for delta in llm.chat_stream(
+                    LLMRequest(
+                        messages=messages,
+                        model_name=settings.llm_models["report_generation"],
+                        temperature=0.7,
+                        max_tokens=8000,
+                        scenario="report_generation_streaming",
+                        prompt_key="report_generation",
+                    )
+                ):
+                    chunk_count += 1
+                    if chunk_count % 10 == 0:
+                        logger.debug(
+                            f"Received chunk {chunk_count}, delta length: {len(delta)}"
+                        )
+                    safe_delta = json.dumps(delta, ensure_ascii=False)
+                    yield f"event: message\ndata: {safe_delta}\n\n"
+                logger.info(
+                    f"Completed LLM stream for prompt {i + 1}, total chunks: {chunk_count}"
+                )
 
                 # 多部分之间添加分隔符
                 if i < len(prompts) - 1:
@@ -115,7 +127,7 @@ async def stream_report_generation(result: dict):
                     yield f"event: message\ndata: {json.dumps(sep, ensure_ascii=False)}\n\n"
 
             except Exception as e:
-                logger.error(f"Error during prompt {i+1} generation: {e}")
+                logger.error(f"Error during prompt {i + 1} generation: {e}")
                 error_msg = f"\n[Generation Error: {str(e)}]\n"
                 yield f"event: message\ndata: {json.dumps(error_msg, ensure_ascii=False)}\n\n"
     else:

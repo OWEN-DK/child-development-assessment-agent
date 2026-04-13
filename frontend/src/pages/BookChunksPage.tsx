@@ -252,7 +252,7 @@ const BookChunksPage = () => {
         onCancel={() => setDetailModalVisible(false)}
         width={800}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         {detailLoading ? (
           <div style={{ textAlign: 'center', padding: '20px' }}>加载中...</div>

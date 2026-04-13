@@ -51,8 +51,8 @@ export const SystemConfigPage: React.FC = () => {
   };
 
   // Build tree data for sidebar
-  const treeData = useMemo<TreeProps['treeData']>(() => {
-    const root = [
+  const treeData = useMemo<any[]>(() => {
+    const root: any[] = [
       {
         title: '全部配置',
         key: 'all',
@@ -119,7 +119,7 @@ export const SystemConfigPage: React.FC = () => {
         root.push({
           title: mainTitle,
           key: mainCategory,
-          children,
+          children: children as any,
           isLeaf: false,
         });
       }

@@ -1,61 +1,50 @@
 import asyncio
-from typing import Dict, Any, Optional, List
+import uuid
+from typing import Any
 from datetime import datetime
-from src.config import settings, Settings, rules
-from src.config.core.repository import JsonConfigRepository, ConfigRepository
-from src.config.core.events import ConfigChangedEvent, ConfigRollbackEvent, ConfigResetEvent
+from src.config.core.entities import ConfigVersion
+from src.service.cache_service import cache_service
 from src.core.event_bus import event_bus
+from src.config.core.events import ConfigChangedEvent
+from src.core.crypto import crypto_service
+from src.config import settings as current_settings, rules
 from src.utils.logger import logger
 
 
 class ConfigManager:
+    """配置管理器，支持MySQL持久化、Redis缓存、热更新、版本控制"""
 
     _instance = None
-    _initialized = False
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._init()
         return cls._instance
 
-    def __init__(self):
-        if self._initialized:
-            return
-        self._repository = JsonConfigRepository()
-        self._memory_cache: Dict[str, Any] = {}
-        self._active_version: Optional[str] = None
-        self._lock = asyncio.Lock()
-        self._load_active_config()
-        ConfigManager._initialized = True
+    def _init(self):
+        self._current_version: ConfigVersion | None = None
+        self._cache_key_prefix = "config:version:"
+        self._lock_name = "config:reload"
+        self._version_repo = None
+        self._audit_log_repo = None
 
-    def _load_active_config(self):
-        default_config = self._extract_config_from_settings()
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        active_version = loop.run_until_complete(
-            self._repository.get_active_version()
-        )
-
-        if active_version:
-            version_data = loop.run_until_complete(
-                self._repository.get_version(active_version)
+    def _get_repos(self):
+        """懒加载Repository实例"""
+        if self._version_repo is None:
+            from src.core.database import async_session_factory
+            from src.repository import (
+                ConfigVersionRepository,
+                ConfigAuditLogRepository,
             )
-            if version_data:
-                self._memory_cache = {**default_config, **version_data["config_snapshot"]}
-                self._active_version = active_version
-                logger.info(f"Loaded config version: {active_version}")
-        else:
-            self._memory_cache = default_config
-            logger.info("Using default config from .env.dev")
 
-    def _extract_config_from_settings(self) -> Dict[str, Any]:
-        config = settings.model_dump()
-        
+            self._version_repo = ConfigVersionRepository(async_session_factory)
+            self._audit_log_repo = ConfigAuditLogRepository(async_session_factory)
+        return self._version_repo, self._audit_log_repo
+
+    def _extract_config_from_settings(self) -> dict[str, Any]:
+        config = current_settings.model_dump()
+
         # Add rule configs
         rule_configs = {
             "rule_validation": rules.validation.model_dump(),
@@ -64,168 +53,284 @@ class ConfigManager:
             "rule_preprocessing": rules.preprocessing.model_dump(),
             "rule_metadata": rules.metadata.model_dump(),
         }
-        
+
         # Flatten rule configs
         for rule_group, rule_values in rule_configs.items():
             for key, value in rule_values.items():
                 config[f"{rule_group}_{key}"] = value
-        
+
         return config
 
-    async def update_config(
-        self,
-        config_updates: Dict[str, Any],
-        description: str = "",
-        created_by: str = "system"
-    ) -> Dict[str, Any]:
-        async with self._lock:
-            version_id = self._generate_version_id()
-            previous_version = self._active_version
+    async def load_latest_version(self) -> None:
+        """加载最新配置版本"""
+        # 优先从缓存获取
+        cache_key = f"{self._cache_key_prefix}latest"
+        cached = await cache_service.get(cache_key)
+        if cached:
+            self._current_version = ConfigVersion(**cached)
+            logger.info(f"配置已从缓存加载，版本: {self._current_version.id}")
+            return
 
-            new_config = {**self._memory_cache, **config_updates}
+        # 缓存未命中，从MySQL查询
+        version_repo, _ = self._get_repos()
+        latest_orm = await version_repo.get_latest_version()
+        if not latest_orm:
+            latest_orm = await self._create_initial_version()
+        self._current_version = ConfigVersion(
+            id=latest_orm.id,
+            created_at=latest_orm.created_at,
+            created_by=latest_orm.created_by,
+            description=latest_orm.description,
+            config_snapshot=latest_orm.config_snapshot,
+            parent_version_id=latest_orm.parent_version_id,
+            is_factory_reset=latest_orm.is_factory_reset,
+        )
+        await cache_service.set(
+            cache_key, self._current_version.model_dump(), expire=3600
+        )
+        logger.info(f"配置已从数据库加载，版本: {self._current_version.id}")
 
-            version_data = {
-                "version_id": version_id,
-                "created_at": datetime.utcnow().isoformat() + "Z",
-                "created_by": created_by,
-                "description": description,
-                "config_snapshot": new_config,
-                "parent_version_id": previous_version,
-                "is_factory_reset": False
+    async def _create_initial_version(self) -> "ConfigVersionORM":
+        """创建初始配置版本"""
+        from src.models.config import ConfigVersion as ConfigVersionORM, ConfigAction
+        from src.repository import ConfigAuditLogRepository
+
+        version_repo, audit_repo = self._get_repos()
+        initial_snapshot = self._extract_config_from_settings()
+        version_id = (
+            f"v_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        )
+
+        version_orm = await version_repo.create(
+            {
+                "id": version_id,
+                "created_at": datetime.now(),
+                "created_by": "system",
+                "description": "初始配置版本",
+                "config_snapshot": initial_snapshot,
+                "parent_version_id": None,
+                "is_factory_reset": True,
             }
+        )
 
-            await self._repository.save_version(version_data)
-
-            self._memory_cache = new_config
-            self._active_version = version_id
-
-            await self._repository.set_active_version(version_id)
-
-            await self._repository.append_audit_log({
-                "timestamp": version_data["created_at"],
-                "action": "UPDATE",
-                "from_version": previous_version,
+        await audit_repo.create(
+            {
+                "action": ConfigAction.RESET,
+                "from_version": None,
                 "to_version": version_id,
-                "user": created_by
-            })
-
-            changed_keys = list(config_updates.keys())
-            event_bus.publish(ConfigChangedEvent(
-                from_version=previous_version or "initial",
-                to_version=version_id,
-                changed_keys=changed_keys,
-                config_snapshot=new_config
-            ))
-
-            logger.info(f"Config updated to version {version_id}")
-
-            return {
-                "version_id": version_id,
-                "previous_version": previous_version,
-                "config_snapshot": new_config,
-                "changed_keys": changed_keys
+                "user": "system",
             }
+        )
+
+        return version_orm
+
+    async def save_new_version(
+        self,
+        config_snapshot: dict[str, Any],
+        description: str,
+        created_by: str = "system",
+    ) -> ConfigVersion:
+        """保存新的配置版本"""
+        from src.core.distributed_lock import DistributedLock
+        from src.models.config import ConfigAction
+
+        async with DistributedLock.execute_with_lock(self._lock_name):
+            version_repo, audit_repo = self._get_repos()
+            version_id = (
+                f"v_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
+
+            await version_repo.create(
+                {
+                    "id": version_id,
+                    "created_at": datetime.now(),
+                    "created_by": created_by,
+                    "description": description,
+                    "config_snapshot": config_snapshot,
+                    "parent_version_id": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "is_factory_reset": False,
+                }
+            )
+
+            await audit_repo.create(
+                {
+                    "action": ConfigAction.UPDATE,
+                    "from_version": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "to_version": version_id,
+                    "user": created_by,
+                }
+            )
+
+            new_version = ConfigVersion(
+                id=version_id,
+                created_at=datetime.now(),
+                created_by=created_by,
+                description=description,
+                config_snapshot=config_snapshot,
+                parent_version_id=self._current_version.id
+                if self._current_version
+                else None,
+                is_factory_reset=False,
+            )
+            self._current_version = new_version
+            await cache_service.delete(f"{self._cache_key_prefix}latest")
+            await cache_service.invalidate_tag("config")
+            event_bus.publish(
+                ConfigChangedEvent(
+                    version_id=new_version.id,
+                    changed_keys=list(config_snapshot.keys()),
+                )
+            )
+            logger.info(f"新配置版本已保存: {new_version.id}")
+            return new_version
+
+    async def rollback_to_version(
+        self, version_id: str, created_by: str = "system"
+    ) -> ConfigVersion:
+        """回滚到指定版本"""
+        from src.core.distributed_lock import DistributedLock
+        from src.models.config import ConfigAction
+
+        async with DistributedLock.execute_with_lock(self._lock_name):
+            version_repo, audit_repo = self._get_repos()
+            target_orm = await version_repo.get_by_id(version_id)
+            if not target_orm:
+                raise ValueError(f"配置版本不存在: {version_id}")
+
+            rollback_id = (
+                f"v_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
+            await version_repo.create(
+                {
+                    "id": rollback_id,
+                    "created_at": datetime.now(),
+                    "created_by": created_by,
+                    "description": f"回滚到版本: {version_id}",
+                    "config_snapshot": target_orm.config_snapshot,
+                    "parent_version_id": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "is_factory_reset": False,
+                }
+            )
+
+            await audit_repo.create(
+                {
+                    "action": ConfigAction.ROLLBACK,
+                    "from_version": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "to_version": rollback_id,
+                    "user": created_by,
+                }
+            )
+
+            rollback_version = ConfigVersion(
+                id=rollback_id,
+                created_at=datetime.now(),
+                created_by=created_by,
+                description=f"回滚到版本: {version_id}",
+                config_snapshot=target_orm.config_snapshot,
+                parent_version_id=self._current_version.id
+                if self._current_version
+                else None,
+                is_factory_reset=False,
+            )
+            self._current_version = rollback_version
+            await cache_service.delete(f"{self._cache_key_prefix}latest")
+            await cache_service.invalidate_tag("config")
+            event_bus.publish(
+                ConfigChangedEvent(
+                    version_id=rollback_version.id,
+                    changed_keys=list(target_orm.config_snapshot.keys()),
+                )
+            )
+            logger.info(
+                f"已回滚到配置版本: {version_id}, 新版本号: {rollback_version.id}"
+            )
+            return rollback_version
+
+    async def list_versions(self, limit: int = 50) -> list[dict]:
+        """列出配置版本"""
+        version_repo, _ = self._get_repos()
+        versions = await version_repo.get_version_history(skip=0, limit=limit)
+        return [
+            {
+                "id": v.id,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+                "created_by": v.created_by,
+                "description": v.description,
+                "config_snapshot": v.config_snapshot,
+                "parent_version_id": v.parent_version_id,
+                "is_factory_reset": v.is_factory_reset,
+            }
+            for v in versions
+        ]
+
+    async def get_version(self, version_id: str) -> dict | None:
+        """获取指定版本配置"""
+        version_repo, _ = self._get_repos()
+        version_orm = await version_repo.get_by_id(version_id)
+        if not version_orm:
+            return None
+        return {
+            "id": version_orm.id,
+            "created_at": version_orm.created_at.isoformat()
+            if version_orm.created_at
+            else None,
+            "created_by": version_orm.created_by,
+            "description": version_orm.description,
+            "config_snapshot": version_orm.config_snapshot,
+            "parent_version_id": version_orm.parent_version_id,
+            "is_factory_reset": version_orm.is_factory_reset,
+        }
+
+    @property
+    def current_config(self) -> dict[str, Any]:
+        """获取当前配置"""
+        if not self._current_version:
+            raise RuntimeError("配置尚未加载，请先调用 load_latest_version()")
+        return self._current_version.config_snapshot
+
+    @property
+    def current_version_id(self) -> str:
+        """获取当前配置版本ID"""
+        if not self._current_version:
+            raise RuntimeError("配置尚未加载，请先调用 load_latest_version()")
+        return self._current_version.id
 
     def get_config_value(self, key: str, default: Any = None) -> Any:
-        return self._memory_cache.get(key, default)
+        """获取配置值"""
+        return self.current_config.get(key, default)
 
-    def get_full_config(self) -> Dict[str, Any]:
-        return self._memory_cache.copy()
+    def get_full_config(self) -> dict[str, Any]:
+        """获取完整配置"""
+        return self.current_config.copy()
 
-    def get_active_version(self) -> Optional[str]:
-        return self._active_version
+    async def save_sensitive_config(
+        self, key: str, value: str, description: str = "", created_by: str = "system"
+    ) -> ConfigVersion:
+        """保存敏感配置（自动加密）"""
+        encrypted_value = crypto_service.encrypt(value)
+        new_config = self.current_config.copy()
+        new_config[key] = encrypted_value
+        return await self.save_new_version(new_config, description, created_by)
 
-    def list_versions(self, limit: int = 50) -> list:
-        """列出所有配置版本（公共方法，替代直接访问_repository）"""
+    def get_sensitive_config(self, key: str, default: str = None) -> str | None:
+        """读取敏感配置（自动解密）"""
+        encrypted_value = self.current_config.get(key)
+        if not encrypted_value:
+            return default
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(self._repository.list_versions(limit=limit))
-
-    def sync_cache_from_settings(self, new_settings) -> None:
-        """从Settings实例同步缓存（公共方法，替代直接访问_memory_cache）"""
-        self._memory_cache.clear()
-        for field_name, field_value in new_settings.model_dump().items():
-            self._memory_cache[field_name] = field_value
-        logger.info("ConfigManager 缓存已从 Settings 同步")
-
-    async def rollback_to_version(self, version_id: str) -> Dict[str, Any]:
-        async with self._lock:
-            version_data = await self._repository.get_version(version_id)
-            if not version_data:
-                raise ValueError(f"Version {version_id} not found")
-
-            previous_version = self._active_version
-
-            self._memory_cache = version_data["config_snapshot"]
-            self._active_version = version_id
-
-            await self._repository.set_active_version(version_id)
-
-            await self._repository.append_audit_log({
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "action": "ROLLBACK",
-                "from_version": previous_version,
-                "to_version": version_id,
-                "user": "system"
-            })
-
-            event_bus.publish(ConfigRollbackEvent(
-                from_version=previous_version or "initial",
-                to_version=version_id,
-                rollback_at=datetime.utcnow().isoformat() + "Z"
-            ))
-
-            return {
-                "version_id": version_id,
-                "previous_version": previous_version,
-                "config_snapshot": self._memory_cache
-            }
-
-    async def reset_to_factory(self) -> Dict[str, Any]:
-        async with self._lock:
-            version_id = self._generate_version_id()
-            previous_version = self._active_version
-
-            default_config = self._extract_config_from_settings()
-
-            version_data = {
-                "version_id": version_id,
-                "created_at": datetime.utcnow().isoformat() + "Z",
-                "created_by": "system",
-                "description": "Factory reset to .env.dev defaults",
-                "config_snapshot": default_config,
-                "parent_version_id": previous_version,
-                "is_factory_reset": True
-            }
-
-            await self._repository.save_version(version_data)
-            self._memory_cache = default_config
-            self._active_version = version_id
-            await self._repository.set_active_version(version_id)
-
-            await self._repository.append_audit_log({
-                "timestamp": version_data["created_at"],
-                "action": "RESET",
-                "from_version": previous_version,
-                "to_version": version_id,
-                "user": "system"
-            })
-
-            event_bus.publish(ConfigResetEvent(
-                from_version=previous_version or "initial",
-                reset_at=version_data["created_at"]
-            ))
-
-            return {
-                "version_id": version_id,
-                "config_snapshot": default_config
-            }
-
-    def _generate_version_id(self) -> str:
-        return f"v_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            return crypto_service.decrypt(encrypted_value)
+        except Exception as e:
+            logger.error(f"解密敏感配置 {key} 失败: {e}")
+            return default
 
 
+# 全局实例
 config_manager = ConfigManager()

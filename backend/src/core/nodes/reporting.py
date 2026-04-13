@@ -1,5 +1,4 @@
 from typing import Dict, Any, List
-from llama_index.llms.dashscope import DashScope
 from src.config import settings
 from src.model.schemas import (
     AgentState,
@@ -14,6 +13,8 @@ from src.core.nodes.base import BaseNode
 from src.core.prompts import REPORTING_SYSTEM_PROMPT
 from src.utils.logger import logger
 import asyncio
+from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.base import LLMRequest, LLMMessage
 
 
 class ReportingNode(BaseNode):
@@ -72,15 +73,15 @@ class ReportingNode(BaseNode):
             if doc.topics:
                 tags.append(f"主题: {', '.join(doc.topics)}")
 
-            tag_str = f" [{ ' | '.join(tags) }]" if tags else ""
+            tag_str = f" [{' | '.join(tags)}]" if tags else ""
 
             # 用于最终报告展示的 Markdown 格式
             evidence_list.append(
-                f"{i+1}. **【{source_info}】**{tag_str}\n   {doc.content}"
+                f"{i + 1}. **【{source_info}】**{tag_str}\n   {doc.content}"
             )
 
             # 用于 Prompt 上下文的纯文本格式
-            reference_list.append(f"资料{i+1} [来源: {source_info}]: {doc.content}")
+            reference_list.append(f"资料{i + 1} [来源: {source_info}]: {doc.content}")
 
         # 整理建议
         suggestions_str = (
@@ -210,17 +211,36 @@ class ReportingNode(BaseNode):
         markdown_content = ""
         if settings.dashscope_api_key:
             try:
-                llm = DashScope(
-                    model=settings.llm_models["report_generation"],
-                    api_key=settings.dashscope_api_key,
-                    max_tokens=8000,
+                # 使用工厂创建 LLM 实例
+                llm = LLMServiceFactory.create(
+                    framework=LLMFramework.LLAMAINDEX,
+                    model_name=settings.llm_models["report_generation"],
+                    scenario="report_generation",
                     temperature=0.7,
-                    top_p=0.8,
                 )
 
+                # 构建提示词
+                messages = [
+                    LLMMessage(
+                        role="system",
+                        content="你是一个专业的儿童发展评估报告撰写专家，根据提供的评估数据生成清晰、专业、易于家长理解的Markdown格式报告。",
+                    ),
+                    LLMMessage(role="user", content=formatted_prompt_full),
+                ]
+
+                # 调用 LLM
                 logger.info("Starting report generation...")
-                response = await llm.acomplete(formatted_prompt_full)
-                markdown_content = response.text.strip()
+                response = await llm.chat(
+                    LLMRequest(
+                        messages=messages,
+                        model_name=settings.llm_models["report_generation"],
+                        temperature=0.7,
+                        max_tokens=8000,
+                        scenario="report_generation",
+                        prompt_key="report_generation",
+                    )
+                )
+                markdown_content = response.content.strip()
                 logger.info("Report generation completed.")
 
             except Exception as e:

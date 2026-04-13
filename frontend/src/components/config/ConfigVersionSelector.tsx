@@ -30,31 +30,35 @@ export const ConfigVersionSelector: React.FC = () => {
         {versions.length === 0 && (
           <div className={styles.empty}>暂无历史版本</div>
         )}
-        {versions.map((v) => (
-          <div key={v.version_id} className={styles.versionItem}>
-            <div className={styles.versionInfo}>
-              <span className={styles.versionId}>
-                {v.version_id}
-                {v.is_active && <span className={styles.activeBadge}>当前</span>}
-              </span>
-              <span className={styles.versionTime}>
-                {new Date(v.created_at).toLocaleString('zh-CN')}
-              </span>
-              {v.description && (
-                <span className={styles.versionDesc}>{v.description}</span>
+        {versions.map((v) => {
+          const versionId = v.id || v.version_id;
+          const isActive = v.id === activeVersion || v.version_id === activeVersion;
+          return (
+            <div key={versionId} className={styles.versionItem}>
+              <div className={styles.versionInfo}>
+                <span className={styles.versionId}>
+                  {versionId}
+                  {isActive && <span className={styles.activeBadge}>当前</span>}
+                </span>
+                <span className={styles.versionTime}>
+                  {new Date(v.created_at).toLocaleString('zh-CN')}
+                </span>
+                {v.description && (
+                  <span className={styles.versionDesc}>{v.description}</span>
+                )}
+              </div>
+              {!isActive && (
+                <Tooltip title="回滚到此版本">
+                  <Button
+                    icon={<RollbackOutlined />}
+                    size="small"
+                    onClick={() => handleRollback(versionId)}
+                  />
+                </Tooltip>
               )}
             </div>
-            {!v.is_active && (
-              <Tooltip title="回滚到此版本">
-                <Button
-                  icon={<RollbackOutlined />}
-                  size="small"
-                  onClick={() => handleRollback(v.version_id)}
-                />
-              </Tooltip>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

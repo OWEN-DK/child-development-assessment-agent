@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Table, Button, Space, Tag, Popconfirm, message, Modal, Form, Input, Select, InputNumber } from 'antd';
-import { CheckOutlined, CloseOutlined, EditOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TestCaseDraft } from '@/api/rag-test/types';
 import { reviewDraft, updateDraft, importDrafts } from '@/api/rag-test';
 
@@ -10,9 +10,11 @@ interface TestCaseReviewTableProps {
   drafts: TestCaseDraft[];
   loading: boolean;
   onRefresh: () => void;
+  onDelete?: (draftId: string) => void;
+  onBatchDelete?: (draftIds: string[]) => void;
 }
 
-const TestCaseReviewTable: React.FC<TestCaseReviewTableProps> = ({ drafts, loading, onRefresh }) => {
+const TestCaseReviewTable: React.FC<TestCaseReviewTableProps> = ({ drafts, loading, onRefresh, onDelete, onBatchDelete }) => {
   const [editingDraft, setEditingDraft] = useState<TestCaseDraft | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
@@ -128,9 +130,9 @@ const TestCaseReviewTable: React.FC<TestCaseReviewTableProps> = ({ drafts, loadi
                   通过
                 </Button>
               </Popconfirm>
-              <Popconfirm title="拒绝此草稿？" onConfirm={() => handleReview(record.id, 'rejected')}>
-                <Button type="link" size="small" icon={<CloseOutlined />} danger>
-                  拒绝
+              <Popconfirm title="确定删除此草稿？" onConfirm={() => onDelete?.(record.id)}>
+                <Button type="link" size="small" icon={<DeleteOutlined />} danger>
+                  删除
                 </Button>
               </Popconfirm>
             </>
@@ -143,9 +145,26 @@ const TestCaseReviewTable: React.FC<TestCaseReviewTableProps> = ({ drafts, loadi
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleBatchImport} disabled={selectedRowKeys.length === 0}>
-          批量导入选中 ({selectedRowKeys.length})
-        </Button>
+        <Space>
+          <Button type="primary" onClick={handleBatchImport} disabled={selectedRowKeys.length === 0}>
+            批量导入选中 ({selectedRowKeys.length})
+          </Button>
+          {selectedRowKeys.length > 0 && (
+            <Popconfirm
+              title={`确定删除选中的 ${selectedRowKeys.length} 个草稿？`}
+              onConfirm={() => {
+                onBatchDelete?.(selectedRowKeys as string[]);
+                setSelectedRowKeys([]);
+              }}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       </div>
 
       <Table

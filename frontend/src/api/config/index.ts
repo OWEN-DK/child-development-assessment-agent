@@ -8,13 +8,16 @@ import {
 
 export const configApi = {
   getConfig: async (): Promise<ConfigResponse> => {
-    return apiClient.get('/api/v1/config').then((r) => r.data);
+    return apiClient.get('/api/v1/config/current').then((r) => r.data);
   },
 
   updateConfig: async (
     request: ConfigUpdateRequest
   ): Promise<ConfigUpdateResponse> => {
-    return apiClient.put('/api/v1/config', request).then((r) => r.data);
+    return apiClient.post('/api/v1/config/save', {
+      config_snapshot: request.config,
+      description: request.description
+    }).then((r) => r.data);
   },
 
   listVersions: async (limit = 50): Promise<ConfigVersion[]> => {
@@ -22,7 +25,9 @@ export const configApi = {
   },
 
   rollbackToVersion: async (versionId: string): Promise<any> => {
-    return apiClient.post(`/api/v1/config/rollback/${versionId}`).then((r) => r.data);
+    return apiClient.post(`/api/v1/config/rollback`, {
+      version_id: versionId
+    }).then((r) => r.data);
   },
 
   resetToFactory: async (): Promise<any> => {

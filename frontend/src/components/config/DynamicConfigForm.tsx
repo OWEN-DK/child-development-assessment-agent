@@ -1,7 +1,7 @@
 import React from 'react';
 import { ConfigFieldMetadata } from '../../api/config/types';
 import { useConfigStore } from '../../store/configStore';
-import { Switch, InputNumber, Input, Tooltip, message, Button, Space } from 'antd';
+import { Switch, InputNumber, Input, Tooltip, message, Button } from 'antd';
 import { QuestionCircleOutlined, WarningOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import styles from './DynamicConfigForm.module.scss';
 

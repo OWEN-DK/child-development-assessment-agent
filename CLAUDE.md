@@ -20,20 +20,20 @@
 - 更新后必须验证两个文档与实际代码结构的一致性
 
 【以第一性原理！从原始需求和问题本质出发，不从惯例或模板出发。
- 1. 不要假设我清楚自己想要什么。动机或目标不清晰时，停下来讨论。 
- 2. 目标清晰但路径不是最短的，直接告诉我并建议更好的办法。 
- 3. 遇到问题追根因，不打补丁。每个决策都要能回答"为什么"。 
- 4. 输出说重点，砍掉一切不改变决策的信息。】
+1. 不要假设我清楚自己想要什么。动机或目标不清晰时，停下来讨论。 
+2. 目标清晰但路径不是最短的，直接告诉我并建议更好的办法。 
+3. 遇到问题追根因，不打补丁。每个决策都要能回答"为什么"。 
+4. 输出说重点，砍掉一切不改变决策的信息。】
 
 ---
 
 # ⚠️ 核心工作原则 (不可忽略)
 
 【以第一性原理！从原始需求和问题本质出发，不从惯例或模板出发。 
- 1. 不要假设我清楚自己想要什么。动机或目标不清晰时，停下来讨论。 
- 2. 目标清晰但路径不是最短的，直接告诉我并建议更好的办法。 
- 3. 遇到问题追根因，不打补丁。每个决策都要能回答"为什么"。 
- 4. 输出说重点，砍掉一切不改变决策的信息。】
+1. 不要假设我清楚自己想要什么。动机或目标不清晰时，停下来讨论。 
+2. 目标清晰但路径不是最短的，直接告诉我并建议更好的办法。 
+3. 遇到问题追根因，不打补丁。每个决策都要能回答"为什么"。 
+4. 输出说重点，砍掉一切不改变决策的信息。】
 
 ---
 
@@ -45,52 +45,79 @@
 
 ```mermaid
 graph TB
-    subgraph 前端层
-        UI[React 前端应用]
-        Assessment[评估功能模块]
-        Documents[知识库管理模块]
-        Knowledge[知识搜索模块]
-        RAGEval[RAG 评估模块]
-        SysConfig[系统配置模块]
+    subgraph 前端展示层 Frontend
+        UI[React 19 + TypeScript]
+        Assessment[评估功能<br/>AssessmentForm/ReportViewer]
+        Documents[知识库管理<br/>DocumentUploader/DocumentList]
+        Knowledge[知识搜索<br/>SearchInput/SearchResultList]
+        RAGEval[RAG 评估与测试<br/>导入/草稿审核/批量执行]
+        SysConfig[系统配置页 /system-config<br/>动态Schema表单]
+        PromptUI[提示词管理页 /prompts<br/>版本管理/A/B配置/变量预览]
+        LLMMonitorUI[LLM监控页 /monitor/llm<br/>调用统计/效果分析/告警]
     end
     
-    subgraph API 网关层
-        FastAPI[FastAPI 服务]
+    subgraph API 网关层 API Gateway
+        FastAPI[FastAPI 0.135.1]
         CORS[CORS 中间件]
-        Router[路由控制器]
+        TaskCtrl[TaskController]
+        RagCtrl[RagController]
+        RagTestCtrl[RagTestController]
+        ConfigCtrl[ConfigController]
+        PromptCtrl[PromptController]
+        MonitorCtrl[MonitoringController]
     end
     
-    subgraph 业务服务层
-        TaskService[任务服务]
-        RagService[RAG 服务]
-        RagTestService[RAG 测试服务]
-        ConfigService[配置服务]
+    subgraph 业务服务层 Services
+        DocIngestion[DocumentIngestionService<br/>文档导入服务]
+        RagSvc[RagService<br/>RAG 门面服务]
+        RetrievSvc[RetrievalService<br/>检索服务]
+        IndexMgr[IndexManagerService<br/>索引管理服务]
+        CacheSvc[CacheService<br/>缓存服务]
+        TestMgr[RagTestManager<br/>并发批量测试/生成/评分]
     end
     
-    subgraph Agent 核心层
-        Graph[LangGraph 工作流]
-        PreNode[预处理节点]
-        ValNode[校验节点]
-        AssessNode[评估节点]
-        RetrievNode[检索节点]
-        ScoreNode[评分节点]
-        ReportNode[报告节点]
+    subgraph 核心配置与状态层
+        ConfigMgr[ConfigManager 配置管理器<br/>支持热更新与版本控制]
+        PromptMgr[PromptManager 提示词管理器<br/>JSON持久化/A/B分发]
+        EventBus[EventBus 事件总线<br/>配置变更/LLM调用事件广播]
+    end
+
+    subgraph 模型适配与路由层
+        LLMFactory[LLMServiceFactory 工厂<br/>9大独立业务场景模型]
+        LangChainAdapter[LangChain 适配器]
+        LlamaIndexAdapter[LlamaIndex 适配器]
+        PipelineOrch[PipelineOrchestrator<br/>YAML驱动查询流水线编排]
+    end
+
+    subgraph Agent 核心层 LangGraph
+        Graph[LangGraph 工作流<br/>create_agent_graph]
+        PreNode[PreprocessingNode<br/>预处理与上下文压缩]
+        ValNode[ValidationNode<br/>数据校验与标准化]
+        AssessNode[AssessmentNode<br/>儿童发展评估]
+        RetrievNode[RetrievalNode<br/>混合检索专家]
+        ScoreNode[ScoringNode<br/>AHP 多维评分]
+        ReportNode[ReportingNode<br/>报告生成]
     end
     
-    subgraph 基础设施层
-        DI[依赖注入容器]
-        EventBus[事件总线]
-        Cache[缓存服务]
-        Memory[记忆管理]
-        Security[安全防护]
-        ABTest[AB 测试框架]
+    subgraph 监控与基础设施层 Infrastructure
+        LLMMonitor[LLM调用监控器<br/>统计收集/效果分析/告警]
+        DI[Injector 依赖注入]
+        Cache[CacheService 三级缓存<br/>Memory + Redis + Disk]
+        Memory[MemoryManager 记忆管理]
+        Security[PromptInjectionGuard<br/>ContentAuditService]
+        ABTest[ABTestFramework]
+        Repo[Repository 数据访问层<br/>BaseRepository + 专属Repository]
+        DB[SQLAlchemy 数据库<br/>异步连接池]
+        Redis[Redis 客户端<br/>分布式锁/会话/熔断]
+        Bloom[BloomFilter 布隆过滤器]
     end
     
-    subgraph 数据层
-        Chroma[(Chroma 向量库<br/>存储位置: /app_data/storage/vector_store)]
-        ConfigDB[(配置存储<br/>存储位置: /app_data/data/configs)]
-        Files[(文件存储<br/>存储位置: /app_data/storage)]
-        Logs[(日志系统)]
+    subgraph 数据层 Data
+        MySQL[(MySQL 8.0<br/>唯一持久化数据源<br/>配置/测试/文档/监控/提示词)]
+        RedisDB[(Redis 7.0<br/>三级缓存/消息队列/锁/会话)]
+        Chroma[(Chroma 向量库<br/>本地持久化<br/>存储位置: /app_data/storage/vector_store)]
+        Files[(文件存储<br/>PDF/EPUB<br/>存储位置: /app_data/storage)]
+        Logs[(Loguru 日志系统)]
     end
     
     UI --> Assessment
@@ -98,27 +125,42 @@ graph TB
     UI --> Knowledge
     UI --> RAGEval
     UI --> SysConfig
+    UI --> PromptUI
+    UI --> LLMMonitorUI
     
     Assessment --> FastAPI
     Documents --> FastAPI
     Knowledge --> FastAPI
     RAGEval --> FastAPI
     SysConfig --> FastAPI
+    PromptUI --> FastAPI
+    LLMMonitorUI --> FastAPI
     
     FastAPI --> CORS
-    CORS --> Router
-    Router --> TaskService
-    Router --> RagService
-    Router --> RagTestService
-    Router --> ConfigService
+    CORS --> TaskCtrl
+    CORS --> RagCtrl
+    CORS --> RagTestCtrl
+    CORS --> ConfigCtrl
+    CORS --> PromptCtrl
+    CORS --> MonitorCtrl
     
-    TaskService --> Graph
-    RagService --> PreNode
-    RagService --> ValNode
-    RagService --> AssessNode
-    RagService --> RetrievNode
-    RagService --> ScoreNode
-    RagService --> ReportNode
+    TaskCtrl --> Graph
+    RagCtrl --> DocIngestion
+    RagCtrl --> RagSvc
+    RagTestCtrl --> TestMgr
+    ConfigCtrl --> ConfigMgr
+    PromptCtrl --> PromptMgr
+    MonitorCtrl --> LLMMonitor
+    
+    TestMgr --> PipelineOrch
+    RagSvc --> PipelineOrch
+    
+    PipelineOrch --> PreNode
+    PipelineOrch --> ValNode
+    PipelineOrch --> AssessNode
+    PipelineOrch --> RetrievNode
+    PipelineOrch --> ScoreNode
+    PipelineOrch --> ReportNode
     
     Graph --> DI
     Graph --> EventBus
@@ -126,71 +168,82 @@ graph TB
     Graph --> Memory
     Graph --> Security
     Graph --> ABTest
+    Graph --> Repo
     
-    TaskService --> ConfigDB
-    RagService --> Chroma
-    RagService --> Files
-    PreNode --> Logs
-    ValNode --> Logs
-    AssessNode --> Logs
-    RetrievNode --> Logs
-    ScoreNode --> Logs
-    ReportNode --> Logs
+    ConfigMgr --触发--> EventBus
+    EventBus --更新模型实例--> LLMFactory
+    EventBus --LLM调用日志--> LLMMonitor
+    
+    LLMFactory --> LangChainAdapter
+    LLMFactory --> LlamaIndexAdapter
+    
+    DocIngestion --> Chroma
+    DocIngestion --> MySQL
+    RetrievNode --> Chroma
+    RetrievNode --> Cache
+    ConfigMgr --> Repo
+    PromptMgr --> Repo
+    LLMMonitor --> Repo
+    RagSvc --> Files
+    CacheSvc --> RedisDB
+    Repo --> DB
+    Repo --> RedisDB
 ```
 
 ### 评估工作流架构 (Mermaid)
 
 ```mermaid
 graph LR
-    Input[用户输入<br/>child_profile + proposed_plan] --> Pre[预处理节点<br/>PreprocessingNode]
-    Pre --> Val[校验节点<br/>ValidationNode]
-    Val --> Assess[评估节点<br/>AssessmentNode]
-    Assess --> Retriev[检索节点<br/>RetrievalNode]
-    Retriev --> Score[评分节点<br/>ScoringNode]
-    Score --> Report[报告节点<br/>ReportingNode]
-    Report --> Output[最终输出<br/>final_report]
+    Input[用户输入<br/>child_profile<br/>proposed_plan<br/>history_context] --> Pre[NodePre: 预处理<br/>PreprocessingNode]
     
-    Pre -.->|condensed_context| Assess
-    Val -.->|标准化计划| Assess
-    Assess -.->|child_state| Score
-    Retriev -.->|retrieved_docs| Score
-    Score -.->|evaluation_result| Report
+    Pre -->|condensed_context| Val[Node1: 校验<br/>ValidationNode]
+    Val -->|标准化计划| Assess[Node2: 评估<br/>AssessmentNode]
+    Assess -->|child_state| Retriev[Node3: 检索<br/>RetrievalNode]
+    Retriev -->|retrieved_docs| Score[Node4: 评分<br/>ScoringNode]
+    Score -->|evaluation_result| Report[Node5: 报告<br/>ReportingNode]
+    Report --> Output[最终输出<br/>final_report<br/>Markdown + 结构化数据]
+    
+    Pre -.统计特征压缩.-> Assess
+    Assess -.发展状态评估.-> Score
+    Retriev -.科学知识依据.-> Score
 ```
 
 ### RAG 系统双流水线架构 (Mermaid)
 
 ```mermaid
 graph TB
-    subgraph 文档导入流水线
-        Upload[用户上传 PDF/EPUB]
-        Parse[文档解析<br/>PDFParser/PDFVLParser/EPUBParser]
-        Chunk[智能分块<br/>语义分块/章节分块]
-        Meta[元数据提取<br/>LLM 提取/规则提取]
-        Embed[向量 Embedding<br/>DashScope text-embedding-v4]
-        Index[索引插入<br/>Chroma 向量存储]
-        Persist[持久化存储<br/>自动备份]
+    subgraph 文档导入流水线 Ingestion Pipeline
+        Upload[用户上传<br/>PDF/EPUB]
+        Parse[阶段1: 文档解析<br/>PDFParser/PDFVLParser<br/>PDFParserV2/EPUBParser]
+        Chunk[阶段2: 智能分块<br/>语义分块/章节分块<br/>父子块分块]
+        Meta[阶段3: 元数据提取<br/>LLM 提取/规则提取<br/>分层模式优化]
+        Embed[阶段4: 向量 Embedding<br/>DashScope<br/>text-embedding-v4]
+        Index[索引插入<br/>Chroma 向量存储<br/>batch_size=100]
+        Layered[阶段5: 分层内容生成<br/>L0 摘要/L1 概览/L2 详情]
+        Persist[持久化存储<br/>自动备份<br/>间隔 300 秒]
         
         Upload --> Parse
         Parse --> Chunk
         Chunk --> Meta
         Meta --> Embed
         Embed --> Index
-        Index --> Persist
+        Index --> Layered
+        Layered --> Persist
     end
     
-    subgraph 知识检索流水线
+    subgraph 知识检索流水线 Retrieval Pipeline
         Query[用户查询]
-        Route[查询路由<br/>简单/复杂分类]
-        Cache[缓存检查]
-        Rewrite[查询重写]
-        Synonym[同义词扩展]
-        AgeFilter[动态年龄过滤]
-        Hybrid[混合检索<br/>BM25 + Vector]
-        Rerank[Cross-Encoder 重排序]
-        Dedup[内容去重]
-        PageIndex[PageIndex 图谱增强]
-        Fusion[结果融合]
-        Result[返回 KnowledgeItem]
+        Route[步骤1: 查询路由<br/>QueryRouter<br/>简单/复杂分类]
+        Cache[步骤2: 缓存检查<br/>CacheService<br/>容量 1000, TTL 3600s]
+        Rewrite[步骤3: 查询重写<br/>可选]
+        Synonym[步骤4: 同义词扩展<br/>LLM 生成 + 质量验证]
+        AgeFilter[步骤5: 动态年龄过滤<br/>根据发展阶段调整]
+        Hybrid[步骤6: 混合检索<br/>BM25 + Vector<br/>并行执行]
+        Rerank[步骤7: Cross-Encoder 重排序<br/>BAAI/bge-reranker-v2-m3]
+        Dedup[步骤8: 内容去重<br/>精确匹配 + 相似度]
+        PageIndex[步骤9: PageIndex 增强<br/>无向量推理式层级树索引<br/>熔断/重试机制]
+        Fusion[结果融合<br/>分数归一化<br/>动态权重]
+        Result[返回 KnowledgeItem<br/>年龄适配度计算<br/>阈值过滤]
         
         Query --> Route
         Route --> Cache
@@ -206,11 +259,90 @@ graph TB
     end
 ```
 
+### 配置系统架构 (Mermaid)
+
+```mermaid
+graph TB
+    subgraph 配置管理层
+        ConfigMgr[ConfigManager<br/>配置管理器]
+        ConfigRepo[ConfigRepository<br/>配置持久化]
+        ConfigEvents[ConfigEvents<br/>配置变更事件]
+    end
+    
+    subgraph 基础设施层 core/
+        CoreManager[manager.py<br/>配置管理器实现]
+        CoreRepository[repository.py<br/>存储层实现]
+        CoreEvents[events.py<br/>事件定义]
+    end
+    
+    subgraph 配置模块层 modules/
+        subgraph 基础配置
+            App[app.py<br/>应用配置]
+            Logging[logging.py<br/>日志配置]
+            Paths[paths.py<br/>路径配置]
+        end
+        
+        subgraph AI模型配置 models/
+            LLM[llm.py<br/>LLM模型配置]
+            Embedding[embedding.py<br/>Embedding配置]
+            MLScoring[ml_scoring.py<br/>ML评分配置]
+        end
+        
+        subgraph RAG配置 rag/
+            RagCore[core.py<br/>RAG核心设置]
+            RagRetrieval[retrieval.py<br/>检索配置]
+            RagChunking[chunking.py<br/>分块配置]
+            RagVector[vector_store.py<br/>向量存储配置]
+            RagPageIndex[pageindex.py<br/>PageIndex索引配置]
+            RagPipeline[pipeline.py<br/>导入流水线配置]
+        end
+    end
+    
+    subgraph 业务规则层 rules/
+        Rules[rules.py<br/>规则定义]
+        RulesJson[rules.json<br/>规则数据(静态)]
+    end
+    
+    subgraph 配置特性
+        HotReload[热重载<br/>事件驱动生效]
+        VersionCtrl[版本控制<br/>MySQL持久化]
+        RedisCache[Redis缓存<br/>加速读取]
+        EnvOverride[环境变量覆盖<br/>.env.dev]
+    end
+    
+    ConfigMgr --> CoreManager
+    CoreManager --> CoreRepository
+    CoreManager --> CoreEvents
+    
+    ConfigMgr --> App
+    ConfigMgr --> Logging
+    ConfigMgr --> Paths
+    ConfigMgr --> LLM
+    ConfigMgr --> Embedding
+    ConfigMgr --> MLScoring
+    ConfigMgr --> RagCore
+    ConfigMgr --> RagRetrieval
+    ConfigMgr --> RagChunking
+    ConfigMgr --> RagVector
+    ConfigMgr --> RagPageIndex
+    ConfigMgr --> RagPipeline
+    ConfigMgr --> Rules
+    
+    Rules --> RulesJson
+    
+    ConfigMgr --> HotReload
+    ConfigMgr --> VersionCtrl
+    ConfigMgr --> RedisCache
+    ConfigMgr --> EnvOverride
+    
+    ConfigEvents -.事件通知.-> HotReload
+```
+
 ## 项目概览
 **儿童发展评估 Agent (Child Development Assessment Agent)** 是一个基于 AI 的系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用 **ReAct** 架构，并集成了 **LangChain** 和 **LlamaIndex**。
 
 - **项目状态**: 开发中，尚未上线
-- **部署策略**: 当前无需任何迁移设计，仅关注本地开发和功能实现
+- **部署策略**: 采用 MySQL 8.0 + Redis 7.0 架构，取代了原有的本地 JSON 存储。MySQL 负责核心数据的唯一持久化，Redis 承担三级缓存、消息队列、分布式锁和会话存储。
 - **目标**: 根据用户输入自动生成专业的评估报告。
 - **架构**: 多 Agent 系统 (预处理 -> 校验 -> 评估 -> 检索 -> 评分 -> 报告)。
 - **前端**: React + TypeScript (已初始化)。
@@ -231,10 +363,16 @@ graph TB
 - **路由**: React Router v7
 - **可视化**: Ant Design Charts
 - **工具库**: Lodash-es, Day.js, Clsx
-- **数据库**: Vector DB (Chroma - 已实现, Pinecone/Milvus/Weaviate - 支持扩展), Graph DB (Neo4j - 计划中)
+- **数据库**:
+  - 关系型: MySQL 8.0 (SQLAlchemy 2.0 ORM + Alembic 迁移)
+  - 向量: Chroma (本地持久化，支持扩展到 Pinecone/Milvus/Weaviate)
+  - 缓存/消息: Redis 7.0 (分布式缓存/Pub/Sub/分布式锁/会话)
 - **ML**: XGBoost 3.2.0, SHAP 0.51.0, Scikit-learn 1.8.0
 - **依赖注入**: Injector 0.24.0
 - **重排序**: Sentence-Transformers 5.3.0 (BAAI/bge-reranker-v2-m3)
+- **数据库驱动**: aiomysql, pymysql, redis, hiredis
+- **缓存**: cachetools (LRU 内存缓存)
+- **布隆过滤器**: pybloom-live
 - **工具**: uv 0.10.9
 
 ## 常用命令
@@ -268,34 +406,61 @@ graph TB
 │   │   │   ├── config_manager.py    # 配置管理器 (支持版本控制)
 │   │   │   ├── config_events.py     # 配置变更事件
 │   │   │   ├── config_repository.py # 配置持久化
-│   │   │   ├── app_settings.py      # 应用配置
-│   │   │   ├── model_settings.py    # LLM 模型配置
-│   │   │   ├── embedding_settings.py # Embedding 配置
-│   │   │   ├── rag_settings.py      # RAG 系统配置
-│   │   │   ├── vector_store_settings.py # 向量存储配置
-│   │   │   ├── semantic_splitter_settings.py # 分块配置
-│   │   │   ├── pageindex_settings.py # PageIndex 配置
-│   │   │   ├── query_fusion_settings.py # 查询融合配置
-│   │   │   ├── ml_scoring_settings.py # ML 评分配置
-│   │   │   ├── path_settings.py     # 路径配置
-│   │   │   ├── log_settings.py      # 日志配置
+│   │   │   ├── modules/             # 配置模块
+│   │   │   │   ├── app.py           # 应用配置
+│   │   │   │   ├── logging.py       # 日志配置
+│   │   │   │   ├── paths.py         # 路径配置
+│   │   │   │   ├── database.py      # 数据库配置 (MySQL)
+│   │   │   │   └── redis.py         # Redis 配置
+│   │   │   ├── models/              # AI 模型配置
+│   │   │   │   ├── llm.py           # LLM 模型配置
+│   │   │   │   ├── embedding.py     # Embedding 配置
+│   │   │   │   └── ml_scoring.py    # ML 评分配置
+│   │   │   ├── rag/                 # RAG 配置
+│   │   │   │   ├── core.py          # RAG 核心配置
+│   │   │   │   ├── retrieval.py     # 检索配置
+│   │   │   │   ├── chunking.py      # 分块配置
+│   │   │   │   ├── vector_store.py  # 向量存储配置
+│   │   │   │   ├── pageindex.py     # PageIndex 配置
+│   │   │   │   └── pipeline.py      # 导入流水线配置
 │   │   │   └── rules.py             # 业务规则
 │   │   ├── controller/  # API 控制器
 │   │   │   ├── task_controller.py   # 任务管理
 │   │   │   ├── rag_controller.py    # RAG 管理
 │   │   │   ├── rag_test_controller.py # RAG 测试 (含测试集导入/文档上传/草稿审核/测试集管理)
-│   │   │   └── config_controller.py # 配置管理
+│   │   │   ├── config_controller.py # 配置管理
+│   │   │   └── prompt_controller.py # 提示词管理
 │   │   ├── core/        # Agent 核心逻辑
+│   │   │   ├── llm/     # LLM 服务工厂
+│   │   │   │   ├── base.py              # LLM 服务统一接口
+│   │   │   │   ├── factory.py           # 按场景动态生成实例
+│   │   │   │   └── adapters/            # 框架适配器
+│   │   │   ├── pipeline/ # RAG 查询流水线编排
+│   │   │   │   └── orchestrator.py      # 流水线编排器
+│   │   │   ├── monitor/ # LLM 调用监控
+│   │   │   │   └── llm_monitor.py       # 监控服务
 │   │   │   ├── nodes/   # LangGraph 节点
 │   │   │   ├── ml/      # ML 评分模块
 │   │   │   ├── graph.py # 工作流编排
 │   │   │   ├── prompts.py # 提示词管理
 │   │   │   ├── di_container.py # 依赖注入
-│   │   │   ├── event_bus.py # 事件总线
+│   │   │   ├── event_bus.py # 事件总线 (支持 Redis Pub/Sub)
 │   │   │   ├── memory_manager.py # 记忆管理
 │   │   │   ├── ab_test_framework.py # AB 测试
 │   │   │   ├── prompt_injection_guard.py # 提示词注入防护
+│   │   │   ├── database.py # SQLAlchemy 数据库管理
+│   │   │   ├── redis_client.py # Redis 客户端单例
+│   │   │   ├── distributed_lock.py # 分布式锁 (带看门狗)
+│   │   │   ├── session_manager.py # 会话管理 (Redis Hash)
+│   │   │   ├── circuit_breaker.py # 熔断器
+│   │   │   ├── bloom_filter.py # 布隆过滤器
 │   │   │   └── [其他核心模块...]
+│   │   ├── models/      # SQLAlchemy ORM 模型
+│   │   │   ├── config.py # 配置模型
+│   │   │   ├── test_case.py # 测试用例模型
+│   │   │   ├── document.py # 文档模型
+│   │   │   ├── monitor.py # 监控模型
+│   │   │   └── prompt.py # 提示词模型
 │   │   ├── model/       # 数据模型 (Pydantic)
 │   │   ├── constants/   # 领域常量
 │   │   │   └── test_case.py     # 测试用例领域枚举
@@ -304,17 +469,38 @@ graph TB
 │   │   │   ├── retrieval_service.py     # 检索服务
 │   │   │   ├── document_ingestion_service.py # 文档导入
 │   │   │   ├── index_manager_service.py # 索引管理
-│   │   │   ├── cache_service.py         # 缓存服务
+│   │   │   ├── cache_service.py         # 缓存服务 (三级缓存)
 │   │   │   ├── content_audit_service.py # 内容审核
 │   │   │   ├── document_manager.py      # 文档管理
 │   │   │   ├── rag_test_manager.py      # RAG 测试管理 (含测试集导入/文档上传/草稿审核/测试集管理)
 │   │   │   └── monitoring_service.py    # 监控服务
+│   │   ├── repository/  # 数据访问层
+│   │   │   ├── base.py  # 通用 BaseRepository
+│   │   │   ├── config_version_repository.py
+│   │   │   ├── config_audit_log_repository.py
+│   │   │   ├── source_document_repository.py
+│   │   │   ├── document_record_repository.py
+│   │   │   ├── test_case_repository.py
+│   │   │   ├── test_case_draft_repository.py
+│   │   │   ├── test_set_repository.py
+│   │   │   ├── test_set_case_repository.py
+│   │   │   ├── test_run_repository.py
+│   │   │   ├── test_run_result_repository.py
+│   │   │   ├── prompt_version_repository.py
+│   │   │   ├── prompt_ab_test_repository.py
+│   │   │   ├── llm_call_log_repository.py
+│   │   │   └── ab_test_metric_repository.py
 │   │   ├── data/        # 静态数据
 │   │   │   ├── test_sets/ # RAG 评估测试集
 │   │   │   ├── child_development_milestones.json # 发展里程碑
 │   │   │   └── jieba_custom_dict.txt    # 结巴自定义词典
 │   │   ├── utils/       # 工具类
 │   │   └── server.py    # 后端入口
+│   ├── alembic/         # 数据库迁移
+│   │   ├── env.py       # 迁移环境配置
+│   │   ├── README       # 迁移说明
+│   │   └── script.py.mako # 迁移模板
+│   ├── alembic.ini      # Alembic 配置文件
 │   ├── scripts/         # 运维脚本
 │   │   ├── debug/       # 调试脚本
 │   │   ├── maintenance/ # 维护脚本
@@ -326,7 +512,7 @@ graph TB
 │   ├── reports/         # 评估报告输出
 │   ├── pyproject.toml   # 后端依赖配置
 │   ├── uv.lock          # 依赖锁定文件
-│   └── .env.dev         # 开发环境配置
+│   └── .env.dev         # 开发环境配置 (含 MySQL/Redis 配置)
 ├── frontend/            # 前端项目根目录
 │   ├── src/             # React 源代码
 │   │   ├── api/         # API 请求层
@@ -334,13 +520,14 @@ graph TB
 │   │   │   ├── config/     # 配置 API
 │   │   │   ├── documents/  # 文档 API
 │   │   │   ├── knowledge/  # 知识库 API
-│   │   │   └── rag-test/   # RAG 测试 API
+│   │   │   ├── rag-test/   # RAG 测试 API
+│   │   │   └── prompt/     # 提示词 API
 │   │   ├── components/  # UI 组件
 │   │   ├── features/    # 功能模块
 │   │   │   ├── assessment/ # 评估功能
 │   │   │   ├── documents/  # 知识库管理
 │   │   │   ├── knowledge/  # 知识搜索
-│   │   │   └── rag-evaluation/ # RAG 评估
+│   │   │   ├── rag-evaluation/ # RAG 评估
 │   │   │   │   ├── components/ # 评估组件
 │   │   │   │   │   ├── TestCaseTable.tsx        # 测试用例表格
 │   │   │   │   │   ├── TestCaseModal.tsx        # 测试用例弹窗
@@ -354,6 +541,11 @@ graph TB
 │   │   │   │   │   └── useRagEvaluation.ts      # 评估主 Hook
 │   │   │   │   └── pages/       # 评估页面
 │   │   │   │       └── RagEvaluationPage.tsx    # 评估主页面
+│   │   │   ├── prompt-management/ # 提示词管理
+│   │   │   │   ├── components/
+│   │   │   │   ├── hooks/
+│   │   │   │   └── pages/
+│   │   │   │       └── PromptManagementPage.tsx
 │   │   ├── pages/       # 页面
 │   │   ├── store/       # 状态管理 (Zustand)
 │   │   ├── hooks/       # 自定义 Hooks
@@ -448,14 +640,14 @@ graph TB
 
 ## RAG 系统架构
 
-RAG 系统是本项目知识库检索的核心，采用分层架构，包含文档导入和知识检索两条流水线。完整技术文档见 [RAG_SYSTEM_COMPLETE_DOCUMENTATION.md](./RAG_SYSTEM_COMPLETE_DOCUMENTATION.md)。
+RAG 系统是本项目知识库检索的核心，采用分层架构，包含文档导入和知识检索两条流水线。完整技术文档见 [RAG_SYSTEM_COMPLETE_DOCUMENTATION.md](./docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md)。
 
 ### 核心模块
 
 | 模块 | 文件路径 | 职责 |
 |------|----------|------|
 | RAG 门面服务 | `backend/src/service/rag_service.py` | 统一入口，聚合所有子服务 |
-| 检索服务 | `backend/src/service/retrieval_service.py` | 核心检索逻辑，含缓存/重写/同义词扩展 |
+| 检索服务 | `backend/src/service/retrieval_service.py` | YAML 驱动的声明式核心检索逻辑，含缓存/重写/同义词扩展 |
 | 文档导入服务 | `backend/src/service/document_ingestion_service.py` | 文档解析→分块→元数据→索引，支持断点续传 |
 | 索引管理服务 | `backend/src/service/index_manager_service.py` | 向量索引生命周期管理，自动持久化 |
 | 混合检索融合器 | `backend/src/core/hybrid_retrieval.py` | BM25 + 向量结果融合，动态权重 |
@@ -489,7 +681,7 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 
 所有 RAG 配置在 `backend/src/config/settings.py` 中定义，支持环境变量覆盖。主要配置分类：
 
-- **混合检索**: BM25/Vector 权重、合并模式、TopK、动态权重
+- **混合检索**: BM25/Vector 权重、合并模式、Top-K、动态权重
 - **缓存**: 启用状态、最大容量 (1000)、TTL (3600秒)
 - **分块**: chunk_size (1024/1536)、overlap (200)、语义分块参数
 - **重排序**: 模型名称、initial_k (30)、final_k (5)
@@ -524,10 +716,11 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/rag/test/cases/{case_id}` | GET/PUT/DELETE | 获取/更新/删除测试用例 |
 | `/rag/test/cases/import/preview` | POST | 预览JSON导入的测试用例 |
 | `/rag/test/cases/batch` | POST | 批量导入测试用例 |
-| `/rag/test/run` | POST | 运行所有测试用例 |
+| `/rag/test/run` | POST | 运行所有测试用例 (支持并发) |
 | `/rag/test/run/{case_id}` | POST | 运行单个测试用例 |
 | `/rag/test/runs` | GET | 列出所有测试运行 |
 | `/rag/test/runs/{run_id}` | GET | 获取单个测试运行 |
+| `/rag/test/runs/sse` | GET | SSE 进度推送 |
 | `/rag/test/compare` | GET | 比较两个测试运行 |
 | `/rag/test/snapshots` | POST/GET | 创建/列出快照 |
 | `/rag/test/snapshots/{snapshot_id}` | GET | 获取单个快照 |
@@ -565,6 +758,8 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | **基础配置** | 应用配置 | `modules/app.py` | 应用基础配置 (host, port, debug) |
 | | 日志配置 | `modules/logging.py` | 日志级别和格式配置 |
 | | 路径配置 | `modules/paths.py` | 文件路径配置 |
+| | 数据库配置 | `modules/database.py` | MySQL 数据库连接池配置 |
+| | Redis 配置 | `modules/redis.py` | Redis 连接/缓存/锁配置 |
 | **AI模型配置** | LLM模型 | `modules/models/llm.py` | LLM 模型配置 |
 | | Embedding配置 | `modules/models/embedding.py` | DashScope Embedding 配置 |
 | | ML评分配置 | `modules/models/ml_scoring.py` | ML 评分模型配置 |
@@ -589,6 +784,113 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 - **事件驱动**: 配置变更通过 EventBus 通知相关组件
 - **环境变量**: 支持 `.env.dev` 环境变量覆盖
 
+## MySQL + Redis 基础设施
+
+### 数据库基础设施 (SQLAlchemy 2.0 + Alembic)
+
+| 模块 | 文件路径 | 职责 |
+|------|----------|------|
+| 数据库管理 | `src/core/database.py` | SQLAlchemy 异步引擎/会话管理，慢查询检测，连接池配置 |
+| 配置模型 | `src/models/config.py` | 系统配置版本、审计日志 ORM 模型 |
+| 测试用例模型 | `src/models/test_case.py` | 测试用例/草稿/测试集/运行结果 ORM 模型 |
+| 文档模型 | `src/models/document.py` | 源文档、导入记录 ORM 模型 |
+| 监控模型 | `src/models/monitor.py` | A/B 测试指标、LLM 调用日志 ORM 模型 |
+| 提示词模型 | `src/models/prompt.py` | 提示词模板 ORM 模型 |
+| Alembic 迁移 | `alembic/env.py`, `alembic.ini` | 数据库版本控制和迁移管理 |
+
+**核心特性**:
+- **异步连接池**: 使用 `aiomysql` 驱动，支持异步操作
+- **连接池配置**: `pool_size`, `max_overflow`, `pool_timeout`, `pool_recycle`
+- **会话管理**: `SessionManager` 提供异步会话上下文管理器
+- **迁移系统**: Alembic 管理数据库 schema 版本，支持升级/降级
+- **慢查询监控**: 内置慢查询检测机制，自动记录超过阈值的 SQL 语句
+
+**环境变量** (`.env.dev`):
+```
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=child_development
+MYSQL_POOL_SIZE=10
+MYSQL_MAX_OVERFLOW=20
+MYSQL_POOL_TIMEOUT=30
+MYSQL_POOL_RECYCLE=1800
+```
+
+### Redis 基础设施
+
+| 模块 | 文件路径 | 职责 |
+|------|----------|------|
+| Redis 客户端 | `src/core/redis_client.py` | 异步 Redis 连接管理，连接池配置，懒加载机制 |
+| 分布式锁 | `src/core/distributed_lock.py` | 基于 Redis 的分布式锁实现 (带看门狗自动续期) |
+| 会话管理 | `src/core/session_manager.py` | 用户会话存储和管理 (Redis Hash 结构) |
+| 熔断器 | `src/core/circuit_breaker.py` | CircuitBreaker 模式实现服务保护 |
+| 布隆过滤器 | `src/core/bloom_filter.py` | pybloom-live 实现的高效去重过滤器 |
+| 事件总线增强 | `src/core/event_bus.py` | Redis Pub/Sub 支持分布式事件传播 |
+| 三级缓存 | `src/service/cache_service.py` | Memory (cachetools LRU) + Redis + Disk |
+
+**核心特性**:
+- **异步客户端**: 使用 `redis.asyncio` + `hiredis` 解析器
+- **分布式锁**: 支持超时自动释放，防止死锁
+- **会话管理**: 可配置 TTL，支持用户会话持久化
+- **熔断器**: 失败阈值/恢复超时配置，保护下游服务
+- **布隆过滤器**: 高效去重，适用于大规模数据场景
+- **三级缓存**: Memory → Redis → Disk 层级缓存，平衡性能与成本
+- **Pub/Sub**: 支持跨进程/跨实例的事件传播
+
+**环境变量** (`.env.dev`):
+```
+REDIS_URL=redis://localhost:6379/0
+REDIS_PASSWORD=your_password
+REDIS_MAX_CONNECTIONS=20
+REDIS_CACHE_DEFAULT_TTL=3600
+REDIS_LOCK_TIMEOUT=30
+REDIS_SESSION_TTL=86400
+REDIS_PUBSUB_ENABLED=true
+```
+
+### 提示词管理系统
+
+| 模块 | 文件路径 | 职责 |
+|------|----------|------|
+| PromptManager | `src/core/prompt/manager.py` | 提示词版本控制、MySQL 存储 + Redis 缓存、A/B 测试分流 |
+| PromptController | `src/controller/prompt_controller.py` | 提示词 API 控制器，路由前缀 `/api/v1/prompts` |
+| 数据模型 | `src/models/prompt.py` | `PromptVersion`、`PromptABTest` 模型定义 |
+| 前端页面 | `frontend/src/features/prompt-management/pages/PromptManagementPage.tsx` | 版本管理、在线编辑、版本对比、A/B 测试配置 |
+
+**API 端点**:
+- `GET /api/v1/prompts/{prompt_key}` - 获取提示词（支持版本和 A/B 测试参数）
+- `POST /api/v1/prompts/{prompt_key}/versions` - 创建新版本
+- `GET /api/v1/prompts/{prompt_key}/versions` - 列出所有版本
+- `GET /api/v1/prompts/{prompt_key}/versions/{version}` - 获取版本详情
+- `GET /api/v1/prompts/{prompt_key}/compare` - 对比两个版本
+- `POST /api/v1/prompts/ab-tests` - 创建 A/B 测试
+- `GET /api/v1/prompts/ab-tests` - 列出 A/B 测试
+- `POST /api/v1/prompts/ab-tests/{test_id}/toggle` - 启用/禁用 A/B 测试
+
+**核心特性**:
+- **版本控制**: 自动递增版本号，内容哈希去重
+- **缓存机制**: Redis 缓存提示词内容，支持标签失效
+- **A/B 测试**: 基于流量比例的版本分流，支持动态启用/禁用
+- **前端管理**: 可视化版本列表、在线编辑器、版本对比、A/B 测试配置
+
+### LLM 监控与分析 (LLM Monitoring)
+- **总览仪表盘**: 全系统 LLM 调用统计、消耗趋势、错误率概览
+- **多维度分析**: 支持按提示词、按场景统计消耗与质量
+- **告警配置**: 异常率升高、耗时突增、Token消耗超阈值告警
+
+### 模型适配与路由 (LLM Factory)
+- **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`
+- **场景隔离**: 9 大独立业务场景（报告生成、评估、重写、解析、评分等），独立配置模型参数
+- **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例
+- **热切换**: 监听配置变更事件，安全清理（dispose）旧模型实例，支持 0 停机动态重载
+
+### RAG 查询流水线编排 (Pipeline Orchestrator)
+- **声明式编排**: 基于 `query_pipeline.yaml` 驱动，消除硬编码的 RAG 查询逻辑
+- **分支路由**: 根据 `QueryRouter` 分类结果动态选择 `simple` (事实性) 或 `complex` (分析性) 流水线
+- **安全与可观测性**: 流水线首节点强制集成 `prompt_injection_guard` 拦截恶意输入，并提供全链路监控耗时与步骤结果
+
 # Claude/Agent Rules
 
 ## Backend Development
@@ -604,4 +906,4 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 - **RAG 系统修改规范**:
   - 修改 RAG 相关逻辑后，必须同步更新 `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` 文档
   - 新增的 RAG 模块必须在本文档的"RAG 系统架构"章节中注册
-  - 配置变更必须更新配置表格,包括环境变量名、默认值、说明
+  - 配置变更必须更新配置表格，包括环境变量名、默认值、说明

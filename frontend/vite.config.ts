@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
+    deps: {
+      inline: ['@ant-design/pro-components'],
+    },
   },
   resolve: {
     alias: {

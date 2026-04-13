@@ -4,6 +4,7 @@ import {
   createTestCase,
   updateTestCase,
   deleteTestCase,
+  batchDeleteTestCases,
   runAllTests,
   runSingleTest,
   getTestRuns,
@@ -14,6 +15,9 @@ import {
   reviewDraft,
   updateDraft,
   importDrafts,
+  deleteDraft,
+  batchDeleteDrafts,
+  batchDeleteTestRuns,
   getSourceDocuments,
   generateDrafts,
 } from '@/api/rag-test';
@@ -135,6 +139,77 @@ export function useRagEvaluation() {
     }
   }, [loadTestCases]);
 
+  const handleBatchDeleteTestCases = useCallback(async (caseIds: string[]) => {
+    setLoading(true);
+    try {
+      const result = await batchDeleteTestCases(caseIds);
+      await loadTestCases();
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量删除测试用例失败');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadTestCases]);
+
+  const handleBatchDeleteTestRuns = useCallback(async (runIds: string[]) => {
+    setLoading(true);
+    try {
+      const result = await batchDeleteTestRuns(runIds);
+      await loadTestRuns();
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量删除评估报告失败');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadTestRuns]);
+
+  const loadDrafts = useCallback(async (sourceDocumentId?: string) => {
+    setLoading(true);
+    try {
+      console.log('[loadDrafts] 开始加载草稿, sourceDocumentId:', sourceDocumentId);
+      const data = await getDrafts(sourceDocumentId);
+      console.log('[loadDrafts] 加载到草稿数据:', data.length, '条');
+      setDrafts(data);
+      setError(null);
+    } catch (err) {
+      console.error('[loadDrafts] 加载草稿失败:', err);
+      setError(err instanceof Error ? err.message : '加载草稿失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleDeleteDraft = useCallback(async (draftId: string) => {
+    setLoading(true);
+    try {
+      await deleteDraft(draftId);
+      await loadDrafts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除草稿失败');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDrafts]);
+
+  const handleBatchDeleteDrafts = useCallback(async (draftIds: string[]) => {
+    setLoading(true);
+    try {
+      const result = await batchDeleteDrafts(draftIds);
+      await loadDrafts();
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量删除草稿失败');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDrafts]);
+
   const handleCompareRuns = useCallback(async (runId1: string, runId2: string) => {
     setLoading(true);
     try {
@@ -161,22 +236,6 @@ export function useRagEvaluation() {
       setLoading(false);
     }
   }, [loadSnapshots]);
-
-  const loadDrafts = useCallback(async (sourceDocumentId?: string) => {
-    setLoading(true);
-    try {
-      console.log('[loadDrafts] 开始加载草稿, sourceDocumentId:', sourceDocumentId);
-      const data = await getDrafts(sourceDocumentId);
-      console.log('[loadDrafts] 加载到草稿数据:', data.length, '条');
-      setDrafts(data);
-      setError(null);
-    } catch (err) {
-      console.error('[loadDrafts] 加载草稿失败:', err);
-      setError(err instanceof Error ? err.message : '加载草稿失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const loadSourceDocuments = useCallback(async () => {
     setLoading(true);
@@ -251,6 +310,10 @@ export function useRagEvaluation() {
     createTestCase: handleCreateTestCase,
     updateTestCase: handleUpdateTestCase,
     deleteTestCase: handleDeleteTestCase,
+    batchDeleteTestCases: handleBatchDeleteTestCases,
+    batchDeleteTestRuns: handleBatchDeleteTestRuns,
+    deleteDraft: handleDeleteDraft,
+    batchDeleteDrafts: handleBatchDeleteDrafts,
     compareTestRuns: handleCompareRuns,
     createSnapshot: handleCreateSnapshot,
     reviewDraft: handleReviewDraft,

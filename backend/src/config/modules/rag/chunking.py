@@ -1,22 +1,49 @@
 """RAG 分块配置：基础分块、长章节分块、语义分块"""
 
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings
 from typing import List
+
+BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 
 
 class RagChunkingSettings(BaseSettings):
     """RAG 分块配置"""
 
     # 基础分块
-    rag_chunk_size: int = Field(default=1024, validation_alias="RAG_CHUNK_SIZE", description="默认分块大小（字符）")
-    rag_chunk_overlap: int = Field(default=200, validation_alias="RAG_CHUNK_OVERLAP", description="分块重叠大小（字符）")
-    rag_pdf_chunk_size: int = Field(default=1536, validation_alias="RAG_PDF_CHUNK_SIZE", description="PDF 分块大小（字符）")
-    rag_epub_chunk_target_size: int = Field(default=1024, validation_alias="RAG_EPUB_CHUNK_TARGET_SIZE", description="EPUB 分块目标大小（字符）")
+    rag_chunk_size: int = Field(
+        default=1024,
+        validation_alias="RAG_CHUNK_SIZE",
+        description="默认分块大小（字符）",
+    )
+    rag_chunk_overlap: int = Field(
+        default=200,
+        validation_alias="RAG_CHUNK_OVERLAP",
+        description="分块重叠大小（字符）",
+    )
+    rag_pdf_chunk_size: int = Field(
+        default=1536,
+        validation_alias="RAG_PDF_CHUNK_SIZE",
+        description="PDF 分块大小（字符）",
+    )
+    rag_epub_chunk_target_size: int = Field(
+        default=1024,
+        validation_alias="RAG_EPUB_CHUNK_TARGET_SIZE",
+        description="EPUB 分块目标大小（字符）",
+    )
 
     # 长章节分块
-    semantic_splitter_chapter_max_size: int = Field(default=3000, validation_alias="SEMANTIC_SPLITTER_CHAPTER_MAX_SIZE", description="长章节最大大小")
-    semantic_splitter_chapter_split_threshold: int = Field(default=50, validation_alias="SEMANTIC_SPLITTER_CHAPTER_SPLIT_THRESHOLD", description="长章节分割阈值")
+    semantic_splitter_chapter_max_size: int = Field(
+        default=3000,
+        validation_alias="SEMANTIC_SPLITTER_CHAPTER_MAX_SIZE",
+        description="长章节最大大小",
+    )
+    semantic_splitter_chapter_split_threshold: int = Field(
+        default=50,
+        validation_alias="SEMANTIC_SPLITTER_CHAPTER_SPLIT_THRESHOLD",
+        description="长章节分割阈值",
+    )
 
     # 语义分块设置
     semantic_splitter_buffer_size: int = Field(
@@ -41,15 +68,21 @@ class RagChunkingSettings(BaseSettings):
     )
     semantic_splitter_separators: List[str] = Field(
         default_factory=lambda: [
-            "\n## ", "\n### ", "\n#### ",  # 标题边界
-            "\n\n",                        # 段落边界
-            "\n",                          # 换行边界
-            "。", "！", "？",              # 中文句子结束
-            ". ", "! ", "? "               # 英文句子结束
+            "\n## ",
+            "\n### ",
+            "\n#### ",  # 标题边界
+            "\n\n",  # 段落边界
+            "\n",  # 换行边界
+            "。",
+            "！",
+            "？",  # 中文句子结束
+            ". ",
+            "! ",
+            "? ",  # 英文句子结束
         ],
-        description="语义分块优先使用的分隔符列表，按优先级排序"
+        description="语义分块优先使用的分隔符列表，按优先级排序",
     )
 
     class Config:
-        env_file = ".env.dev"
+        env_file = str(BASE_DIR / ".env.dev")
         env_file_encoding = "utf-8"

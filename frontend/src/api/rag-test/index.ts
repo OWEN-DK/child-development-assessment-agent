@@ -26,6 +26,26 @@ export const deleteTestCase = async (caseId: string): Promise<{ status: string; 
   return response.data;
 };
 
+export const batchDeleteTestCases = async (ids: string[]): Promise<{ status: string; message: string; deleted_count: number }> => {
+  const response = await apiClient.post('/rag/test/cases/batch/delete', { ids });
+  return response.data;
+};
+
+export const batchDeleteTestRuns = async (ids: string[]): Promise<{ status: string; message: string; deleted_count: number }> => {
+  const response = await apiClient.post('/rag/test/runs/batch/delete', { ids });
+  return response.data;
+};
+
+export const deleteDraft = async (draftId: string): Promise<{ status: string; message: string }> => {
+  const response = await apiClient.post(`/rag/test/drafts/${draftId}/delete`);
+  return response.data;
+};
+
+export const batchDeleteDrafts = async (ids: string[]): Promise<{ status: string; message: string; deleted_count: number }> => {
+  const response = await apiClient.post('/rag/test/drafts/batch/delete', { ids });
+  return response.data;
+};
+
 export const runAllTests = async (data?: { name?: string; description?: string; limit?: number }): Promise<{ status: string; test_run: TestRun }> => {
   const response = await apiClient.post('/rag/test/run', data || {});
   return response.data;
@@ -85,12 +105,14 @@ export const batchImportCases = async (data: BatchImportRequest): Promise<BatchI
   return response.data;
 };
 
-export const uploadSourceDocument = async (file: File, title?: string): Promise<{ status: string; document: SourceDocument }> => {
+export const uploadSourceDocument = async (file: File, title?: string): Promise<{ status: string; document: SourceDocument; auto_generate_started?: boolean; task_id?: string; message?: string }> => {
   const formData = new FormData();
   formData.append('file', file);
   if (title) formData.append('title', title);
   formData.append('auto_generate', 'true');
-  const response = await apiClient.post('/rag/test/documents/upload', formData);
+  const response = await apiClient.post('/rag/test/documents/upload', formData, {
+    timeout: 120000, // 增加超时时间至 2 分钟，因为 LLM 生成草稿需要较长时间
+  });
   return response.data;
 };
 
@@ -110,7 +132,9 @@ export const deleteSourceDocument = async (docId: string): Promise<{ status: str
 };
 
 export const generateDrafts = async (docId: string, params: GenerationParams): Promise<{ status: string; drafts: TestCaseDraft[] }> => {
-  const response = await apiClient.post(`/rag/test/documents/${docId}/generate-drafts`, { params });
+  const response = await apiClient.post(`/rag/test/documents/${docId}/generate-drafts`, { params }, {
+    timeout: 180000, // 生成草稿可能需要非常长的时间（3分钟）
+  });
   return response.data;
 };
 

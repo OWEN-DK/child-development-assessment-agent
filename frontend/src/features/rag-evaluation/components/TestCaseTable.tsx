@@ -12,6 +12,7 @@ interface TestCaseTableProps {
   onRefresh: () => void;
   onRunSingle?: (caseId: string) => void;
   onDelete?: (caseId: string) => void;
+  onBatchDelete?: (caseIds: string[]) => void;
 }
 
 export const TestCaseTable: React.FC<TestCaseTableProps> = ({
@@ -20,12 +21,14 @@ export const TestCaseTable: React.FC<TestCaseTableProps> = ({
   onRefresh,
   onRunSingle,
   onDelete,
+  onBatchDelete,
 }) => {
   const [searchText, setSearchText] = useState('');
   const [domainFilter, setDomainFilter] = useState<string | undefined>(undefined);
   const [ageFilter, setAgeFilter] = useState<number | undefined>(undefined);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCase, setEditingCase] = useState<TestCase | undefined>(undefined);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
   const filteredCases = testCases.filter(tc => {
     const matchesSearch = !searchText || tc.query.toLowerCase().includes(searchText.toLowerCase());
@@ -122,7 +125,7 @@ export const TestCaseTable: React.FC<TestCaseTableProps> = ({
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <Search
           placeholder="搜索查询内容"
           allowClear
@@ -160,6 +163,21 @@ export const TestCaseTable: React.FC<TestCaseTableProps> = ({
         <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           新建测试用例
         </Button>
+        {selectedRowKeys.length > 0 && (
+          <Popconfirm
+            title={`确定删除选中的 ${selectedRowKeys.length} 个测试用例？`}
+            onConfirm={() => {
+              onBatchDelete?.(selectedRowKeys as string[]);
+              setSelectedRowKeys([]);
+            }}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button danger icon={<DeleteOutlined />}>
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          </Popconfirm>
+        )}
       </div>
 
       <Table
@@ -167,6 +185,11 @@ export const TestCaseTable: React.FC<TestCaseTableProps> = ({
         dataSource={filteredCases}
         rowKey="id"
         loading={loading}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+        }}
+        scroll={{ x: 1200 }}
         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: total => `共 ${total} 条` }}
       />
 
