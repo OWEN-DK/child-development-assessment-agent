@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from typing import Callable, Awaitable, Any, Optional
+from fastapi.encoders import jsonable_encoder
 from src.api.sse import SSEPublisher
 from src.utils.logger import logger
 
@@ -56,11 +57,19 @@ class AsyncTaskManager:
                     **kwargs
                 )
                 logger.info(f"异步任务[{task_type}:{task_id}] 执行完成")
+                
+                # 安全地序列化结果，避免 SQLAlchemy ORM 或 Pydantic 模型引发 json 序列化错误
+                try:
+                    safe_result = jsonable_encoder(result) if result is not None else {}
+                except Exception as enc_err:
+                    logger.warning(f"结果序列化失败，将返回空字典: {enc_err}")
+                    safe_result = {}
+                
                 # 推送完成消息
                 await cls.publish_complete(
                     task_type=task_type,
                     task_id=task_id,
-                    result=result if result is not None else {}
+                    result=safe_result
                 )
                 return result
             except Exception as e:

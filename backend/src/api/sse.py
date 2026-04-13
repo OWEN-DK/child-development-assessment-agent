@@ -42,6 +42,9 @@ class SSEPublisher:
                 if message is None:  # 停止信号
                     break
                 yield f"data: {json.dumps(message, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            # 客户端断开连接或任务取消
+            raise
         finally:
             if channel in cls._local_subscribers:
                 cls._local_subscribers[channel].remove(queue)
@@ -72,10 +75,18 @@ class SSEPublisher:
     @classmethod
     async def publish(cls, channel: str, message: dict):
         """发布消息到 Redis 频道"""
+        from fastapi.encoders import jsonable_encoder
+        try:
+            # 确保 message 是可 JSON 序列化的 (防止 ORM 或 Pydantic 对象导致 dumps 崩溃)
+            safe_message = jsonable_encoder(message)
+        except Exception as e:
+            logger.error(f"SSE 消息序列化失败: {e}")
+            return
+            
         try:
             redis_client = RedisClient.get_client()
             await redis_client.publish(
-                f"child-dev:sse:{channel}", json.dumps(message, ensure_ascii=False)
+                f"child-dev:sse:{channel}", json.dumps(safe_message, ensure_ascii=False)
             )
         except Exception as e:
             logger.debug(f"Redis 发布失败，仅通过本地队列分发: {e}")
@@ -83,7 +94,7 @@ class SSEPublisher:
         # 同时发送到本地队列（同实例优化）
         if channel in cls._local_subscribers:
             for queue in cls._local_subscribers[channel]:
-                await queue.put(message)
+                await queue.put(safe_message)
 
     @classmethod
     async def publish_progress(cls, run_id: str, progress: dict):
