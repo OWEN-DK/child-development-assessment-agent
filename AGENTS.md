@@ -60,6 +60,8 @@ graph TB
         IndexMgr[IndexManagerService<br/>索引管理服务]
         CacheSvc[CacheService<br/>缓存服务]
         TestMgr[RagTestManager<br/>并发批量测试/生成/评分]
+        MonitorSvc[MonitoringService<br/>监控服务]
+        AlertSvc[AlertService<br/>告警服务]
     end
     
     subgraph 核心配置与状态层
@@ -136,7 +138,9 @@ graph TB
     RagTestCtrl --> TestMgr
     ConfigCtrl --> ConfigMgr
     PromptCtrl --> PromptMgr
-    MonitorCtrl --> LLMMonitor
+    MonitorCtrl --> MonitorSvc
+    MonitorSvc --> LLMMonitor
+    MonitorSvc --> AlertSvc
     
     TestMgr --> PipelineOrch
     RagSvc --> PipelineOrch
@@ -249,32 +253,32 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph 配置管理层
+    subgraph ConfigManagementLayer [配置管理层]
         ConfigMgr[ConfigManager<br/>配置管理器]
         ConfigRepo[ConfigRepository<br/>配置持久化]
         ConfigEvents[ConfigEvents<br/>配置变更事件]
     end
     
-    subgraph 基础设施层 core/
+    subgraph InfrastructureLayer [基础设施层 core/]
         CoreManager[manager.py<br/>配置管理器实现]
         CoreRepository[repository.py<br/>存储层实现]
         CoreEvents[events.py<br/>事件定义]
     end
     
-    subgraph 配置模块层 modules/
-        subgraph 基础配置
+    subgraph ConfigModulesLayer [配置模块层 modules/]
+        subgraph BaseConfig [基础配置]
             App[app.py<br/>应用配置]
             Logging[logging.py<br/>日志配置]
             Paths[paths.py<br/>路径配置]
         end
         
-        subgraph AI模型配置 models/
+        subgraph AIModelsConfig [AI模型配置 models/]
             LLM[llm.py<br/>LLM模型配置]
             Embedding[embedding.py<br/>Embedding配置]
             MLScoring[ml_scoring.py<br/>ML评分配置]
         end
         
-        subgraph RAG配置 rag/
+        subgraph RAGConfig [RAG配置 rag/]
             RagCore[core.py<br/>RAG核心设置]
             RagRetrieval[retrieval.py<br/>检索配置]
             RagChunking[chunking.py<br/>分块配置]
@@ -284,12 +288,12 @@ graph TB
         end
     end
     
-    subgraph 业务规则层 rules/
+    subgraph BusinessRulesLayer [业务规则层 rules/]
         Rules[rules.py<br/>规则定义]
-        RulesJson[rules.json<br/>规则数据(静态)]
+        RulesJson[rules.json<br/>规则数据静态]
     end
     
-    subgraph 配置特性
+    subgraph ConfigFeatures [配置特性]
         HotReload[热重载<br/>事件驱动生效]
         VersionCtrl[版本控制<br/>MySQL持久化]
         RedisCache[Redis缓存<br/>加速读取]
@@ -496,7 +500,7 @@ graph TB
       - **科学性 (40%)**: 基于 RAG 文档的相关性和对家长主诉问题的覆盖率。
       - **年龄适配度 (30%)**: 检查周总时长、单次时长是否符合年龄建议。
       - **安全性 (30%)**: 检查高风险活动与年龄的匹配度，以及 RAG 检索到的风险提示；结合 `child_state` (如前庭觉缺陷) 进行个性化扣分。
-  2.  **Level 2 & 3 (ML 预测与融合 - 规划中)**: 暂未实现，目前直接输出 AHP 分数。
+  2.  **Level 2 (ML 预测与融合 - 已实现)**: 引入 `QwenScorer`，基于大模型分析 AHP 得分和 RAG 文档，给出包含特征重要度的综合评分。失败时平滑回退至 AHP 基准评分。
   3.  **输出**: 生成详细的维度分析 (`DimensionAnalysis`) 和改进建议 (`suggestions`)。
 
 ### 2.5 Node5: 报告生成 Agent (Report Generation)
@@ -652,6 +656,18 @@ class AgentState(BaseModel):
 - **配置模块**: `src/config/modules/database.py` 数据库配置
 
 ### 6.8 Redis 基础设施
+
+```mermaid
+graph LR
+    App[应用程序] --> CacheSvc[CacheService]
+    CacheSvc --> L1[L1: Memory LRU Cache<br/>最快, 容量小]
+    CacheSvc --> L2[L2: Redis Cache<br/>分布式共享]
+    CacheSvc --> L3[L3: Disk Cache<br/>持久化兜底]
+    L1 -.未命中.-> L2
+    L2 -.未命中.-> L3
+    L3 -.未命中.-> DB[(数据库/计算)]
+```
+
 - **Redis 客户端**: 异步 Redis 连接管理，连接池配置，懒加载机制
 - **分布式锁**: 基于 Redis 的分布式锁实现 (带看门狗自动续期)
 - **会话管理**: 用户会话存储和管理 (Redis Hash 结构)
@@ -661,6 +677,31 @@ class AgentState(BaseModel):
 - **配置模块**: `src/config/modules/redis.py` Redis 配置
 
 ### 6.9 提示词管理系统
+
+```mermaid
+graph TB
+    subgraph Frontend [前端]
+        UI[PromptManagementPage]
+    end
+    subgraph API [API网关]
+        Ctrl[PromptController]
+    end
+    subgraph Core [核心层]
+        Mgr[PromptManager]
+        ABTest[A/B 测试分流]
+    end
+    subgraph Data [数据层]
+        Redis[(Redis 缓存)]
+        MySQL[(MySQL 版本控制)]
+    end
+    
+    UI --> Ctrl
+    Ctrl --> Mgr
+    Mgr --> ABTest
+    Mgr --> Redis
+    Mgr --> MySQL
+```
+
 - **PromptManager**: 提示词版本控制和 MySQL 存储 + Redis 缓存
   - 位置: `src/core/prompt/manager.py`
   - 功能: 版本管理、A/B 测试分流、缓存失效
@@ -675,6 +716,40 @@ class AgentState(BaseModel):
   - 功能: 版本列表、在线编辑、版本对比、A/B 测试配置
 
 ### 6.10 数据访问层 (Repository Layer)
+
+```mermaid
+graph TB
+    subgraph ServiceLayer [业务服务层]
+        Service[业务服务 / Manager]
+    end
+    subgraph RepositoryLayer [数据访问层 Repository]
+        DI[Injector 依赖注入]
+        Base[BaseRepository 泛型基类<br/>CRUD/过滤通用实现]
+        subgraph SpecificRepo [专属模型 Repository]
+            ConfigRepo[config_repository]
+            TestRepo[test_case_repository]
+            DocRepo[document_repository]
+            PromptRepo[prompt_repository]
+        end
+    end
+    subgraph StorageLayer [数据存储层]
+        DB[(MySQL 数据库<br/>async_session_factory)]
+    end
+    
+    Service --> DI
+    DI --> ConfigRepo
+    DI --> TestRepo
+    DI --> DocRepo
+    DI --> PromptRepo
+    
+    ConfigRepo --继承--> Base
+    TestRepo --继承--> Base
+    DocRepo --继承--> Base
+    PromptRepo --继承--> Base
+    
+    Base --> DB
+```
+
 - **架构**: 基于泛型的 BaseRepository 基类 + 模型专属 Repository 类
 - **位置**: `src/repository/`
 - **设计要点**:
@@ -682,22 +757,98 @@ class AgentState(BaseModel):
   - 过滤查询时校验字段有效性，防止 SQL 注入
   - create/update 方法接收 `Dict[str, Any]`，由调用方负责数据校验
 - **BaseRepository 通用方法**: `get_by_id`, `get_all`, `create`, `update`, `delete`, `get_by_filter`, `get_one_by_filter`, `count_by_filter`
-- **专属 Repository**:
-  - `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
-  - `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
-  - `TestCaseRepository`, `TestCaseDraftRepository`, `TestSetRepository`, `TestSetCaseRepository`, `TestRunRepository`, `TestRunResultRepository` - 测试用例管理
-  - `PromptVersionRepository`, `PromptABTestRepository` - 提示词管理
-  - `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
+- **专属 Repository** (已合并至模块文件):
+  - `config_repository.py`: `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
+  - `document_repository.py`: `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
+  - `test_case_repository.py`: `TestCaseRepository`, `TestCaseDraftRepository`, `TestSetRepository`, `TestSetCaseRepository`, `TestRunRepository`, `TestRunResultRepository` - 测试用例管理
+  - `prompt_repository.py`: `PromptVersionRepository`, `PromptABTestRepository` - 提示词管理
+  - `monitor_repository.py`: `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
 - **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器 (`src/core/di_container.py`)
 - **已迁移模块**: ConfigManager, PromptManager, MonitoringService, RagTestManager (部分 CRUD)
 
 ### 6.11 模型适配与路由 (LLM Factory)
+
+```mermaid
+graph TB
+    subgraph Scenarios [业务场景层]
+        Gen[报告生成]
+        Assess[评估分析]
+        Score[评分机制]
+        Extract[信息提取]
+    end
+    
+    subgraph FactoryLayer [工厂与路由层]
+        Config[ConfigManager]
+        Event[EventBus 变更事件]
+        Factory[LLMServiceFactory<br/>按场景动态生成/缓存实例]
+    end
+    
+    subgraph Adapters [框架适配层]
+        Interface[ILLMService 统一接口]
+        LangChain[LangChainAdapter]
+        LlamaIndex[LlamaIndexAdapter]
+    end
+    
+    subgraph Models [底层模型]
+        Qwen[Qwen-Plus / Qwen-Turbo 等]
+    end
+    
+    Gen --> Factory
+    Assess --> Factory
+    Score --> Factory
+    Extract --> Factory
+    
+    Config --热更新--> Event
+    Event -.通知更新.-> Factory
+    
+    Factory --> Interface
+    Interface <|-- LangChain
+    Interface <|-- LlamaIndex
+    
+    LangChain --> Qwen
+    LlamaIndex --> Qwen
+```
+
 - **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`
 - **场景隔离**: 9 大独立业务场景（报告生成、评估、重写、解析、评分等），独立配置模型参数
 - **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例
 - **热切换**: 监听配置变更事件，安全清理（dispose）旧模型实例，支持 0 停机动态重载
 
 ### 6.12 RAG 查询流水线编排 (Pipeline Orchestrator)
+
+```mermaid
+graph TB
+    subgraph Driver [驱动层]
+        YAML[query_pipeline.yaml<br/>声明式配置]
+    end
+    
+    subgraph Orchestrator [编排核心]
+        Orch[PipelineOrchestrator]
+        Router[QueryRouter<br/>复杂/简单查询分类]
+    end
+    
+    subgraph SimplePipeline [Simple 流水线]
+        S_Cache[缓存检查] --> S_Search[混合检索] --> S_Fusion[结果融合]
+    end
+    
+    subgraph ComplexPipeline [Complex 流水线]
+        C_Guard[注入防护] --> C_Cache[缓存检查]
+        C_Cache --> C_Rewrite[查询重写]
+        C_Rewrite --> C_Synonym[同义词扩展]
+        C_Synonym --> C_Filter[年龄动态过滤]
+        C_Filter --> C_Search[混合检索]
+        C_Search --> C_Rerank[重排序 Reranking]
+        C_Rerank --> C_Dedup[去重去噪]
+        C_Dedup --> C_Page[PageIndex增强]
+        C_Page --> C_Fusion[结果融合]
+    end
+    
+    YAML --> Orch
+    Orch --> Router
+    Router --事实性查询--> SimplePipeline
+    Router --分析性查询--> ComplexPipeline
+```
+
 - **声明式编排**: 基于 `query_pipeline.yaml` 驱动，消除硬编码的 RAG 查询逻辑
 - **分支路由**: 根据 `QueryRouter` 分类结果动态选择 `simple` (事实性) 或 `complex` (分析性) 流水线
 - **安全与可观测性**: 流水线首节点强制集成 `prompt_injection_guard` 拦截恶意输入，并提供全链路监控耗时与步骤结果

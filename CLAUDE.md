@@ -74,6 +74,8 @@ graph TB
         IndexMgr[IndexManagerService<br/>索引管理服务]
         CacheSvc[CacheService<br/>缓存服务]
         TestMgr[RagTestManager<br/>并发批量测试/生成/评分]
+        MonitorSvc[MonitoringService<br/>监控服务]
+        AlertSvc[AlertService<br/>告警服务]
     end
     
     subgraph 核心配置与状态层
@@ -150,7 +152,9 @@ graph TB
     RagTestCtrl --> TestMgr
     ConfigCtrl --> ConfigMgr
     PromptCtrl --> PromptMgr
-    MonitorCtrl --> LLMMonitor
+    MonitorCtrl --> MonitorSvc
+    MonitorSvc --> LLMMonitor
+    MonitorSvc --> AlertSvc
     
     TestMgr --> PipelineOrch
     RagSvc --> PipelineOrch
@@ -263,32 +267,32 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph 配置管理层
+    subgraph ConfigManagementLayer [配置管理层]
         ConfigMgr[ConfigManager<br/>配置管理器]
         ConfigRepo[ConfigRepository<br/>配置持久化]
         ConfigEvents[ConfigEvents<br/>配置变更事件]
     end
     
-    subgraph 基础设施层 core/
+    subgraph InfrastructureLayer [基础设施层 core/]
         CoreManager[manager.py<br/>配置管理器实现]
         CoreRepository[repository.py<br/>存储层实现]
         CoreEvents[events.py<br/>事件定义]
     end
     
-    subgraph 配置模块层 modules/
-        subgraph 基础配置
+    subgraph ConfigModulesLayer [配置模块层 modules/]
+        subgraph BaseConfig [基础配置]
             App[app.py<br/>应用配置]
             Logging[logging.py<br/>日志配置]
             Paths[paths.py<br/>路径配置]
         end
         
-        subgraph AI模型配置 models/
+        subgraph AIModelsConfig [AI模型配置 models/]
             LLM[llm.py<br/>LLM模型配置]
             Embedding[embedding.py<br/>Embedding配置]
             MLScoring[ml_scoring.py<br/>ML评分配置]
         end
         
-        subgraph RAG配置 rag/
+        subgraph RAGConfig [RAG配置 rag/]
             RagCore[core.py<br/>RAG核心设置]
             RagRetrieval[retrieval.py<br/>检索配置]
             RagChunking[chunking.py<br/>分块配置]
@@ -298,12 +302,12 @@ graph TB
         end
     end
     
-    subgraph 业务规则层 rules/
+    subgraph BusinessRulesLayer [业务规则层 rules/]
         Rules[rules.py<br/>规则定义]
-        RulesJson[rules.json<br/>规则数据(静态)]
+        RulesJson[rules.json<br/>规则数据静态]
     end
     
-    subgraph 配置特性
+    subgraph ConfigFeatures [配置特性]
         HotReload[热重载<br/>事件驱动生效]
         VersionCtrl[版本控制<br/>MySQL持久化]
         RedisCache[Redis缓存<br/>加速读取]
@@ -429,7 +433,8 @@ graph TB
 │   │   │   ├── rag_controller.py    # RAG 管理
 │   │   │   ├── rag_test_controller.py # RAG 测试 (含测试集导入/文档上传/草稿审核/测试集管理)
 │   │   │   ├── config_controller.py # 配置管理
-│   │   │   └── prompt_controller.py # 提示词管理
+│   │   │   ├── prompt_controller.py # 提示词管理
+│   │   │   └── monitoring_controller.py # 监控分析与告警
 │   │   ├── core/        # Agent 核心逻辑
 │   │   │   ├── llm/     # LLM 服务工厂
 │   │   │   │   ├── base.py              # LLM 服务统一接口
@@ -441,6 +446,7 @@ graph TB
 │   │   │   │   └── llm_monitor.py       # 监控服务
 │   │   │   ├── nodes/   # LangGraph 节点
 │   │   │   ├── ml/      # ML 评分模块
+│   │   │   │   └── qwen_scorer.py       # 大模型综合评分器
 │   │   │   ├── graph.py # 工作流编排
 │   │   │   ├── prompts.py # 提示词管理
 │   │   │   ├── di_container.py # 依赖注入
@@ -473,23 +479,16 @@ graph TB
 │   │   │   ├── content_audit_service.py # 内容审核
 │   │   │   ├── document_manager.py      # 文档管理
 │   │   │   ├── rag_test_manager.py      # RAG 测试管理 (含测试集导入/文档上传/草稿审核/测试集管理)
-│   │   │   └── monitoring_service.py    # 监控服务
+│   │   │   ├── draft_deduplicator.py    # 草稿去重服务
+│   │   │   ├── alert_service.py         # 监控告警服务
+│   │   │   └── monitoring_service.py    # 监控分析服务
 │   │   ├── repository/  # 数据访问层
 │   │   │   ├── base.py  # 通用 BaseRepository
-│   │   │   ├── config_version_repository.py
-│   │   │   ├── config_audit_log_repository.py
-│   │   │   ├── source_document_repository.py
-│   │   │   ├── document_record_repository.py
-│   │   │   ├── test_case_repository.py
-│   │   │   ├── test_case_draft_repository.py
-│   │   │   ├── test_set_repository.py
-│   │   │   ├── test_set_case_repository.py
-│   │   │   ├── test_run_repository.py
-│   │   │   ├── test_run_result_repository.py
-│   │   │   ├── prompt_version_repository.py
-│   │   │   ├── prompt_ab_test_repository.py
-│   │   │   ├── llm_call_log_repository.py
-│   │   │   └── ab_test_metric_repository.py
+│   │   │   ├── config_repository.py     # 配置版本与审计
+│   │   │   ├── document_repository.py   # 文档与分块记录
+│   │   │   ├── test_case_repository.py  # 测试用例全生命周期
+│   │   │   ├── prompt_repository.py     # 提示词与A/B测试
+│   │   │   └── monitor_repository.py    # LLM调用与统计指标
 │   │   ├── data/        # 静态数据
 │   │   │   ├── test_sets/ # RAG 评估测试集
 │   │   │   ├── child_development_milestones.json # 发展里程碑
@@ -527,6 +526,9 @@ graph TB
 │   │   │   ├── assessment/ # 评估功能
 │   │   │   ├── documents/  # 知识库管理
 │   │   │   ├── knowledge/  # 知识搜索
+│   │   │   ├── monitoring/ # 监控面板
+│   │   │   │   └── LLMMonitoringDashboard.tsx
+│   │   │   ├── prompts/    # 提示词管理
 │   │   │   ├── rag-evaluation/ # RAG 评估
 │   │   │   │   ├── components/ # 评估组件
 │   │   │   │   │   ├── TestCaseTable.tsx        # 测试用例表格
@@ -541,11 +543,10 @@ graph TB
 │   │   │   │   │   └── useRagEvaluation.ts      # 评估主 Hook
 │   │   │   │   └── pages/       # 评估页面
 │   │   │   │       └── RagEvaluationPage.tsx    # 评估主页面
-│   │   │   ├── prompt-management/ # 提示词管理
-│   │   │   │   ├── components/
-│   │   │   │   ├── hooks/
-│   │   │   │   └── pages/
-│   │   │   │       └── PromptManagementPage.tsx
+│   │   │   └── system-config/ # 系统配置管理
+│   │   │       ├── ConfigManagementPage.tsx
+│   │   │       ├── ConfigForm.tsx
+│   │   │       └── schema.ts
 │   │   ├── pages/       # 页面
 │   │   ├── store/       # 状态管理 (Zustand)
 │   │   ├── hooks/       # 自定义 Hooks
@@ -708,6 +709,35 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/rag/chunks/{chunk_id}` | GET | 获取分块详情 |
 | `/rag/layered-progress/{task_id}` | GET | 分层内容生成进度 |
 
+路由前缀: `/api/v1/monitoring`
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/monitoring/statistics` | GET | 获取调用统计与告警 |
+| `/api/v1/monitoring/trend` | GET | 获取趋势数据 |
+| `/api/v1/monitoring/model-distribution` | GET | 获取模型分布 |
+| `/api/v1/monitoring/scenarios` | GET | 获取场景统计 |
+| `/api/v1/monitoring/ab-comparison` | GET | A/B 测试 variant 对比 |
+
+路由前缀: `/api/v1/config`
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/config/current` | GET | 获取当前生效配置 |
+| `/api/v1/config/versions` | GET | 列出配置版本历史 |
+| `/api/v1/config/save` | POST | 创建新配置版本 |
+| `/api/v1/config/rollback` | POST | 回滚到指定版本 |
+| `/api/v1/config/schema` | GET | 获取动态配置表单 Schema |
+
+路由前缀: `/api/v1/prompts`
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/prompts/{prompt_key}` | GET | 获取提示词(支持A/B测试参数) |
+| `/api/v1/prompts/{prompt_key}/versions` | GET/POST | 列出/创建提示词版本 |
+| `/api/v1/prompts/ab-tests` | GET/POST | 列出/创建 A/B 测试 |
+| `/api/v1/prompts/ab-tests/{test_id}/toggle` | POST | 启用/禁用 A/B 测试 |
+
 路由前缀: `/rag/test`
 
 | 端点 | 方法 | 功能 |
@@ -716,11 +746,13 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/rag/test/cases/{case_id}` | GET/PUT/DELETE | 获取/更新/删除测试用例 |
 | `/rag/test/cases/import/preview` | POST | 预览JSON导入的测试用例 |
 | `/rag/test/cases/batch` | POST | 批量导入测试用例 |
+| `/rag/test/cases/batch/delete` | POST | 批量删除测试用例 |
 | `/rag/test/run` | POST | 运行所有测试用例 (支持并发) |
 | `/rag/test/run/{case_id}` | POST | 运行单个测试用例 |
 | `/rag/test/runs` | GET | 列出所有测试运行 |
 | `/rag/test/runs/{run_id}` | GET | 获取单个测试运行 |
-| `/rag/test/runs/sse` | GET | SSE 进度推送 |
+| `/rag/test/run/{run_id}/stream` | GET | SSE 进度推送 |
+| `/rag/test/runs/batch/delete` | POST | 批量删除运行记录 |
 | `/rag/test/compare` | GET | 比较两个测试运行 |
 | `/rag/test/snapshots` | POST/GET | 创建/列出快照 |
 | `/rag/test/snapshots/{snapshot_id}` | GET | 获取单个快照 |
@@ -730,10 +762,13 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/rag/test/documents` | GET | 列出所有源文档 |
 | `/rag/test/documents/{doc_id}` | GET/DELETE | 获取/删除源文档 |
 | `/rag/test/documents/{doc_id}/generate-drafts` | POST | 手动生成测试用例草稿 |
+| `/rag/test/drafts/generate/{task_id}/stream` | GET | SSE 推送生成草稿进度 |
 | `/rag/test/drafts` | GET | 列出草稿 |
 | `/rag/test/drafts/{draft_id}` | GET/PUT | 获取/更新草稿 |
 | `/rag/test/drafts/{draft_id}/review` | POST | 审核草稿 |
 | `/rag/test/drafts/import` | POST | 导入已审核草稿 |
+| `/rag/test/drafts/batch/delete` | POST | 批量删除草稿 |
+| `/rag/test/drafts/{draft_id}/delete` | POST | 删除单个草稿 |
 | `/rag/test/sets` | POST/GET | 创建/列出测试集 |
 | `/rag/test/sets/{set_id}` | GET/PUT/DELETE | 获取/更新/删除测试集 |
 | `/rag/test/sets/{set_id}/cases` | POST/DELETE | 添加/移除测试用例 |
@@ -820,6 +855,17 @@ MYSQL_POOL_RECYCLE=1800
 
 ### Redis 基础设施
 
+```mermaid
+graph LR
+    App[应用程序] --> CacheSvc[CacheService]
+    CacheSvc --> L1[L1: Memory LRU Cache<br/>最快, 容量小]
+    CacheSvc --> L2[L2: Redis Cache<br/>分布式共享]
+    CacheSvc --> L3[L3: Disk Cache<br/>持久化兜底]
+    L1 -.未命中.-> L2
+    L2 -.未命中.-> L3
+    L3 -.未命中.-> DB[(数据库/计算)]
+```
+
 | 模块 | 文件路径 | 职责 |
 |------|----------|------|
 | Redis 客户端 | `src/core/redis_client.py` | 异步 Redis 连接管理，连接池配置，懒加载机制 |
@@ -852,6 +898,30 @@ REDIS_PUBSUB_ENABLED=true
 
 ### 提示词管理系统
 
+```mermaid
+graph TB
+    subgraph Frontend [前端]
+        UI[PromptManagementPage]
+    end
+    subgraph API [API网关]
+        Ctrl[PromptController]
+    end
+    subgraph Core [核心层]
+        Mgr[PromptManager]
+        ABTest[A/B 测试分流]
+    end
+    subgraph Data [数据层]
+        Redis[(Redis 缓存)]
+        MySQL[(MySQL 版本控制)]
+    end
+    
+    UI --> Ctrl
+    Ctrl --> Mgr
+    Mgr --> ABTest
+    Mgr --> Redis
+    Mgr --> MySQL
+```
+
 | 模块 | 文件路径 | 职责 |
 |------|----------|------|
 | PromptManager | `src/core/prompt/manager.py` | 提示词版本控制、MySQL 存储 + Redis 缓存、A/B 测试分流 |
@@ -881,12 +951,88 @@ REDIS_PUBSUB_ENABLED=true
 - **告警配置**: 异常率升高、耗时突增、Token消耗超阈值告警
 
 ### 模型适配与路由 (LLM Factory)
+
+```mermaid
+graph TB
+    subgraph Scenarios [业务场景层]
+        Gen[报告生成]
+        Assess[评估分析]
+        Score[评分机制]
+        Extract[信息提取]
+    end
+    
+    subgraph FactoryLayer [工厂与路由层]
+        Config[ConfigManager]
+        Event[EventBus 变更事件]
+        Factory[LLMServiceFactory<br/>按场景动态生成/缓存实例]
+    end
+    
+    subgraph Adapters [框架适配层]
+        Interface[ILLMService 统一接口]
+        LangChain[LangChainAdapter]
+        LlamaIndex[LlamaIndexAdapter]
+    end
+    
+    subgraph Models [底层模型]
+        Qwen[Qwen-Plus / Qwen-Turbo 等]
+    end
+    
+    Gen --> Factory
+    Assess --> Factory
+    Score --> Factory
+    Extract --> Factory
+    
+    Config --热更新--> Event
+    Event -.通知更新.-> Factory
+    
+    Factory --> Interface
+    Interface <|-- LangChain
+    Interface <|-- LlamaIndex
+    
+    LangChain --> Qwen
+    LlamaIndex --> Qwen
+```
+
 - **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`
 - **场景隔离**: 9 大独立业务场景（报告生成、评估、重写、解析、评分等），独立配置模型参数
 - **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例
 - **热切换**: 监听配置变更事件，安全清理（dispose）旧模型实例，支持 0 停机动态重载
 
 ### RAG 查询流水线编排 (Pipeline Orchestrator)
+
+```mermaid
+graph TB
+    subgraph Driver [驱动层]
+        YAML[query_pipeline.yaml<br/>声明式配置]
+    end
+    
+    subgraph Orchestrator [编排核心]
+        Orch[PipelineOrchestrator]
+        Router[QueryRouter<br/>复杂/简单查询分类]
+    end
+    
+    subgraph SimplePipeline [Simple 流水线]
+        S_Cache[缓存检查] --> S_Search[混合检索] --> S_Fusion[结果融合]
+    end
+    
+    subgraph ComplexPipeline [Complex 流水线]
+        C_Guard[注入防护] --> C_Cache[缓存检查]
+        C_Cache --> C_Rewrite[查询重写]
+        C_Rewrite --> C_Synonym[同义词扩展]
+        C_Synonym --> C_Filter[年龄动态过滤]
+        C_Filter --> C_Search[混合检索]
+        C_Search --> C_Rerank[重排序 Reranking]
+        C_Rerank --> C_Dedup[去重去噪]
+        C_Dedup --> C_Page[PageIndex增强]
+        C_Page --> C_Fusion[结果融合]
+    end
+    
+    YAML --> Orch
+    Orch --> Router
+    Router --事实性查询--> SimplePipeline
+    Router --分析性查询--> ComplexPipeline
+```
+
 - **声明式编排**: 基于 `query_pipeline.yaml` 驱动，消除硬编码的 RAG 查询逻辑
 - **分支路由**: 根据 `QueryRouter` 分类结果动态选择 `simple` (事实性) 或 `complex` (分析性) 流水线
 - **安全与可观测性**: 流水线首节点强制集成 `prompt_injection_guard` 拦截恶意输入，并提供全链路监控耗时与步骤结果
