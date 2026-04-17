@@ -34,7 +34,7 @@ graph TB
     end
 
     subgraph 数据持久层
-        MySQL[(MySQL 8.0<br>12张核心业务表<br>SQLAlchemy 2.0 ORM<br>唯一数据源)]
+        MySQL[(MySQL 5.7<br>12张核心业务表<br>SQLAlchemy 2.0 ORM<br>唯一数据源)]
         Redis[(Redis 7.0<br>缓存/队列/锁/会话<br>全面加速层)]
         Chroma[(Chroma 向量库<br>Client/Server HTTP模式<br>独立微服务节点)]
         JSONFiles[JSON 文件存储<br>规则/静态数据]
@@ -170,7 +170,7 @@ sequenceDiagram
 
 ### 2.1 技术栈
 
-- **数据库**: MySQL 8.0（自建服务器）
+- **数据库**: MySQL 5.7（自建服务器）
 - **ORM 框架**: SQLAlchemy 2.0（异步模式）
 - **迁移工具**: Alembic
 - **异步驱动**: aiomysql

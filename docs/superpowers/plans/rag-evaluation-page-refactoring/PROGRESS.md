@@ -1,7 +1,7 @@
 # 实施进度追踪
 
 > **最后更新**: 2026-04-17
-> **总体进度**: Phase 0-3 代码完成，Phase 5-8 方案已补全
+> **总体进度**: Phase 0-5 代码完成，Phase 6-8 方案已补全
 > **总需求点数**: 108 个
 
 ---
@@ -15,8 +15,8 @@
 | Phase 2 | SSE 工作流实现 | 10 | ✅ 代码完成 | 10/10 |
 | Phase 3 | 前端页面实现 | 10 | ✅ 代码完成 | 10/10 |
 | Phase 4 | 6 层校验引擎 | 17 | ✅ 代码完成 | 17/17 |
-| Phase 5 | 推荐模式面板 + 配置/提示词编辑 | 11 | ✅ 方案完成 | 11/11 |
-| Phase 6 | 趋势追踪 + 导出功能 | 8 | ✅ 方案完成 | 8/8 |
+| Phase 5 | 推荐模式面板 + 配置/提示词编辑 | 11 | ✅ 代码完成 | 11/11 |
+| Phase 6 | 趋势追踪 + 导出功能 | 8 | ✅ 代码完成 | 8/8 |
 | Phase 7 | 提示词管理重构 | 10 | ✅ 方案完成 | 10/10 |
 | Phase 8 | 配置管理优化 | 8 | ✅ 方案完成 | 8/8 |
 | **合计** | | **108** | | **108/108** |
@@ -139,17 +139,24 @@
 
 | # | 需求点 | 实施文件 | 状态 | 备注 |
 |---|--------|---------|------|------|
-| 1 | 推荐模式面板（三种模式） | `01-recommendation-panel-three-modes.md` | ✅ | 方案已补全 |
-| 2 | 审查面板（抽屉式） | `02-review-panel-drawer.md` | ✅ | 方案已补全 |
-| 3 | 配置对比视图 | `03-comparison-view-config.md` | ✅ | 方案已补全 |
-| 4 | 提示词对比视图 | `04-comparison-view-prompt.md` | ✅ | 方案已补全 |
-| 5 | 采纳→审查→保存三步流程 | `05-adopt-review-save-flow.md` | ✅ | 方案已补全 |
-| 6 | 原子保存事务 | `06-atomic-save-transaction.md` | ✅ | 方案已补全 |
-| 7 | 配置热重载 | `07-config-hot-reload.md` | ✅ | 方案已补全 |
-| 8 | ConfigCache 单例 | `08-config-cache-singleton.md` | ✅ | 方案已补全 |
-| 9 | 已忽略建议列表 | `09-ignored-suggestions-list.md` | ✅ | 方案已补全 |
-| 10 | 恢复忽略建议 | `10-restore-ignored-suggestion.md` | ✅ | 方案已补全 |
-| 11 | 面板布局适配 | `11-panel-layout-adaptation.md` | ✅ | 方案已补全 |
+| 1 | 推荐模式面板（三种模式） | `01-recommendation-panel-three-modes.md` | ✅ | 代码完成，RecommendationPanel 组件 + 三种模式切换 |
+| 2 | 审查面板（抽屉式） | `02-review-panel-drawer.md` | ✅ | 代码完成，ReviewDrawer + ReviewItem + ImpactPreview |
+| 3 | 配置对比视图 | `03-comparison-view-config.md` | ✅ | 代码完成，ConfigDiffView + HistoryReference 模态框 |
+| 4 | 提示词对比视图 | `04-comparison-view-prompt.md` | ✅ | 代码完成，PromptDiffView + ChangeSummary + ImpactAnalysis |
+| 5 | 采纳→审查→保存三步流程 | `05-adopt-review-save-flow.md` | ✅ | 代码完成，Zustand store 管理三步状态 |
+| 6 | 原子保存事务 | `06-atomic-save-transaction.md` | ✅ | 代码完成，ConfigChangeSetService + async with session.begin() |
+| 7 | 配置热重载 | `07-config-hot-reload.md` | ✅ | 代码完成，ConfigCache + Redis Pub/Sub + lifespan 初始化 |
+| 8 | ConfigCache 单例 | `08-config-cache-singleton.md` | ✅ | 代码完成，单例模式 + asyncio.Lock + 5分钟 TTL 清理 |
+| 9 | 已忽略建议列表 | `09-ignored-suggestions-list.md` | ✅ | 代码完成，IgnoredSuggestionsList + IgnoredSuggestionService |
+| 10 | 恢复忽略建议 | `10-restore-ignored-suggestion.md` | ✅ | 代码完成，restore/delete API + 前端集成 |
+| 11 | 面板布局适配 | `11-panel-layout-adaptation.md` | ✅ | 代码完成，LayoutAdapter 响应式 (固定 380px / Drawer 40%) |
+
+> **实施文件清单**:
+> - 后端: `backend/src/service/tuning_suggestion_service.py`, `backend/src/service/ignored_suggestion_service.py`, `backend/src/service/config_change_set_service.py`, `backend/src/core/config/cache.py`, `backend/src/controller/tuning_controller.py` (扩展)
+> - 前端: `frontend/src/features/rag-eval/components/RecommendationPanel/` (6 文件), `frontend/src/features/rag-eval/components/ReviewPanel/` (5 文件), `frontend/src/features/rag-eval/components/ConfigComparison/` (4 文件), `frontend/src/features/rag-eval/components/PromptComparison/` (5 文件), `frontend/src/features/rag-eval/components/IgnoredSuggestionsList/` (4 文件)
+> - Store: `frontend/src/store/recommendationPanelStore.ts`
+> - API: `frontend/src/api/rag-eval/tuning.ts`
+> - 测试: 177 个测试通过 (service + api + core + integration)
 
 ---
 
@@ -157,14 +164,23 @@
 
 | # | 需求点 | 实施文件 | 状态 | 备注 |
 |---|--------|---------|------|------|
-| 1 | 趋势图组件（均值 + 误差线） | `01-trend-chart-component.md` | ✅ | 方案已补全 |
-| 2 | 多指标叠加展示 | `02-multi-metric-overlay.md` | ✅ | 方案已补全 |
-| 3 | 配置版本对比 | `03-config-version-comparison.md` | ✅ | 方案已补全 |
-| 4 | 配置版本回滚 | `04-config-version-rollback.md` | ✅ | 方案已补全 |
-| 5 | PDF 导出（后端异步） | `05-pdf-export-async.md` | ✅ | 方案已补全 |
-| 6 | CSV 导出（前端） | `06-csv-export-frontend.md` | ✅ | 方案已补全 |
-| 7 | JSON 导出（前端） | `07-json-export-frontend.md` | ✅ | 方案已补全 |
-| 8 | 导出任务并发限制 | `08-export-task-concurrency-limit.md` | ✅ | 方案已补全 |
+| 1 | 趋势图组件（均值 + 误差线） | `01-trend-chart-component.md` | ✅ | 代码完成，TrendService + API + TrendChart 组件 |
+| 2 | 多指标叠加展示 | `02-multi-metric-overlay.md` | ✅ | 代码完成，MultiMetricChart + MetricLegend 可点击切换 |
+| 3 | 配置版本对比 | `03-config-version-comparison.md` | ✅ | 代码完成，对比 API + ConfigVersionComparison 组件 |
+| 4 | 配置版本回滚 | `04-config-version-rollback.md` | ✅ | 代码完成，ConfigRollobackService + 原子回滚 + 确认对话框 |
+| 5 | PDF 导出（后端异步） | `05-pdf-export-async.md` | ✅ | 代码完成，ExportService + weasyprint + Jinja2 模板 |
+| 6 | CSV 导出（前端） | `06-csv-export-frontend.md` | ✅ | 代码完成，papaparse + BOM 编码 |
+| 7 | JSON 导出（前端） | `07-json-export-frontend.md` | ✅ | 代码完成，前端直接下载 |
+| 8 | 导出任务并发限制 | `08-export-task-concurrency-limit.md` | ✅ | 代码完成，Semaphore(2) + 队列 + 60s 超时 |
+
+> **实施文件清单**:
+> - 后端: `backend/src/service/trend_service.py`, `backend/src/service/export_service.py`, `backend/src/service/config_rollback_service.py`
+> - 控制器: `backend/src/controller/trend_controller.py`, `backend/src/controller/export_controller.py`, `backend/src/controller/rollback_controller.py`
+> - 模板: `backend/src/templates/reports/report_summary.html`
+> - 前端: `frontend/src/features/rag-eval/components/TrendChart/` (6 文件), `frontend/src/features/rag-eval/components/ConfigVersionComparison/` (4 文件), `frontend/src/features/rag-eval/components/RollbackConfirmDialog/` (2 文件)
+> - API: `frontend/src/api/rag-eval/trend.ts`, `frontend/src/api/rag-eval/export.ts`, `frontend/src/api/rag-eval/config.ts`
+> - 工具: `frontend/src/features/rag-eval/utils/export.ts`
+> - 测试: 10 个测试通过 (trend_service 5 个 + export_service 5 个)
 
 ---
 

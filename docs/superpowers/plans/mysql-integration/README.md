@@ -5,14 +5,14 @@
 **Goal:** 完成儿童发展评估系统的 MySQL+Redis 全栈重构，替换原有 JSON 文件存储，实现三级缓存、分布式锁、事件总线、会话管理等核心能力，重构配置系统、LLM 服务、RAG 流水线、测试框架，达到性能提升指标（RAG 查询延迟降低 60%，缓存命中<100ms，支持万级测试用例查询）。
 
 **Architecture:**
-- MySQL 8.0 作为唯一持久化数据源，存储所有结构化数据（配置、测试用例、运行结果、LLM 日志等）
+- MySQL 5.7 作为唯一持久化数据源，存储所有结构化数据（配置、测试用例、运行结果、LLM 日志等）
 - Redis 7.0 作为全面加速层，承担分布式缓存、消息队列、分布式锁、会话存储四大角色
 - 三级缓存架构：内存 LRU → Redis → MySQL，采用 Cache-Aside 模式保证一致性
 - 事件驱动架构：内存 EventBus + Redis Pub/Sub 实现跨实例事件传播
 - 异步 ORM：SQLAlchemy 2.0 + aiomysql，连接池优化，支持事务、批量写入
 - 向量存储保持 Chroma，业务规则/静态数据保持 JSON 文件不变
 
-**Tech Stack:** MySQL 8.0、Redis 7.0、SQLAlchemy 2.0、Alembic、aiomysql、redis.asyncio、FastAPI、LangChain、LlamaIndex、React 19、Ant Design 6
+**Tech Stack:** MySQL 5.7、Redis 7.0、SQLAlchemy 2.0、Alembic、aiomysql、redis.asyncio、FastAPI、LangChain、LlamaIndex、React 19、Ant Design 6
 
 **方案状态:** ✅ 100% 完成并验证通过（v1.4，23 项修复已完成）
 
