@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG 评估报告</title>
+    <style>
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            font-size: 12px;
+        }
+        h1 {
+            font-size: 24px;
+            color: #1a1a1a;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            font-size: 18px;
+            color: #333;
+            margin-top: 30px;
+            border-left: 4px solid #1890ff;
+            padding-left: 10px;
+        }
+        h3 {
+            font-size: 14px;
+            color: #555;
+        }
+        .summary {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .summary .metric {
+            display: inline-block;
+            width: 18%;
+            text-align: center;
+            padding: 10px;
+        }
+        .summary .metric .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1890ff;
+        }
+        .summary .metric .label {
+            font-size: 12px;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #fafafa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .status-pass {
+            color: #52c41a;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: #ff4d4f;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            color: #999;
+            font-size: 10px;
+            text-align: center;
+        }
+        .bad-case {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>RAG 评估报告</h1>
+
+    <div class="summary">
+        <h3>核心指标</h3>
+        <div class="metric">
+            <div class="value">{{ "%.2f"|format(precision) }}</div>
+            <div class="label">Precision</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ "%.2f"|format(recall) }}</div>
+            <div class="label">Recall</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ "%.2f"|format(f1) }}</div>
+            <div class="label">F1 Score</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ "%.2f"|format(mrr) }}</div>
+            <div class="label">MRR</div>
+        </div>
+        <div class="metric">
+            <div class="value">{{ "%.2f"|format(ndcg) }}</div>
+            <div class="label">NDCG</div>
+        </div>
+    </div>
+
+    <div class="summary">
+        <h3>运行概览</h3>
+        <p><strong>报告 ID:</strong> {{ report_id }}</p>
+        {% if run %}
+        <p><strong>运行名称:</strong> {{ run.name }}</p>
+        <p><strong>状态:</strong> {{ run.status }}</p>
+        <p><strong>创建时间:</strong> {{ run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else '-' }}</p>
+        {% endif %}
+        <p><strong>总用例数:</strong> {{ total_cases }}</p>
+        <p><strong>通过:</strong> <span class="status-pass">{{ passed_cases }}</span></p>
+        <p><strong>失败:</strong> <span class="status-fail">{{ failed_cases }}</span></p>
+        <p><strong>生成时间:</strong> {{ generated_at }}</p>
+    </div>
+
+    <h2>测试用例详情</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>查询</th>
+                <th>状态</th>
+                <th>Hit@1</th>
+                <th>Hit@3</th>
+                <th>Hit@5</th>
+                <th>耗时 (ms)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in results[:50] %}
+            <tr>
+                <td>{{ result.query[:50] }}{% if result.query|length > 50 %}...{% endif %}</td>
+                <td class="status-{{ result.status }}">{{ result.status }}</td>
+                <td>{{ "✓" if result.hit_at_1 else "✗" }}</td>
+                <td>{{ "✓" if result.hit_at_3 else "✗" }}</td>
+                <td>{{ "✓" if result.hit_at_5 else "✗" }}</td>
+                <td>{{ result.duration_ms if result.duration_ms else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if results|length > 50 %}
+    <p>... 共 {{ results|length }} 条结果，仅展示前 50 条</p>
+    {% endif %}
+
+    {% if bad_cases %}
+    <h2>Bad Cases ({{ bad_cases|length }})</h2>
+    {% for case in bad_cases[:20] %}
+    <div class="bad-case">
+        <p><strong>查询:</strong> {{ case.query }}</p>
+        <p><strong>Hit@1:</strong> {{ "✓" if case.hit_at_1 else "✗" }} | <strong>Hit@3:</strong> {{ "✓" if case.hit_at_3 else "✗" }} | <strong>Hit@5:</strong> {{ "✓" if case.hit_at_5 else "✗" }}</p>
+        {% if case.duration_ms %}
+        <p><strong>耗时:</strong> {{ case.duration_ms }}ms</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% if bad_cases|length > 20 %}
+    <p>... 共 {{ bad_cases|length }} 个 Bad Case，仅展示前 20 个</p>
+    {% endif %}
+    {% endif %}
+
+    <div class="footer">
+        <p>本报告由 RAG 评估系统自动生成 | {{ generated_at }}</p>
+    </div>
+</body>
+</html>

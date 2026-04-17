@@ -1,5 +1,6 @@
-from fastapi import FastAPI
-from src.config import settings
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from src.config import settings, validate_required_env_vars
 from src.controller import (
     task_controller,
     rag_controller,
@@ -7,21 +8,67 @@ from src.controller import (
     config_controller,
     monitoring_controller,
     prompt_controller,
+    tuning_controller,
+    trend_controller,
+    export_controller,
+    rollback_controller,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from src.utils.logger import logger
 from pathlib import Path
 from contextlib import asynccontextmanager
 from src.core.llm.log_collector import LLMLogCollector
+from src.core.scheduler import start_scheduler, stop_scheduler
+from src.core.tracing.writer import get_trace_writer
+from src.core.config.cache import ConfigCache
+from src.core.redis_client import RedisClient
 from prometheus_client import make_asgi_app
+import os
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动 LLM 日志收集器
     LLMLogCollector.start()
+
+    # 启动 TraceWriter 异步队列
+    trace_writer = get_trace_writer()
+    await trace_writer.start()
+    logger.info("TraceWriter started")
+
+    # 启动定时任务调度器
+    start_scheduler()
+
+    # 初始化配置热重载缓存
+    try:
+        redis_client = RedisClient.get_client()
+        config_cache = ConfigCache.get_instance()
+        await config_cache.initialize(redis_client)
+        logger.info("ConfigCache 热重载已启用")
+    except Exception as e:
+        logger.warning(f"ConfigCache 初始化失败，热重载未启用: {e}")
+
     logger.info("Application startup complete")
     yield
+
+    # 关闭配置热重载缓存
+    try:
+        config_cache = ConfigCache.get_instance()
+        await config_cache.shutdown()
+        logger.info("ConfigCache 热重载已关闭")
+    except Exception as e:
+        logger.warning(f"ConfigCache 关闭异常: {e}")
+
+    # 关闭 TraceWriter 异步队列（等待队列排空）
+    await trace_writer.stop()
+    logger.info("TraceWriter stopped")
+
+    # 关闭定时任务调度器
+    stop_scheduler()
+
+    # 关闭 LLM 日志收集器
     await LLMLogCollector.stop()
+
     logger.info("Application shutdown complete")
 
 
@@ -64,18 +111,85 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # 校验环境变量
+    missing_vars = validate_required_env_vars()
+    if missing_vars:
+        logger.critical(f"关键环境变量缺失: {', '.join(missing_vars)}")
+        app.state.env_vars_missing = missing_vars
+    else:
+        app.state.env_vars_missing = []
+
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )
     app.include_router(task_controller.router)
     app.include_router(rag_controller.router)
     app.include_router(rag_test_controller.router)
+    app.include_router(rag_test_controller.api_router)  # Phase 2: SSE 工作流
     app.include_router(config_controller.router)
+
+    # 配置健康诊断
+    from src.controller import config_health_controller
+
+    app.include_router(config_health_controller.router)
+
+    # 健康检查端点
+    from src.controller.health_controller import router as health_router
+
+    app.include_router(health_router)
+
     app.include_router(monitoring_controller.router)
     app.include_router(prompt_controller.router)
 
+    # Phase 6: 趋势、导出、回滚
+    app.include_router(trend_controller.router)
+    app.include_router(export_controller.router)
+    app.include_router(rollback_controller.router)
+
+    from src.core.tuning import (
+        TuningSuggestionEngine,
+        RuleEngine,
+        HistoryAnalyzer,
+        LLMDiagnoser,
+        ConflictDetector,
+    )
+
+    tuning_engine = TuningSuggestionEngine(
+        rule_engine=RuleEngine(),
+        history_analyzer=HistoryAnalyzer(),
+        llm_diagnoser=LLMDiagnoser(),
+        conflict_detector=ConflictDetector(),
+    )
+    controller = tuning_controller.TuningController(tuning_engine)
+    controller.register_routes(app)
+
     metrics_app = make_asgi_app()
     app.mount("/metrics", metrics_app)
+
+    # SPA 回退路由：非 API 路径的 404 请求返回 index.html
+    frontend_dist_dir = os.path.join(os.path.dirname(__file__), "../../frontend/dist")
+    spa_enabled = os.path.isfile(os.path.join(frontend_dist_dir, "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        """SPA回退路由：将所有非API路径的请求返回index.html，由前端React Router处理"""
+        if not spa_enabled:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        if full_path.startswith(
+            ("api/", "docs", "openapi.json", "metrics", "rag/", "health")
+        ):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        file_path = os.path.join(frontend_dist_dir, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+
+        index_path = os.path.join(frontend_dist_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+
+        raise HTTPException(status_code=404, detail="Not Found")
 
     return app
 
