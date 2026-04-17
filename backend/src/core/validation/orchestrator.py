@@ -11,6 +11,17 @@ from src.config.core.manager import config_manager
 from src.models.rag_eval.test_report import RagEvalTestReport
 from src.models.rag_eval.test_run import RagEvalTestRun
 from src.models.rag_eval.enums import RagEvalTestReportStatus
+from src.core.validation.layers import (
+    Layer1RuleEngine,
+    Layer2HistoryComparison,
+    Layer3LLMDiagnosis,
+    Layer4aGoldenCoverage,
+    Layer4bChunkQuality,
+    Layer4cDocumentStaleness,
+    Layer5aEmbeddingQuality,
+    Layer5bIntentAccuracy,
+    Layer5cErrorPatterns,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +104,10 @@ class ValidationOrchestrator:
 
         config = await _get_validation_config()
         queue_max = config["queue_max"]
+        queue_timeout = queue_max * 2
 
         try:
-            await asyncio.wait_for(self._semaphore.acquire(), timeout=5)
+            await asyncio.wait_for(self._semaphore.acquire(), timeout=queue_timeout)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=503, detail="校验队列已满，请稍后重试")
 
@@ -379,85 +391,3 @@ class ValidationOrchestrator:
                 await session.flush()
                 await session.refresh(report)
                 return report
-
-
-# Layer stubs - 这些将在后续任务中实现
-class Layer1RuleEngine:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer2HistoryComparison:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer3LLMDiagnosis:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer4aGoldenCoverage:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer4bChunkQuality:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer4cDocumentStaleness:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer5aEmbeddingQuality:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer5bIntentAccuracy:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}
-
-
-class Layer5cErrorPatterns:
-    def __init__(self, session_factory: SessionFactory, test_run: RagEvalTestRun):
-        self.session_factory = session_factory
-        self.test_run = test_run
-
-    async def execute(self) -> dict:
-        return {"data": {}}

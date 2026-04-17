@@ -223,3 +223,117 @@ async def test_layer_error_marked_degraded(orchestrator):
 
     assert result["status"] == "degraded"
     assert "reason" in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_queue_full_returns_503(mock_session_factory, mock_test_run):
+    """测试队列满时返回 503 错误"""
+    ValidationOrchestrator._semaphore = None
+    ValidationOrchestrator._init_lock = None
+    orchestrator = ValidationOrchestrator()
+    await orchestrator.init(max_concurrent=1)
+
+    async def slow_task(*args):
+        await asyncio.sleep(10)
+        return MagicMock(id="report-1")
+
+    with patch(
+        "src.core.validation.orchestrator._get_validation_config"
+    ) as mock_config:
+        mock_config.return_value = {
+            "total_timeout": 300,
+            "layer_timeouts": {1: 30, 2: 30, 3: 120, 4: 30, 5: 30, 6: 60},
+            "max_concurrent": 1,
+            "queue_max": 1,
+        }
+        with patch.object(
+            orchestrator, "_execute_with_timeout", new_callable=AsyncMock
+        ) as mock_exec:
+            mock_exec.side_effect = slow_task
+
+            task1 = asyncio.create_task(
+                orchestrator.execute(mock_session_factory, mock_test_run)
+            )
+            await asyncio.sleep(0.1)
+
+            from fastapi import HTTPException
+
+            task2 = asyncio.create_task(
+                orchestrator.execute(mock_session_factory, mock_test_run)
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await task2
+
+            assert exc_info.value.status_code == 503
+            assert "队列已满" in exc_info.value.detail
+
+            task1.cancel()
+            try:
+                await task1
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_queue_max_config_used_in_timeout(mock_session_factory, mock_test_run):
+    """测试 queue_max 配置用于计算等待超时"""
+    orchestrator = ValidationOrchestrator()
+    await orchestrator.init(max_concurrent=1)
+
+    with patch(
+        "src.core.validation.orchestrator._get_validation_config"
+    ) as mock_config:
+        mock_config.return_value = {
+            "total_timeout": 300,
+            "layer_timeouts": {1: 30, 2: 30, 3: 120, 4: 30, 5: 30, 6: 60},
+            "max_concurrent": 1,
+            "queue_max": 5,
+        }
+        with patch.object(
+            orchestrator, "_execute_with_timeout", new_callable=AsyncMock
+        ) as mock_exec:
+            mock_exec.return_value = MagicMock(id="report-1")
+
+            await orchestrator.execute(mock_session_factory, mock_test_run)
+
+            mock_config.assert_called()
+            assert mock_config.return_value["queue_max"] == 5
+
+
+@pytest.mark.asyncio
+async def test_layer6_skipped_status(orchestrator, mock_session_factory, mock_test_run):
+    """测试 Layer 6 默认标记为 skipped 状态"""
+    await orchestrator.init(max_concurrent=3)
+
+    with patch(
+        "src.core.validation.orchestrator._get_validation_config"
+    ) as mock_config:
+        mock_config.return_value = {
+            "total_timeout": 300,
+            "layer_timeouts": {1: 30, 2: 30, 3: 120, 4: 30, 5: 30, 6: 60},
+            "max_concurrent": 3,
+            "queue_max": 10,
+        }
+        with patch.object(
+            orchestrator, "_run_layer_with_result", new_callable=AsyncMock
+        ) as mock_run:
+            mock_run.return_value = {
+                "layer": 1,
+                "status": "completed",
+                "data": {},
+                "duration_ms": 50,
+            }
+            with patch.object(
+                orchestrator, "_create_report", new_callable=AsyncMock
+            ) as mock_create:
+                mock_create.return_value = MagicMock(id="report-1")
+                await orchestrator.execute(mock_session_factory, mock_test_run)
+
+                call_args = mock_create.call_args[0][2]
+                layer6_result = next(
+                    (r for r in call_args if r.get("layer") == 6), None
+                )
+                assert layer6_result is not None
+                assert layer6_result["status"] == "skipped"
+                assert "reason" in layer6_result["data"]
