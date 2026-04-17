@@ -25,22 +25,25 @@
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
-| **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、16张业务建表语句及外键约束 |
+| **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、18张业务建表语句（无外键约束，采用弱关联） |
 | **RAG 知识库检索** | `.ai/rag_pipeline.md` | RAG 核心模块、双流水线解析、向量库(Chroma)检索策略、API端点 |
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
 | **RAG 完整技术文档**| `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` | RAG 系统完整的技术细节与 API 规范 |
+| **RAG+LLM 重构计划**| `docs/superpowers/plans/rag-llm-refactoring/` | RAG 与 LLM 架构重构的详细实施方案、进度追踪与验收标准 |
+| **RAG页面重构计划**| `docs/superpowers/plans/rag-evaluation-page-refactoring/` | RAG 评估页面的6层校验诊断、工作流及 SSE 推送的详细重构计划 |
 
 ---
 
 # 📌 项目宏观概览与技术栈
 
-**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。
+**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含 RAG 知识检索、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
 
 ## 技术栈
 - **语言**: Python 3.13, TypeScript 5.3
 - **核心编排**: LangGraph 1.1.0, LangChain 1.2.11, LlamaIndex 0.14.16
-- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库)
+- **大模型支持**: DashScope, OpenAI, Anthropic, DeepSeek, Ollama
+- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送
 - **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, Zustand 5, React Router 7
 - **包管理**: uv (后端), npm (前端)
 

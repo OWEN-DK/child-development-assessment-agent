@@ -2,28 +2,25 @@
 
 本文档详细描述系统的底层基础设施、数据模型以及前端功能模块。
 
-## 4.1 RAG 测试数据模型
+## 4.1 RAG 测试与评估数据模型
 
-### 测试用例 (TestCase)
-- `id`, `query`, `age`, `expected_knowledge_ids`, `expected_keywords`, `description`
-- `domain`: 领域 (粗大动作/精细动作/语言发展/认知能力/社交情感/感觉统合)
-- `answer_points`, `professional_terms`, `age_requirement`, `relevance_scores`
-- `source_document_id`, `test_set_id`, `version`
+基于 MySQL 5.7 存储，所有主键统一采用 UUID `String(36)`，表之间通过弱引用关联，避免严格的外键约束。共 18 张表支持完整工作流与配置追踪。
 
-### 源文档 (SourceDocument)
-- `id`, `title`, `file_type`, `file_path`, `file_hash`
-- `content_summary`, `page_count`, `chapter_structure`, `quality_report`
-- `status`: uploaded/parsing/ready/archived
+### 评估工作流模型
+- **测试集 (TestSet)**: `id`, `name`, `description`, `source_type`
+- **测试用例 (TestCase)**: 包含核心问题、领域、年龄要求、预期回答和指标分数等。
+- **测试用例关联 (TestSetCase)**: 管理测试集与用例的多对多关系。
+- **测试草稿 (TestCaseDraft)**: LLM 自动提取的原始问题，经过人工审核后转化为 TestCase。
+- **运行记录 (TestRun)**: 批量测试的执行记录与状态跟踪。
+- **运行结果 (TestRunResult)**: 单条用例的测试明细与多维指标得分。
+- **评估报告 (TestReport)**: 汇总 TestRun 结果生成的结构化与 Markdown 报告。
 
-### 测试用例草稿 (TestCaseDraft)
-- `id`, `source_document_id`, `query`, `age`, `domain`
-- `expected_knowledge_ids`, `expected_keywords`, `description`
-- `answer_points`, `professional_terms`, `age_requirement`
-- `generation_params`, `status`: draft/reviewed/rejected/imported
-
-### 测试集 (TestSet)
-- `id`, `name`, `description`, `source_type`: manual/json_import/book_generated/mixed
-- `test_case_ids`: 包含的测试用例ID列表
+### 配置与追踪模型
+- **源文档 (SourceDocument)**: 知识库文件元数据、状态与解析结果。
+- **意图标注 (IntentAnnotation) / 意图日志 (QueryIntentLog) / 同义词 (SynonymQueryPair)**: 检索优化模型。
+- **配置版本 (ConfigVersion) / 提示词版本 (PromptVersion)**: 记录系统设置的历史变更，支持回滚。
+- **配置变更集 (ConfigChangeSet / ConfigChangeSetPrompt)**: 原子保存多项配置与提示词变更的集合。
+- **调优建议 (TuningSuggestionRecord / PromptSuggestionRecord / IgnoredSuggestion)**: 6层校验引擎生成的智能建议与用户处理记录。
 
 ## 5. 前端功能模块
 
@@ -33,7 +30,7 @@
 - **状态管理**: 使用 Zustand 管理评估流程状态
 
 ### 5.2 知识库管理 (Documents)
-- **文档上传**: 支持 PDF/EPUB 上传和导入进度跟踪
+- **文档上传**: 支持 PDF/EPUB/TXT 上传和导入进度跟踪
 - **文档列表**: 展示已索引文档和分块信息
 - **任务管理**: 监控文档导入任务状态
 
@@ -42,28 +39,24 @@
 - **结果展示**: 展示检索结果和相关度分数
 - **详情查看**: 支持分块详情和来源追溯
 
-### 5.4 RAG 评估 (RAG Evaluation)
-- **测试集管理**: 创建/编辑/删除/导出测试集，支持添加/移除测试用例
-- **评估报告**: 展示检索和生成质量指标
-- **Bad Case 分析**: 标记和分析评估失败案例
-- **JSON 导入**: 从 JSON 文件批量导入测试用例，支持预览/校验/去重
-- **书籍导入**: 上传 PDF/EPUB/TXT 文档，自动生成测试用例草稿（默认 10 条，领域：感觉统合，年龄：0-6 岁）
-- **草稿审核**: 表格化审核测试用例草稿，支持编辑/通过/拒绝/批量导入，审核后转为正式测试用例
+### 5.4 RAG 评估与调优 (RAG Evaluation)
+- **测试集工作流**: 测试集创建 -> 案例添加 -> 并发测试 -> 报告生成与导出 (PDF/CSV/JSON)。
+- **智能诊断与调优面板**: 基于 6 层校验引擎生成调参建议，支持一键应用（推荐模式/审查模式分离）。
+- **SSE 实时反馈**: 支持任务进度实时推送、断线重连与页面独立执行。
+- **趋势分析**: 包含多指标叠加、配置版本误差线的趋势图表。
 
 ### 5.5 系统配置 (System Config)
-- **动态配置**: 支持运行时配置修改和热重载
-- **版本管理**: 配置版本切换和回滚
-- **差异对比**: 可视化展示配置变更
+- **热重载与版本控制**: 动态修改系统运行参数，修改后通过 ConfigCache 热重载生效，支持原子保存与一键回滚。
+- **多模式支持**: 提供向导模式 (WizardMode) 和专家模式 (ExpertMode) 分层视图。
+- **差异对比**: 可视化展示配置修改 Diff，输入时实时校验取值范围与冲突。
 
 ### 5.6 提示词管理 (Prompt Management)
-- **版本管理**: 创建/查看/对比提示词版本
-- **在线编辑**: 支持提示词内容编辑和元数据配置
-- **A/B 测试**: 创建和管理提示词 A/B 测试，支持流量分配
+- **沙箱与版本控制**: 创建/查看/对比提示词版本，提供带中文说明和代码引用分析的编辑面板。
+- **在线沙箱测试**: 支持注入变量直接预览大模型输出结果。
 
 ### 5.7 LLM 监控与分析 (LLM Monitoring)
 - **总览仪表盘**: 全系统 LLM 调用统计、消耗趋势、错误率概览
-- **多维度分析**: 支持按提示词、按场景统计消耗与质量
-- **告警配置**: 异常率升高、耗时突增、Token消耗超阈值告警
+- **全链路追踪 (Tracing)**: 支持查看 LangGraph 到大模型底层调用的完整 Span 层级树，耗时与成本分析。
 
 ## 6. 核心基础设施
 
@@ -76,6 +69,11 @@
 - **热重载**: 配置文件变更自动生效
 - **版本控制**: 支持配置版本管理和回滚
 - **事件驱动**: 配置变更通过 EventBus 传播
+- **嵌套模型支持**: 后端 `get_all_config_metadata()` 支持递归展开嵌套 Pydantic 模型，前端动态表单支持嵌套对象渲染。
+- **LLM 配置重构**:
+  - **凭证管理 (`llm_providers`)**: 独立管理各提供商（DashScope/OpenAI 等）的 API Key 和 Base URL，每种提供商只能配置一个凭证。前端提供卡片式管理界面。
+  - **场景配置 (`llm_scene_configs`)**: 9 大业务场景独立配置模型参数（provider, model, temperature, max_tokens, top_p 等）。前端按场景分组展示，包含详细的应用场景说明。
+  - **参数限制**: 温度参数 (0-2)、最大 Token 数 (1-32000)、Top-p (0-1) 等均有严格的输入限制。
 
 ### 6.2 依赖注入
 - **DI Container**: 使用 Injector 框架管理依赖
@@ -224,11 +222,9 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph Scenarios [业务场景层]
-        Gen[报告生成]
-        Assess[评估分析]
-        Score[评分机制]
-        Extract[信息提取]
+    subgraph ConfigUI [配置管理前端]
+        Cred[凭证管理<br>API Key/Base URL]
+        Scene[场景配置<br>模型/参数/提供商]
     end
     
     subgraph FactoryLayer [工厂与路由层]
@@ -247,11 +243,8 @@ graph TB
         Qwen[Qwen3.5-Plus / Qwen3-Omni-Flash 等]
     end
     
-    Gen --> Factory
-    Assess --> Factory
-    Score --> Factory
-    Extract --> Factory
-    
+    Cred --llm_providers--> Config
+    Scene --llm_scene_configs--> Config
     Config --热更新--> Event
     Event -.通知更新待订阅.-> Factory
     
@@ -263,10 +256,13 @@ graph TB
     LlamaIndex --> Qwen
 ```
 
-- **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`
-- **场景隔离**: 9 大独立业务场景（报告生成、评估、重写、解析、评分等），独立配置模型参数
-- **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例
-- **热切换**: 支持配置变更事件安全清理（dispose）旧模型实例，支持动态重载（事件订阅待完善）
+- **配置结构升级**: 采用嵌套配置模型，分离"凭证管理"与"场景配置"。
+  - **凭证管理 (`llm_providers`)**: 独立管理各提供商（DashScope/OpenAI/Anthropic 等）的 API Key 和 Base URL，每种提供商只能配置一个凭证。
+  - **场景配置 (`llm_scene_configs`)**: 9 大业务场景独立配置模型参数（provider, model, temperature, max_tokens, top_p 等）。
+- **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`。
+- **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例，自动从配置中读取凭证和参数。
+- **热切换**: 支持配置变更事件安全清理（dispose）旧模型实例，支持动态重载。
+- **前端交互**: 系统配置页提供独立的"LLM 凭证管理"区域，场景配置按卡片分组展示，包含详细的应用场景说明和参数输入限制。
 
 ### 6.12 RAG 查询流水线编排 (Pipeline Orchestrator)
 

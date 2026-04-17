@@ -36,22 +36,25 @@ graph TB
         RetrievSvc[RetrievalService<br>检索服务]
         IndexMgr[IndexManagerService<br>索引管理服务]
         CacheSvc[CacheService<br>缓存服务]
-        TestMgr[RagTestManager<br>并发批量测试/生成/评分]
+        TestMgr[RagTestManager<br>并发批量测试/报告管理]
+        ValEngine[6层校验引擎 ValidationEngine<br>规则/历史/大模型诊断]
         MonitorSvc[MonitoringService<br>监控服务]
         AlertSvc[AlertService<br>告警服务]
     end
     
     subgraph 核心配置与状态层
-        ConfigMgr[ConfigManager 配置管理器<br>支持热更新与版本控制]
-        PromptMgr[PromptManager 提示词管理器<br>MySQL持久化/A/B分发]
-        EventBus[EventBus 事件总线<br>配置变更/LLM调用事件广播待订阅]
+        ConfigMgr[ConfigManager 配置管理器<br>支持热更新/原子保存/回滚]
+        PromptMgr[PromptManager 提示词管理器<br>MySQL持久化/沙箱测试]
+        EventBus[EventBus 事件总线<br>配置变更/SSE实时推送]
+        LLMConfig[LLM 嵌套配置<br>凭证管理 + 场景配置]
     end
 
     subgraph 模型适配与路由层
-        LLMFactory[LLMServiceFactory 工厂<br>9大独立业务场景模型]
+        LLMFactory[LLMServiceFactory 工厂<br>Provider Registry多提供商]
+        Providers[DashScope/OpenAI/Anthropic<br>DeepSeek/Ollama]
         LangChainAdapter[LangChain 适配器]
         LlamaIndexAdapter[LlamaIndex 适配器]
-        PipelineOrch[PipelineOrchestrator<br>YAML驱动查询流水线编排待集成]
+        PipelineOrch[PipelineOrchestrator<br>YAML驱动查询流水线]
     end
 
     subgraph Agent 核心层 LangGraph
@@ -66,14 +69,16 @@ graph TB
     
     subgraph 监控与基础设施层 Infrastructure
         LLMMonitor[LLM调用监控器<br>统计收集/效果分析/告警]
+        Tracing[Trace/Span 追踪系统<br>全链路耗时与成本计算]
         DI[Injector 依赖注入]
+        AsyncMgr[AsyncTaskManager<br>异步任务/SSE分发]
         Cache[CacheService 三级缓存<br>Memory + Redis + Disk]
         Memory[MemoryManager 记忆管理]
         Security[PromptInjectionGuard<br>ContentAuditService]
         ABTest[ABTestFramework]
         Repo[Repository 数据访问层<br>BaseRepository + 专属Repository]
         DB[SQLAlchemy 数据库<br>异步连接池]
-        Redis[Redis 客户端<br>分布式锁/会话/熔断]
+        Redis[Redis 客户端<br>分布式锁/会话/SSE心跳]
         Bloom[BloomFilter 布隆过滤器]
     end
     
