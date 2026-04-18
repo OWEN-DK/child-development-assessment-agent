@@ -6,8 +6,9 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.monitor import LLMCallLog, CallLevel
+from src.models.monitor import CallLevel, LLMCallLog
 from src.models.trace import Trace, TraceStatus
+from src.utils.serializers import safe_enum_value
 
 
 class TraceService:
@@ -100,6 +101,7 @@ class TraceService:
 
     def _span_to_dict(self, span: LLMCallLog) -> dict:
         call_params = span.call_parameters or {}
+        level_val = safe_enum_value(span.level)
         return {
             "span_id": span.span_id,
             "parent_span_id": span.parent_span_id,
@@ -108,11 +110,11 @@ class TraceService:
                 "duration_ms", span.completion_start_time_ms
             ),
             "tokens": span.tokens,
-            "status": "success" if span.level.value == "INFO" else "error",
+            "status": "success" if level_val == "INFO" else "error",
             "prompt_messages": span.prompt_messages,
             "completion_message": span.completion_message,
             "call_parameters": span.call_parameters,
-            "error": call_params.get("error") if span.level.value == "ERROR" else None,
+            "error": call_params.get("error") if level_val == "ERROR" else None,
         }
 
     async def list_llm_call_logs(

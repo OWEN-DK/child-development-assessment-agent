@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Steps, Button, Space, Result, message } from 'antd';
 import { StepContent } from './StepContent';
-import { useConfigStore } from '../../store/configStore';
+import { useConfig } from '../../features/config/hooks/useConfig';
 
 const WIZARD_STEPS = [
   {
@@ -28,7 +28,7 @@ export const WizardMode: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [completed, setCompleted] = useState(false);
   
-  const { saveConfig, isSaving, switchMode, updateDraft } = useConfigStore();
+  const { saveConfig, isSaving, switchMode, updateDraft } = useConfig();
   
   const handleNext = () => {
     if (currentStep < WIZARD_STEPS.length - 1) {

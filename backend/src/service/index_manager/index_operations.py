@@ -1,0 +1,165 @@
+import json
+from typing import Callable, Dict, List, Optional
+
+from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core.schema import Node
+
+from src.config import settings
+from src.core.vector_store_factory import VectorStoreFactory
+from src.service.document_manager import document_manager
+from src.utils.logger import logger
+
+
+class IndexOperations:
+    def __init__(self, storage_manager):
+        self.storage_manager = storage_manager
+
+    def insert_nodes(self, nodes: list[Node], progress_callback: Callable[[str, float, str], None] = None):
+        logger.info(f"Starting index insertion for {len(nodes)} nodes")
+        if not self.storage_manager.index:
+            if progress_callback:
+                progress_callback("indexing", 92.0, f"正在创建新索引，共 {len(nodes)} 个节点")
+            logger.info("Creating new VectorStoreIndex from nodes")
+            try:
+                vector_store = VectorStoreFactory.get_vector_store()
+                storage_context = StorageContext.from_defaults(vector_store=vector_store)
+                batch_size = 200
+                total_nodes = len(nodes)
+                if total_nodes > batch_size:
+                    logger.info(f"Large dataset detected ({total_nodes} nodes), using batch processing")
+                    self.storage_manager.index = VectorStoreIndex([], storage_context=storage_context, store_nodes_override=True)
+                    for i in range(0, total_nodes, batch_size):
+                        batch = nodes[i:i + batch_size]
+                        batch_num = (i // batch_size) + 1
+                        total_batches = (total_nodes + batch_size - 1) // batch_size
+                        logger.info(f"Inserting batch {batch_num}/{total_batches}")
+                        try:
+                            self.storage_manager.index.insert_nodes(batch)
+                            if progress_callback:
+                                batch_progress = 92.0 + (3.0 * (i + batch_size) / total_nodes)
+                                progress_callback("indexing", batch_progress, f"正在插入批次 {batch_num}/{total_batches}")
+                        except Exception as batch_error:
+                            logger.error(f"Failed to insert batch {batch_num}: {batch_error}")
+                            if i + batch_size >= total_nodes and len(batch) == 1:
+                                logger.warning(f"Skipping failed node at index {i}: {str(batch_error)[:200]}")
+                            else:
+                                raise
+                else:
+                    self.storage_manager.index = VectorStoreIndex(nodes, storage_context=storage_context, store_nodes_override=True)
+                logger.info("New index created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create index: {e}", exc_info=True)
+                if progress_callback:
+                    progress_callback("indexing", 92.0, f"创建索引失败：{str(e)}")
+                raise
+        else:
+            if progress_callback:
+                progress_callback("indexing", 92.0, f"正在插入 {len(nodes)} 个节点到现有索引")
+            logger.info("Inserting nodes into existing index")
+            self.storage_manager.index.insert_nodes(nodes)
+            logger.info("Nodes inserted successfully")
+        self.storage_manager._dirty = True
+        if progress_callback:
+            progress_callback("indexing", 95.0, "正在持久化索引到磁盘")
+        logger.info("Starting index persistence")
+        self.storage_manager._persist_index()
+        self.storage_manager._dirty = False
+        logger.info("Index persisted successfully")
+        if progress_callback:
+            progress_callback("indexing", 98.0, "索引构建完成")
+        logger.info(f"Successfully inserted {len(nodes)} nodes into index")
+
+    def delete_document(self, file_name: str) -> bool:
+        doc = document_manager.get_document_by_name(file_name)
+        if not doc:
+            logger.warning(f"Document {file_name} not found in registry.")
+            return False
+        if not self.storage_manager.index:
+            logger.warning("Index not initialized, only deleting document record.")
+            document_manager.delete_document(doc.file_hash)
+            return True
+        logger.info(f"Deleting document: {file_name} (hash: {doc.file_hash})")
+        try:
+            for ref_id in doc.ref_doc_ids:
+                self.storage_manager.index.delete_ref_doc(ref_id, delete_from_docstore=True)
+            self.storage_manager._persist_index()
+            self.storage_manager._dirty = False
+            document_manager.delete_document(doc.file_hash)
+            remaining_docs = document_manager.list_documents()
+            if not remaining_docs:
+                self.storage_manager._clear_index()
+            logger.info(f"Successfully deleted {file_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete document: {e}")
+            return False
+
+    def _parse_metadata_json_strings(self, metadata: dict) -> dict:
+        if not metadata:
+            return metadata
+        parsed_metadata = metadata.copy()
+        json_fields = ['topics', 'brain_regions']
+        for field in json_fields:
+            if field in parsed_metadata and isinstance(parsed_metadata[field], str):
+                try:
+                    parsed_value = json.loads(parsed_metadata[field])
+                    if isinstance(parsed_value, list):
+                        parsed_metadata[field] = parsed_value
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Failed to parse {field} from metadata: {parsed_metadata[field]}")
+                    parsed_metadata[field] = []
+        return parsed_metadata
+
+    def get_document_chunks(self, file_hash: str, page: int = 1, page_size: int = 20) -> dict:
+        if not self.storage_manager.index or not hasattr(self.storage_manager.index, "_vector_store"):
+            return {"total": 0, "chunks": [], "page": page, "page_size": page_size, "total_pages": 0}
+        vector_store = self.storage_manager.index._vector_store
+        all_chunks = []
+        try:
+            if hasattr(vector_store, '_collection') and vector_store._collection:
+                collection = vector_store._collection
+                results = collection.get(where={"file_hash": file_hash}, include=["metadatas", "documents"])
+                if results and results['ids']:
+                    for i, (doc_id, doc_text, metadata) in enumerate(zip(results['ids'], results['documents'], results['metadatas'])):
+                        metadata = self._parse_metadata_json_strings(metadata)
+                        start_idx = metadata.get('start_char_idx')
+                        end_idx = metadata.get('end_char_idx')
+                        if start_idx is None or end_idx is None:
+                            start_idx = i * 1000
+                            end_idx = start_idx + len(doc_text)
+                        all_chunks.append({"id": doc_id, "content": doc_text, "metadata": metadata, "start_char_idx": start_idx, "end_char_idx": end_idx, "score": None})
+        except Exception as e:
+            logger.error(f"Failed to get chunks from vector store: {e}")
+            return {"total": 0, "chunks": [], "page": page, "page_size": page_size, "total_pages": 0}
+        all_chunks.sort(key=lambda x: x["metadata"].get("page_label", "0"))
+        total = len(all_chunks)
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        page = max(1, min(page, total_pages)) if total_pages > 0 else 1
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        chunks = all_chunks[start_idx:end_idx]
+        return {"total": total, "chunks": chunks, "page": page, "page_size": page_size, "total_pages": total_pages}
+
+    def get_chunk_detail(self, chunk_id: str) -> Optional[dict]:
+        if not self.storage_manager.index:
+            return None
+        if hasattr(self.storage_manager.index, '_vector_store') and self.storage_manager.index._vector_store:
+            vector_store = self.storage_manager.index._vector_store
+            try:
+                if hasattr(vector_store, '_collection') and vector_store._collection:
+                    collection = vector_store._collection
+                    results = collection.get(ids=[chunk_id], include=["metadatas", "documents"])
+                    if results and results['ids']:
+                        doc_id = results['ids'][0]
+                        doc_text = results['documents'][0]
+                        metadata = results['metadatas'][0]
+                        metadata = self._parse_metadata_json_strings(metadata)
+                        start_idx = metadata.get('start_char_idx')
+                        end_idx = metadata.get('end_char_idx')
+                        if start_idx is None or end_idx is None:
+                            start_idx = 0
+                            end_idx = len(doc_text)
+                        return {"id": doc_id, "content": doc_text, "metadata": metadata, "start_char_idx": start_idx, "end_char_idx": end_idx, "relationships": {}}
+            except Exception as e:
+                logger.error(f"Failed to get chunk detail from vector store: {e}")
+                return None

@@ -1,7 +1,10 @@
-from sqlalchemy import String, Text, DateTime, JSON, Boolean, Float, func, Index
-from sqlalchemy.orm import Mapped, mapped_column
-from src.core.database import Base
 from datetime import datetime
+
+from sqlalchemy import (JSON, Boolean, DateTime, Float, Index, String, Text,
+                        func)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from src.core.database import Base
 
 
 class PromptVersion(Base):

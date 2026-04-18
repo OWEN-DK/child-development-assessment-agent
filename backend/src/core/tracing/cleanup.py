@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 
 from src.core.database import async_session_factory
-from src.models.trace import Trace
 from src.models.monitor import LLMCallLog
+from src.models.trace import Trace
 
 logger = logging.getLogger(__name__)
 

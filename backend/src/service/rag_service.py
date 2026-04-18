@@ -1,15 +1,12 @@
-from typing import List, Any, Optional
 import time
+from typing import Any, List, Optional
+
 from src.config import settings
 from src.core.di_container import injector
-from src.core.interfaces import (
-    IIndexManager,
-    ICacheService,
-    IRetrievalService,
-    IDocumentIngestionService,
-)
-from src.utils.logger import logger
+from src.core.interfaces import (ICacheService, IDocumentIngestionService,
+                                 IIndexManager, IRetrievalService)
 from src.service.monitoring_service import monitoring_service
+from src.utils.logger import logger
 
 
 class RagService:
@@ -25,8 +22,8 @@ class RagService:
         self.document_ingestion_service = self.injector.get(IDocumentIngestionService)
 
         # Initialize PageIndex hybrid architecture components
-        from src.core.query_router import QueryRouter, QueryType
         from src.core.pageindex_wrapper import PageIndexWrapper
+        from src.core.query_router import QueryRouter, QueryType
         from src.core.result_fusion import ResultFusion
 
         self.query_router = QueryRouter()

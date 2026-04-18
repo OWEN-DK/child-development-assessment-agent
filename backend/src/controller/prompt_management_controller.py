@@ -1,93 +1,23 @@
 """提示词管理 API 控制器 - Phase 7"""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional
+from fastapi import APIRouter
 
-from src.utils.logger import logger
 from src.core.database import async_session_factory
-from src.service.prompt_impact_analyzer import PromptImpactAnalyzer, VariableValidator
 from src.core.prompt.manager import prompt_manager
+from src.schemas import (ImpactAnalysisResponse, PromptComparisonResponse,
+                         PromptDetailResponse, PromptListResponse,
+                         PromptMetadataResponse, PromptTestRequest,
+                         PromptTestResponse, PromptVersionResponse,
+                         UpdatePromptRequest)
+from src.service.prompt_impact_analyzer import (PromptImpactAnalyzer,
+                                                VariableValidator)
+from src.utils.exceptions import (ForbiddenException, InvalidParamsException,
+                                   InternalServerErrorException,
+                                   PromptNotFoundException,
+                                   PromptVersionNotFoundException)
+from src.utils.logger import logger
 
 router = APIRouter(prefix="/api/v1/rag/prompts", tags=["提示词管理"])
-
-
-class PromptMetadataResponse(BaseModel):
-    """提示词元数据响应"""
-    id: str
-    prompt_key: str
-    name_zh: str
-    purpose: str
-    category: str
-    subcategory: Optional[str] = None
-    is_active: bool
-    is_system: bool
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-
-class PromptVersionResponse(BaseModel):
-    """提示词版本响应"""
-    id: str
-    prompt_key: str
-    version_label: str
-    version_number: int
-    content: str
-    variables_extracted: Optional[list] = None
-    change_impact: Optional[dict] = None
-    change_summary: Optional[str] = None
-    created_at: Optional[str] = None
-    created_by: Optional[str] = None
-
-
-class PromptListResponse(BaseModel):
-    """提示词列表响应"""
-    items: list[PromptMetadataResponse]
-    total: int
-
-
-class PromptDetailResponse(BaseModel):
-    """提示词详情响应"""
-    metadata: PromptMetadataResponse
-    current_version: Optional[PromptVersionResponse] = None
-    versions: list[PromptVersionResponse] = []
-
-
-class UpdatePromptRequest(BaseModel):
-    """更新提示词请求"""
-    content: str
-    change_summary: Optional[str] = None
-    created_by: Optional[str] = None
-
-
-class ImpactAnalysisResponse(BaseModel):
-    """影响分析响应"""
-    code_references: list[dict] = Field(default_factory=list)
-    variable_changes: dict = Field(default_factory=dict)
-    config_dependencies: list[dict] = Field(default_factory=list)
-    affected_files: list[str] = Field(default_factory=list)
-    risk_level: str = "low"
-
-
-class PromptTestRequest(BaseModel):
-    """提示词测试请求"""
-    prompt_key: str
-    version: Optional[str] = None
-    variables: dict = Field(default_factory=dict)
-
-
-class PromptTestResponse(BaseModel):
-    """提示词测试响应"""
-    rendered_prompt: str
-    variables_used: list[str] = Field(default_factory=list)
-    variables_missing: list[str] = Field(default_factory=list)
-
-
-class PromptComparisonResponse(BaseModel):
-    """提示词对比响应"""
-    version_1: PromptVersionResponse
-    version_2: PromptVersionResponse
-    diff: dict
 
 
 class PromptController:
@@ -106,9 +36,11 @@ class PromptController:
         ):
             """获取提示词列表"""
             try:
-                from src.models.rag_eval.prompt_metadata import RagEvalPromptMetadata
-                from src.models.rag_eval.enums import RagEvalPromptCategory
                 from sqlalchemy import select
+
+                from src.models.rag_eval.enums import RagEvalPromptCategory
+                from src.models.rag_eval.prompt_metadata import \
+                    RagEvalPromptMetadata
 
                 async with async_session_factory() as session:
                     query = select(RagEvalPromptMetadata)
@@ -118,7 +50,7 @@ class PromptController:
                             cat_enum = RagEvalPromptCategory(category)
                             query = query.where(RagEvalPromptMetadata.category == cat_enum)
                         except ValueError:
-                            raise HTTPException(status_code=400, detail=f"无效的分类: {category}")
+                            raise InvalidParamsException(message=f"无效的分类: {category}")
 
                     if is_active is not None:
                         query = query.where(RagEvalPromptMetadata.is_active == is_active)
@@ -144,19 +76,20 @@ class PromptController:
                     ]
 
                     return PromptListResponse(items=items, total=len(items))
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"获取提示词列表失败: {e}")
-                raise HTTPException(status_code=500, detail="获取提示词列表失败")
+                raise InternalServerErrorException(message="获取提示词列表失败")
 
         @router.get("/{prompt_key}", response_model=PromptDetailResponse)
         async def get_prompt_detail(prompt_key: str):
             """获取提示词详情"""
             try:
-                from src.models.rag_eval.prompt_metadata import RagEvalPromptMetadata
-                from src.models.rag_eval.prompt_version import RagEvalPromptVersion
                 from sqlalchemy import select
+
+                from src.models.rag_eval.prompt_metadata import \
+                    RagEvalPromptMetadata
+                from src.models.rag_eval.prompt_version import \
+                    RagEvalPromptVersion
 
                 async with async_session_factory() as session:
                     # 获取元数据
@@ -167,7 +100,7 @@ class PromptController:
                     )
                     metadata = result.scalar_one_or_none()
                     if not metadata:
-                        raise HTTPException(status_code=404, detail="提示词未找到")
+                        raise PromptNotFoundException(prompt_id=prompt_key)
 
                     # 获取所有版本
                     result = await session.execute(
@@ -211,22 +144,24 @@ class PromptController:
                         current_version=current_version,
                         versions=version_responses,
                     )
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"获取提示词详情失败: {e}")
-                raise HTTPException(status_code=500, detail="获取提示词详情失败")
+                raise InternalServerErrorException(message="获取提示词详情失败")
 
         @router.post("/{prompt_key}/update")
         async def update_prompt(prompt_key: str, req: UpdatePromptRequest):
             """更新提示词内容"""
             try:
-                from src.models.rag_eval.prompt_metadata import RagEvalPromptMetadata
-                from src.models.rag_eval.prompt_version import RagEvalPromptVersion
-                from sqlalchemy import select
                 import hashlib
                 import uuid
                 from datetime import datetime
+
+                from sqlalchemy import select
+
+                from src.models.rag_eval.prompt_metadata import \
+                    RagEvalPromptMetadata
+                from src.models.rag_eval.prompt_version import \
+                    RagEvalPromptVersion
 
                 async with async_session_factory() as session:
                     # 获取元数据
@@ -237,10 +172,10 @@ class PromptController:
                     )
                     metadata = result.scalar_one_or_none()
                     if not metadata:
-                        raise HTTPException(status_code=404, detail="提示词未找到")
+                        raise PromptNotFoundException(prompt_id=prompt_key)
 
                     if metadata.is_system and not req.created_by:
-                        raise HTTPException(status_code=403, detail="系统内置提示词不可修改")
+                        raise ForbiddenException(message="系统内置提示词不可修改")
 
                     # 获取当前版本
                     result = await session.execute(
@@ -292,18 +227,18 @@ class PromptController:
                         "version": version_label,
                         "impact": impact.model_dump(),
                     }
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"更新提示词失败: {e}")
-                raise HTTPException(status_code=500, detail="更新提示词失败")
+                raise InternalServerErrorException(message="更新提示词失败")
 
         @router.post("/{prompt_key}/analyze", response_model=ImpactAnalysisResponse)
         async def analyze_prompt_impact(prompt_key: str, req: UpdatePromptRequest):
             """分析提示词修改影响（不保存）"""
             try:
-                from src.models.rag_eval.prompt_version import RagEvalPromptVersion
                 from sqlalchemy import select
+
+                from src.models.rag_eval.prompt_version import \
+                    RagEvalPromptVersion
 
                 async with async_session_factory() as session:
                     # 获取当前版本变量
@@ -330,7 +265,7 @@ class PromptController:
                     )
             except Exception as e:
                 logger.error(f"分析提示词影响失败: {e}")
-                raise HTTPException(status_code=500, detail="分析提示词影响失败")
+                raise InternalServerErrorException(message="分析提示词影响失败")
 
         @router.post("/test", response_model=PromptTestResponse)
         async def test_prompt(req: PromptTestRequest):
@@ -354,7 +289,7 @@ class PromptController:
                 )
             except Exception as e:
                 logger.error(f"测试提示词失败: {e}")
-                raise HTTPException(status_code=500, detail="测试提示词失败")
+                raise InternalServerErrorException(message="测试提示词失败")
 
         @router.get("/{prompt_key}/compare", response_model=PromptComparisonResponse)
         async def compare_prompt_versions(
@@ -364,8 +299,10 @@ class PromptController:
         ):
             """对比两个提示词版本"""
             try:
-                from src.models.rag_eval.prompt_version import RagEvalPromptVersion
                 from sqlalchemy import select
+
+                from src.models.rag_eval.prompt_version import \
+                    RagEvalPromptVersion
 
                 async with async_session_factory() as session:
                     result = await session.execute(
@@ -377,7 +314,7 @@ class PromptController:
                     versions = result.scalars().all()
 
                     if len(versions) != 2:
-                        raise HTTPException(status_code=404, detail="版本未找到")
+                        raise PromptVersionNotFoundException(version_id=f"{version_1}, {version_2}")
 
                     v1 = next(v for v in versions if v.version_label == version_1)
                     v2 = next(v for v in versions if v.version_label == version_2)
@@ -416,10 +353,8 @@ class PromptController:
                         ),
                         diff=diff,
                     )
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"对比提示词版本失败: {e}")
-                raise HTTPException(status_code=500, detail="对比提示词版本失败")
+                raise InternalServerErrorException(message="对比提示词版本失败")
 
         app.include_router(router)

@@ -1,7 +1,8 @@
-from typing import TypeVar, Generic, List, Optional, Any, Dict
-from sqlalchemy import select, func
-from sqlalchemy.orm import DeclarativeBase
+from typing import Any, Dict, Generic, List, Optional, TypeVar
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
 ModelType = TypeVar("ModelType", bound=DeclarativeBase)
 

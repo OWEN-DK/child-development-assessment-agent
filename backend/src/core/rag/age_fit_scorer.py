@@ -1,8 +1,8 @@
 """细粒度年龄适配度计算器"""
 
-from functools import lru_cache
-from typing import Optional, Dict, Any, Tuple
 import json
+from functools import lru_cache
+from typing import Any, Dict, Optional, Tuple
 
 
 class AgeFitScorer:

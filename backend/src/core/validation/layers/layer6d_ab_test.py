@@ -1,14 +1,15 @@
 """Layer 6d: A/B 影子测试"""
 
 import logging
-import numpy as np
 from typing import Any
-from scipy import stats
 
+import numpy as np
+from scipy import stats
 from sqlalchemy import select
+
+from src.models.rag_eval.enums import RagEvalABTestSide
 from src.models.rag_eval.test_run import RagEvalTestRun
 from src.models.rag_eval.test_run_result import RagEvalTestRunResult
-from src.models.rag_eval.enums import RagEvalABTestSide
 
 logger = logging.getLogger(__name__)
 

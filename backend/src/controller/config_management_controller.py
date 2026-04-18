@@ -1,65 +1,22 @@
 """配置管理 API 控制器 - Phase 8"""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 from typing import Optional
 
+from fastapi import APIRouter
+
+from src.schemas import (ConfigConflictRequest, ConfigGroupResponse,
+                         ConfigMetadataListResponse, ConfigMetadataResponse,
+                         ConfigValidationRequest)
+from src.service.config_conflict_detector import (ConfigConflictDetector,
+                                                  Conflict)
+from src.service.config_validation_engine import (ConfigValidationEngine,
+                                                  ValidationResult)
+from src.utils.exceptions import (ConfigValidationFailedException,
+                                   InternalServerErrorException,
+                                   InvalidParamsException)
 from src.utils.logger import logger
-from src.service.config_validation_engine import (
-    ConfigValidationEngine,
-    ValidationResult,
-)
-from src.service.config_conflict_detector import ConfigConflictDetector, Conflict
 
 router = APIRouter(prefix="/api/v1/rag/config", tags=["配置管理"])
-
-
-class ConfigMetadataResponse(BaseModel):
-    """配置元数据响应"""
-
-    id: str
-    config_key: str
-    name_zh: str
-    description_zh: str
-    category: str
-    value_type: str
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    recommended_min: Optional[float] = None
-    recommended_max: Optional[float] = None
-    unit: Optional[str] = None
-    affected_components: Optional[list] = None
-    reload_type: str
-    is_system: bool
-
-
-class ConfigMetadataListResponse(BaseModel):
-    """配置元数据列表响应"""
-
-    items: list[ConfigMetadataResponse]
-    total: int
-
-
-class ConfigValidationRequest(BaseModel):
-    """配置校验请求"""
-
-    config_updates: dict = Field(default_factory=dict)
-
-
-class ConfigConflictRequest(BaseModel):
-    """配置冲突检测请求"""
-
-    config_updates: dict = Field(default_factory=dict)
-    current_config: dict = Field(default_factory=dict)
-
-
-class ConfigGroupResponse(BaseModel):
-    """配置分组响应"""
-
-    name: str
-    key: str
-    description: str
-    configs: list[ConfigMetadataResponse]
 
 
 # 配置分组定义
@@ -116,11 +73,11 @@ class ConfigManagementController:
         async def get_config_metadata(category: Optional[str] = None):
             """获取配置元数据列表"""
             try:
-                from src.models.rag_eval.config_metadata import RagEvalConfigMetadata
-                from src.models.rag_eval.config_metadata import ConfigCategory
                 from sqlalchemy import select
 
                 from src.core.database import async_session_factory
+                from src.models.rag_eval.config_metadata import (
+                    ConfigCategory, RagEvalConfigMetadata)
 
                 async with async_session_factory() as session:
                     query = select(RagEvalConfigMetadata)
@@ -132,8 +89,8 @@ class ConfigManagementController:
                                 RagEvalConfigMetadata.category == cat_enum
                             )
                         except ValueError:
-                            raise HTTPException(
-                                status_code=400, detail=f"无效的分类: {category}"
+                            raise InvalidParamsException(
+                                message=f"无效的分类: {category}"
                             )
 
                     query = query.order_by(RagEvalConfigMetadata.config_key)
@@ -161,11 +118,9 @@ class ConfigManagementController:
                     ]
 
                     return ConfigMetadataListResponse(items=items, total=len(items))
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"获取配置元数据失败: {e}")
-                raise HTTPException(status_code=500, detail="获取配置元数据失败")
+                raise InternalServerErrorException(message="获取配置元数据失败")
 
         @router.post("/validate", response_model=ValidationResult)
         async def validate_config(req: ConfigValidationRequest):
@@ -175,7 +130,7 @@ class ConfigManagementController:
                 return result
             except Exception as e:
                 logger.error(f"配置校验失败: {e}")
-                raise HTTPException(status_code=500, detail="配置校验失败")
+                raise InternalServerErrorException(message="配置校验失败")
 
         @router.post("/conflicts")
         async def detect_conflicts(req: ConfigConflictRequest):
@@ -187,16 +142,17 @@ class ConfigManagementController:
                 return [c.model_dump() for c in conflicts]
             except Exception as e:
                 logger.error(f"配置冲突检测失败: {e}")
-                raise HTTPException(status_code=500, detail="配置冲突检测失败")
+                raise InternalServerErrorException(message="配置冲突检测失败")
 
         @router.get("/groups", response_model=list[ConfigGroupResponse])
         async def get_config_groups():
             """获取配置分组"""
             try:
-                from src.models.rag_eval.config_metadata import RagEvalConfigMetadata
                 from sqlalchemy import select
 
                 from src.core.database import async_session_factory
+                from src.models.rag_eval.config_metadata import \
+                    RagEvalConfigMetadata
 
                 async with async_session_factory() as session:
                     result = await session.execute(select(RagEvalConfigMetadata))
@@ -240,6 +196,6 @@ class ConfigManagementController:
                     return groups
             except Exception as e:
                 logger.error(f"获取配置分组失败: {e}")
-                raise HTTPException(status_code=500, detail="获取配置分组失败")
+                raise InternalServerErrorException(message="获取配置分组失败")
 
         app.include_router(router)

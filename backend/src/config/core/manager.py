@@ -1,14 +1,29 @@
 import asyncio
 import uuid
-from typing import Any
 from datetime import datetime
+from typing import Any
+
 from src.config.core.entities import ConfigVersion
-from src.service.cache_service import cache_service
-from src.core.event_bus import event_bus
 from src.config.core.events import ConfigChangedEvent
 from src.core.crypto import crypto_service
-from src.config import settings as current_settings, rules
+from src.core.event_bus import event_bus
+from src.service.cache_service import cache_service
 from src.utils.logger import logger
+from src.utils.serializers import create_serializer, safe_isoformat
+
+
+_serialize_config_version = create_serializer(
+    object,
+    {
+        "id": None,
+        "created_at": safe_isoformat,
+        "created_by": None,
+        "description": None,
+        "config_snapshot": None,
+        "parent_version_id": None,
+        "is_factory_reset": None,
+    }
+)
 
 
 class ConfigManager:
@@ -33,16 +48,17 @@ class ConfigManager:
         """懒加载Repository实例"""
         if self._version_repo is None:
             from src.core.database import async_session_factory
-            from src.repository import (
-                ConfigVersionRepository,
-                ConfigAuditLogRepository,
-            )
+            from src.repository import (ConfigAuditLogRepository,
+                                        ConfigVersionRepository)
 
             self._version_repo = ConfigVersionRepository(async_session_factory)
             self._audit_log_repo = ConfigAuditLogRepository(async_session_factory)
         return self._version_repo, self._audit_log_repo
 
     def _extract_config_from_settings(self) -> dict[str, Any]:
+        from src.config import rules
+        from src.config import settings as current_settings
+
         config = current_settings.model_dump()
 
         # Add rule configs
@@ -92,7 +108,8 @@ class ConfigManager:
 
     async def _create_initial_version(self) -> "ConfigVersionORM":
         """创建初始配置版本"""
-        from src.models.config import ConfigVersion as ConfigVersionORM, ConfigAction
+        from src.models.config import ConfigAction
+        from src.models.config import ConfigVersion as ConfigVersionORM
         from src.repository import ConfigAuditLogRepository
 
         version_repo, audit_repo = self._get_repos()
@@ -325,18 +342,7 @@ class ConfigManager:
         """列出配置版本"""
         version_repo, _ = self._get_repos()
         versions = await version_repo.get_version_history(skip=0, limit=limit)
-        return [
-            {
-                "id": v.id,
-                "created_at": v.created_at.isoformat() if v.created_at else None,
-                "created_by": v.created_by,
-                "description": v.description,
-                "config_snapshot": v.config_snapshot,
-                "parent_version_id": v.parent_version_id,
-                "is_factory_reset": v.is_factory_reset,
-            }
-            for v in versions
-        ]
+        return [_serialize_config_version(v) for v in versions]
 
     async def get_version(self, version_id: str) -> dict | None:
         """获取指定版本配置"""
@@ -344,17 +350,7 @@ class ConfigManager:
         version_orm = await version_repo.get_by_id(version_id)
         if not version_orm:
             return None
-        return {
-            "id": version_orm.id,
-            "created_at": version_orm.created_at.isoformat()
-            if version_orm.created_at
-            else None,
-            "created_by": version_orm.created_by,
-            "description": version_orm.description,
-            "config_snapshot": version_orm.config_snapshot,
-            "parent_version_id": version_orm.parent_version_id,
-            "is_factory_reset": version_orm.is_factory_reset,
-        }
+        return _serialize_config_version(version_orm)
 
     @property
     def current_config(self) -> dict[str, Any]:

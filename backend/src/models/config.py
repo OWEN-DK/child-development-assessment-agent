@@ -1,9 +1,11 @@
-from sqlalchemy import String, Text, DateTime, Enum, ForeignKey, JSON
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.core.database import Base
 from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Any, Optional
+
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.core.database import Base
 
 
 class ConfigAction(PyEnum):

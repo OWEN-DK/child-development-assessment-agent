@@ -1,10 +1,12 @@
-import yaml
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
-from dataclasses import dataclass
-from src.utils.logger import logger
+
+import yaml
+
 from src.config import settings
+from src.utils.logger import logger
 
 
 @dataclass

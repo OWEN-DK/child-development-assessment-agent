@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { assessDevelopment, assessDevelopmentStream } from '../../../api/assessment';
-import type { UserInput, FinalReport, StreamingReportData } from '../../../models/assessment';
+import type { UserInput, FinalReport, StreamingReportData } from '@entities/assessment/types';
 
 interface UseAssessmentReturn {
   report: FinalReport | null;
@@ -62,7 +62,7 @@ export const useAssessment = (): UseAssessmentReturn => {
         },
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
-          setReport((prev) => prev ? {
+          setReport((prev: FinalReport | null) => prev ? {
             ...prev,
             markdown_content: prev.markdown_content + chunk,
           } : {

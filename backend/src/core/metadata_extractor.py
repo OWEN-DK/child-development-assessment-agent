@@ -6,7 +6,8 @@ from src.config import settings
 from src.utils.logger import logger
 from src.core.prompt.manager import prompt_manager
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
-from src.core.llm.base import LLMRequest, LLMMessage
+from src.core.llm.base import LLMRequest
+from src.schemas.llm import LLMMessage
 
 
 from src.config import rules

@@ -1,15 +1,8 @@
 """配置冲突检测器 - Phase 8"""
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-
-class Conflict(BaseModel):
-    """配置冲突"""
-
-    level: str  # error | warning
-    rule: str
-    message: str
-    affected_configs: list[str] = Field(default_factory=list)
+from src.schemas import Conflict
 
 
 class ConfigConflictDetector:

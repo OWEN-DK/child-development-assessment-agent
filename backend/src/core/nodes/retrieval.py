@@ -1,9 +1,9 @@
-from typing import Dict, Any
-from src.model.schemas import AgentState
-from src.core.nodes.base import BaseNode
-from src.utils.logger import logger
+from typing import Any, Dict
 
+from src.core.nodes.base import BaseNode
 from src.core.prompts_fallback import RAG_QUERY_TEMPLATE
+from src.schemas import AgentState
+from src.utils.logger import logger
 
 
 class RetrievalNode(BaseNode):

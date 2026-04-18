@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { DEFAULT_PAGE_SIZE } from '../lib/constants';
+import { DEFAULT_PAGE_SIZE } from '@shared/lib/constants';
 
 interface UsePaginationOptions {
   initialPage?: number;

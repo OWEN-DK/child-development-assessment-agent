@@ -8,13 +8,9 @@ import time
 from contextlib import contextmanager
 from typing import Generator
 
-from src.core.tracing.context import (
-    create_span,
-    get_current_span_id,
-    get_current_trace_id,
-    get_parent_span_id,
-    _get_span_stack,
-)
+from src.core.tracing.context import (_get_span_stack, create_span,
+                                      get_current_span_id,
+                                      get_current_trace_id, get_parent_span_id)
 from src.core.tracing.writer import get_trace_writer
 
 

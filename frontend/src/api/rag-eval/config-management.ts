@@ -2,7 +2,7 @@
  * 配置管理 API 客户端 - Phase 8
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface ConfigMetadata {
   id: string;

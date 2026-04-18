@@ -3,7 +3,8 @@
 """
 import hashlib
 import re
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from src.config import settings
 
 

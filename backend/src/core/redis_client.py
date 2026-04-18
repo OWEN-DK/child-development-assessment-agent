@@ -1,12 +1,9 @@
 import redis.asyncio as redis
 from redis.asyncio import ConnectionPool
 from redis.backoff import ExponentialBackoff
+from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError
 from redis.retry import Retry
-from redis.exceptions import (
-    ConnectionError,
-    TimeoutError,
-    BusyLoadingError,
-)
+
 from src.config import redis_settings
 from src.utils.logger import logger
 

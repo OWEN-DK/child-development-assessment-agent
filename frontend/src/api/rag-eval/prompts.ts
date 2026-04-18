@@ -2,7 +2,7 @@
  * 提示词管理 API 客户端
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface PromptMetadata {
   id: string;

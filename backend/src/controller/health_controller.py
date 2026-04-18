@@ -1,13 +1,8 @@
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+
+from src.schemas import HealthResponse
 
 router = APIRouter(prefix="/health", tags=["health"])
-
-
-class HealthResponse(BaseModel):
-    status: str
-    llm_configured: bool
-    missing_vars: list[str] = []
 
 
 @router.get("/", response_model=HealthResponse)

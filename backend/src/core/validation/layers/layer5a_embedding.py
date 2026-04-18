@@ -3,13 +3,14 @@
 import json
 import logging
 import random
-import numpy as np
-from typing import Any
 from pathlib import Path
+from typing import Any
+
+import numpy as np
 from sqlalchemy import select
 
-from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 from src.models.rag_eval.test_case import RagEvalTestCase
+from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +122,8 @@ class Layer5aEmbeddingQuality:
     async def _get_embedding(self):
         """懒加载 Embedding 实例，全局复用"""
         if self._embedding is None:
-            from src.core.llm.embedding_factory import EmbeddingFactory
             from src.config.core.manager import config_manager
+            from src.core.llm.embedding_factory import EmbeddingFactory
 
             factory = EmbeddingFactory(config_manager)
             self._embedding = await factory.create(framework="langchain")

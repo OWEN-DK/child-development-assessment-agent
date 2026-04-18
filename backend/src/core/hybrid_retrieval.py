@@ -1,9 +1,11 @@
-from typing import List, Dict, Optional
-from llama_index.core.schema import NodeWithScore
-from src.config import settings
-from src.utils.logger import logger
 import math
 import re
+from typing import Dict, List, Optional
+
+from llama_index.core.schema import NodeWithScore
+
+from src.config import settings
+from src.utils.logger import logger
 
 _query_analyzer_instance = None
 

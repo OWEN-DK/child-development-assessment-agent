@@ -1,11 +1,12 @@
 """Reranker 工厂 - 支持热更新"""
 
 import asyncio
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
+
 from injector import singleton
 
 from src.config.core.manager import ConfigManager
-from src.core.event_bus import event_bus, ConfigChangedEvent
+from src.core.event_bus import ConfigChangedEvent, event_bus
 from src.utils.logger import logger
 
 

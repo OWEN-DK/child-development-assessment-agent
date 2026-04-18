@@ -14,12 +14,9 @@ from typing import Any
 
 from src.core.database import async_session_factory
 from src.core.tracing.cost import calculate_cost
-from src.core.tracing.truncation import (
-    truncate_content,
-    truncate_messages,
-    save_full_content,
-)
-from src.models.monitor import LLMCallLog, CallLevel
+from src.core.tracing.truncation import (save_full_content, truncate_content,
+                                         truncate_messages)
+from src.models.monitor import CallLevel, LLMCallLog
 from src.models.trace import Trace, TraceStatus
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@
  * 趋势数据 API 客户端
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface TrendRun {
   run_id: string;

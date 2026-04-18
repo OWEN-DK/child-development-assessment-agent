@@ -1,8 +1,9 @@
 """Embedding 配置模块（支持多提供商）"""
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 

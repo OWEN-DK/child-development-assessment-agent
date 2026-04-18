@@ -1,11 +1,12 @@
 """LLM 诊断器:Bad Case 语义深度分析"""
 
-from typing import Any, Dict, List, Optional
-from json_repair import repair_json
 import json
-from src.model.tuning import LLMDiagnosis, TuningSuggestion, LLMFinding
-from src.utils.logger import logger
+from typing import Any, Dict, List, Optional
 
+from json_repair import repair_json
+
+from src.schemas import LLMDiagnosis, LLMFinding, TuningSuggestion
+from src.utils.logger import logger
 
 MIN_BAD_CASES_FOR_DIAGNOSIS = 3
 

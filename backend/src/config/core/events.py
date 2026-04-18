@@ -1,5 +1,6 @@
+from typing import Any, Dict
+
 from src.core.event_bus import BaseEvent
-from typing import Dict, Any
 
 
 class ConfigChangedEvent(BaseEvent):

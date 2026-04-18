@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Callable, Any
+from typing import Any, Callable, List, Optional
+
 from llama_index.core import VectorStoreIndex
 from llama_index.core.schema import Node
+
 
 class IIndexManager(ABC):
     """索引管理服务接口"""

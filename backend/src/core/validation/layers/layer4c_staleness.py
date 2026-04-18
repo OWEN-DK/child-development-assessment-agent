@@ -4,11 +4,12 @@
 """
 
 import logging
-from datetime import datetime, timedelta, UTC
-from typing import Any
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
+
 from src.models.document import SourceDocument
 
 logger = logging.getLogger(__name__)

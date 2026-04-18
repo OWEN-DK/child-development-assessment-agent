@@ -8,7 +8,8 @@ import enum
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import String, Integer, DateTime, Enum, JSON, DECIMAL, Index, func, text
+from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Index, Integer, String,
+                        func, text)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base

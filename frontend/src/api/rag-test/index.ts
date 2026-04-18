@@ -1,4 +1,4 @@
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 import type { TestCase, TestRun, KnowledgeSnapshot, TestResult, ImportPreviewResult, BatchImportRequest, BatchImportResult, SourceDocument, TestCaseDraft, TestSet, GenerationParams } from './types';
 
 export type { TestCase, TestRun, KnowledgeSnapshot, TestResult, ImportPreviewResult, BatchImportRequest, BatchImportResult, SourceDocument, TestCaseDraft, TestSet, GenerationParams } from './types';

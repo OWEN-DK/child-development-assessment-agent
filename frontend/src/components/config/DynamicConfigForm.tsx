@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfigFieldMetadata } from '../../api/config/types';
-import { useConfigStore } from '../../store/configStore';
+import { useConfig } from '../../features/config/hooks/useConfig';
 import { Switch, InputNumber, Input, Tooltip, message, Button, Select, Collapse } from 'antd';
 import { QuestionCircleOutlined, WarningOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import styles from './DynamicConfigForm.module.scss';
@@ -14,7 +14,7 @@ export const DynamicConfigForm: React.FC<DynamicConfigFormProps> = ({
   fields,
   category,
 }) => {
-  const { draftChanges, updateDraft } = useConfigStore();
+  const { draftChanges, updateDraft } = useConfig();
 
   // 不常用字段列表（默认隐藏）
   const hiddenFields = [

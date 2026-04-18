@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+
 from src.models.rag_eval.test_run import RagEvalTestRun
 from src.models.rag_eval.tuning_suggestion import RagEvalTuningSuggestionRecord
 
@@ -174,8 +175,8 @@ class Layer2HistoryComparison:
 
     async def _get_bad_cases(self, session) -> list:
         """获取当前运行的 Bad Case 列表"""
-        from src.models.rag_eval.test_run_result import RagEvalTestRunResult
         from src.models.rag_eval.test_case import RagEvalTestCase
+        from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 
         # 获取当前运行中失败的测试用例结果
         stmt = (

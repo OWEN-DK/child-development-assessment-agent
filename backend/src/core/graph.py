@@ -1,15 +1,11 @@
 from typing import Dict
-from langgraph.graph import StateGraph, END
-from src.model.schemas import AgentState
-from src.core.nodes import (
-    PreprocessingNode,
-    ValidationNode,
-    AssessmentNode,
-    RetrievalNode,
-    ScoringNode,
-    ReportingNode,
-)
+
+from langgraph.graph import END, StateGraph
+
+from src.core.nodes import (AssessmentNode, PreprocessingNode, ReportingNode,
+                            RetrievalNode, ScoringNode, ValidationNode)
 from src.core.tracing.langgraph_middleware import TracingMiddleware
+from src.schemas import AgentState
 
 
 def create_agent_graph():

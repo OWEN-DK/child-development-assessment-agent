@@ -3,8 +3,9 @@
 通过 ConfigManager 从 MySQL 读取，.env 兜底，支持热更新
 """
 
-from pydantic import BaseModel, Field
 from typing import List
+
+from pydantic import BaseModel, Field
 
 
 class TestCaseGenerationConfig(BaseModel):

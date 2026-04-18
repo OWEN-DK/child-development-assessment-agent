@@ -3,7 +3,7 @@ import { List, Progress, Button, Space, Typography } from 'antd';
 import { LoadingOutlined, StopOutlined } from '@ant-design/icons';
 import type { UploadTaskStatus } from '../../api/documents/types';
 import { formatTaskStatus } from '../../utils/formatters';
-import { TASK_STATUS } from '../../lib/constants';
+import { TASK_STATUS } from '@shared/lib/constants';
 
 interface TaskProgressListProps {
   tasks: UploadTaskStatus[];

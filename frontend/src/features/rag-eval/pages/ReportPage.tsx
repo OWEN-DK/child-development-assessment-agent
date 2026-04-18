@@ -35,7 +35,7 @@ import RollbackConfirmDialog from '@/features/rag-eval/components/RollbackConfir
 import { exportCasesToCSV, exportReportToJSON } from '@/features/rag-eval/utils/export';
 import { createExportTask, downloadExport } from '@/api/rag-eval/export';
 import { rollbackToVersion } from '@/api/rag-eval/config';
-import { useExportSse } from '@/hooks/useSseClient';
+import { useSSE } from '@shared/hooks/useSSE';
 
 const { Title } = Typography;
 
@@ -56,32 +56,27 @@ export default function ReportPage() {
   const [exporting, setExporting] = useState(false);
 
   // 导出 SSE
-  const exportSse = useExportSse('anonymous');
-
-  useEffect(() => {
-    if (!exportSse.on) return;
-
-    const unbindReady = exportSse.on('export_ready', async (event: any) => {
-      try {
-        await downloadExport(event.export_id);
-        message.success('PDF 下载已开始');
-      } catch (err) {
-        message.error('下载导出文件失败');
-      } finally {
+  const { connect: connectExportSse, disconnect: disconnectExportSse } = useSSE({
+    url: '/api/sse/exports?user_id=anonymous',
+    enabled: false,
+    onMessage: async (eventType, event: any) => {
+      if (eventType === 'export_ready') {
+        try {
+          await downloadExport(event.export_id);
+          message.success('PDF 下载已开始');
+        } catch (err) {
+          message.error('下载导出文件失败');
+        } finally {
+          setExporting(false);
+          disconnectExportSse();
+        }
+      } else if (eventType === 'export_failed') {
+        message.error(`PDF 导出失败: ${event.error || '未知错误'}`);
         setExporting(false);
+        disconnectExportSse();
       }
-    });
-
-    const unbindFailed = exportSse.on('export_failed', (event: any) => {
-      message.error(`PDF 导出失败: ${event.error || '未知错误'}`);
-      setExporting(false);
-    });
-
-    return () => {
-      unbindReady?.();
-      unbindFailed?.();
-    };
-  }, [exportSse.on]);
+    }
+  });
 
   // 回滚相关状态
   const [rollbackVisible, setRollbackVisible] = useState(false);
@@ -118,11 +113,13 @@ export default function ReportPage() {
     if (!id) return;
     setExporting(true);
     try {
+      connectExportSse();
       await createExportTask(id);
       message.success('PDF 导出任务已提交，请稍后查看下载状态');
     } catch {
       message.error('创建 PDF 导出任务失败');
       setExporting(false);
+      disconnectExportSse();
     }
   };
 

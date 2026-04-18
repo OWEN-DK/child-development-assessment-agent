@@ -1,7 +1,9 @@
-from typing import Optional, List
+from typing import List, Optional
+
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.models.document import DocumentRecord, SourceDocument
 from src.repository.base import BaseRepository
-from src.models.document import SourceDocument, DocumentRecord
 
 
 class SourceDocumentRepository(BaseRepository[SourceDocument]):

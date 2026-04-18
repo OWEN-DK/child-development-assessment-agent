@@ -1,12 +1,12 @@
 import json
 import os
 import threading
-from typing import Dict, List, Optional
 from datetime import datetime
+from typing import Dict, List, Optional
 
-from src.model.document import DocumentStore, DocumentRecord
-from src.utils.logger import logger
 from src.config import settings
+from src.schemas import DocumentRecord, DocumentStore
+from src.utils.logger import logger
 
 DOCUMENT_STORE_PATH = f"{settings.rag_storage_dir}/document_store.json"
 

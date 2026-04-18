@@ -3,7 +3,7 @@
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Generator
 
 trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)

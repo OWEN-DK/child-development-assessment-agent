@@ -2,7 +2,7 @@
  * 导出 API 客户端
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface ExportTaskStatus {
   task_id: string;

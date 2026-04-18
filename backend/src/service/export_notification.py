@@ -6,7 +6,9 @@
 
 from datetime import datetime, timedelta
 from typing import Optional
+
 from fastapi.encoders import jsonable_encoder
+
 from src.api.sse import SSEPublisher
 from src.utils.logger import logger
 

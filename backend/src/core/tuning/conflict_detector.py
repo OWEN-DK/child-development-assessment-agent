@@ -1,9 +1,9 @@
 """冲突检测器:过滤矛盾的调参建议"""
 
 from typing import List, Tuple
-from src.model.tuning import TuningSuggestion
-from src.utils.logger import logger
 
+from src.schemas import TuningSuggestion
+from src.utils.logger import logger
 
 CONFLICT_PAIRS = {
     ("increase", "decrease"),

@@ -4,11 +4,14 @@
 """
 
 from typing import List
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.models.rag_eval.tuning_suggestion import RagEvalTuningSuggestionRecord
+
+from src.models.rag_eval.enums import (RagEvalIgnoredSuggestionType,
+                                       RagEvalIgnoreScope)
 from src.models.rag_eval.ignored_suggestion import RagEvalIgnoredSuggestion
-from src.models.rag_eval.enums import RagEvalIgnoreScope, RagEvalIgnoredSuggestionType
+from src.models.rag_eval.tuning_suggestion import RagEvalTuningSuggestionRecord
 from src.utils.logger import logger
 
 

@@ -1,10 +1,10 @@
 """Layer 3: LLM 诊断 - 分析 Bad Case 并提供失败类型分类、根因分析和建议"""
 
+import asyncio
 import json
 import logging
-import asyncio
-from typing import Any
 from collections import defaultdict
+from typing import Any
 
 from json_repair import repair_json
 
@@ -96,8 +96,9 @@ class Layer3LLMDiagnosis:
     async def _get_bad_cases(self) -> list:
         """获取 Bad Case 列表 (hit_at_5 = 0)"""
         from sqlalchemy import select
-        from src.models.rag_eval.test_run_result import RagEvalTestRunResult
+
         from src.models.rag_eval.test_case import RagEvalTestCase
+        from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 
         async with self.session_factory() as session:
             results = await session.execute(
@@ -147,8 +148,8 @@ class Layer3LLMDiagnosis:
 
     async def _call_llm_with_retry(self, prompt: str, max_retries: int = 2) -> str:
         """带重试的 LLM 调用"""
-        from src.core.llm.factory import LLMServiceFactory, LLMFramework
-        from src.core.llm.base import LLMRequest, LLMMessage
+        from src.core.llm.factory import LLMFramework, LLMServiceFactory
+        from src.schemas import LLMMessage, LLMRequest
 
         factory = self._get_llm_factory()
         llm = await factory.create("validation", LLMFramework.LANGCHAIN)

@@ -1,6 +1,6 @@
 /** 追踪系统 API 客户端 */
 
-import { apiClient } from '@/api/client';
+import { apiClient } from '@shared/api/client';
 import type {
   Trace,
   TraceDetail,

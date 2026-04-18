@@ -6,25 +6,30 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, Callable
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.validation.config import get_config_value
+from src.utils.exceptions import ServiceUnavailableException
 from src.core.validation.layers.layer1_rule_engine import Layer1RuleEngine
 from src.core.validation.layers.layer2_history import Layer2HistoryComparison
 from src.core.validation.layers.layer3_llm import Layer3LLMDiagnosis
-from src.core.validation.layers.layer4a_golden_coverage import Layer4aGoldenCoverage
-from src.core.validation.layers.layer4b_chunk_quality import Layer4bChunkQuality
-from src.core.validation.layers.layer4c_staleness import Layer4cDocumentStaleness
-from src.core.validation.layers.layer5a_embedding import Layer5aEmbeddingQuality
+from src.core.validation.layers.layer4a_golden_coverage import \
+    Layer4aGoldenCoverage
+from src.core.validation.layers.layer4b_chunk_quality import \
+    Layer4bChunkQuality
+from src.core.validation.layers.layer4c_staleness import \
+    Layer4cDocumentStaleness
+from src.core.validation.layers.layer5a_embedding import \
+    Layer5aEmbeddingQuality
 from src.core.validation.layers.layer5b_intent import Layer5bIntentAccuracy
-from src.core.validation.layers.layer5c_error_patterns import Layer5cErrorPatterns
-from src.core.validation.config import get_config_value
+from src.core.validation.layers.layer5c_error_patterns import \
+    Layer5cErrorPatterns
+from src.models.rag_eval.enums import RagEvalTestReportStatus
 from src.models.rag_eval.test_report import RagEvalTestReport
 from src.models.rag_eval.test_run import RagEvalTestRun
-from src.models.rag_eval.enums import RagEvalTestReportStatus
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +93,7 @@ class ValidationOrchestrator:
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=5)
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=503, detail="校验队列已满，请稍后重试")
+            raise ServiceUnavailableException(message="校验队列已满，请稍后重试")
 
         try:
             return await self._execute_with_timeout(session_factory, test_run, config)

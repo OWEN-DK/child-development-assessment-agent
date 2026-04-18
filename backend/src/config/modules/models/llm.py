@@ -7,10 +7,11 @@
 - 业务代码可通过 settings.llm_scene_configs["report_generation"] 获取完整场景配置
 """
 
+from pathlib import Path
+from typing import Dict, Optional
+
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Dict, Optional
-from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 

@@ -3,11 +3,13 @@ PageIndex 包装器 - 封装 PageIndex 推理检索能力（增强：熔断、�
 """
 
 import asyncio
-import aiohttp
 import logging
 import time
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
 from src.config import settings
 
 logger = logging.getLogger(__name__)

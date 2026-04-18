@@ -1,12 +1,13 @@
 """Layer 5c: 错误模式分组"""
 
 import logging
-from typing import Any
 from collections import defaultdict
+from typing import Any
+
 from sqlalchemy import select
 
-from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 from src.models.rag_eval.test_case import RagEvalTestCase
+from src.models.rag_eval.test_run_result import RagEvalTestRunResult
 
 logger = logging.getLogger(__name__)
 

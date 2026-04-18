@@ -6,14 +6,15 @@
 - 追踪数据清理：每天凌晨 4 点清理 30 天前的过期追踪数据
 """
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from src.service.rag_report_service import rag_report_service
-from src.core.database import db_session_factory
-from src.repository.test_case_repository import TestCaseDraftRepository
-from src.utils.logger import logger
 from datetime import datetime, timedelta
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from src.core.database import db_session_factory
+from src.repository.test_case_repository import TestCaseDraftRepository
+from src.service.rag_report_service import rag_report_service
+from src.utils.logger import logger
 
 scheduler = AsyncIOScheduler()
 
@@ -38,7 +39,8 @@ async def cleanup_orphaned_drafts():
         # 查询 7 天前的草稿
         async with db_session_factory() as session:
             from sqlalchemy import select
-            from src.models.test_case import TestCaseDraft, TestCaseStatus
+
+            from src.schemas import TestCaseDraft, TestCaseStatus
 
             stmt = select(TestCaseDraft).where(
                 TestCaseDraft.status == TestCaseStatus.DRAFT,
@@ -65,7 +67,8 @@ async def cleanup_expired_traces():
     """清理过期追踪数据（保留 30 天）"""
     logger.info("开始执行过期追踪数据清理任务...")
     try:
-        from src.core.tracing.cleanup import cleanup_expired_traces as cleanup_traces
+        from src.core.tracing.cleanup import \
+            cleanup_expired_traces as cleanup_traces
 
         deleted = await cleanup_traces(retention_days=30, batch_size=1000)
         logger.info(f"过期追踪数据清理完成，共删除 {deleted} 条记录")

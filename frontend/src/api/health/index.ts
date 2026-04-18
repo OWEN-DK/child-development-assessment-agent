@@ -1,4 +1,4 @@
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface HealthResponse {
   status: 'healthy' | 'degraded';

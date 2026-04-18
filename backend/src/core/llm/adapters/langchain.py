@@ -1,26 +1,19 @@
 import time
 import uuid
 from typing import Any
+
 from langchain.chat_models.base import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from src.core.llm.base import (
-    LLMService,
-    LLMRequest,
-    LLMResponse,
-    LLMMessage,
-    LLMTimeoutError,
-    LLMRateLimitError,
-    LLMUnavailableError,
-)
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+from src.core.llm.base import (LLMRateLimitError, LLMService, LLMTimeoutError,
+                               LLMUnavailableError)
 from src.core.llm.log_collector import LLMLogCollector
-from src.core.tracing.context import (
-    get_current_trace_id,
-    get_current_span_id,
-    get_parent_span_id,
-    create_span,
-)
-from src.core.tracing.writer import get_trace_writer
+from src.core.tracing.context import (create_span, get_current_span_id,
+                                      get_current_trace_id, get_parent_span_id)
 from src.core.tracing.truncation import truncate_content, truncate_messages
+from src.core.tracing.writer import get_trace_writer
+from src.schemas import (LLMMessage, LLMRequest, LLMResponse, Message,
+                         MessageRole)
 from src.utils.logger import logger
 
 

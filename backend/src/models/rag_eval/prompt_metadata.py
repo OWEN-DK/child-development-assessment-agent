@@ -3,16 +3,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (
-    String,
-    Text,
-    DateTime,
-    Boolean,
-    JSON,
-    Enum as SAEnum,
-    func,
-    Index,
-)
+from sqlalchemy import JSON, Boolean, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base

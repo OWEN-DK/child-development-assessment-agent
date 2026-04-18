@@ -6,10 +6,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.service.monitoring_service import MonitoringService
-from src.service.alert_service import AlertService
-from src.service.trace_service import TraceService
 from src.core.database import async_session_factory
+from src.schemas.common import APIResponse
+from src.service.alert_service import AlertService
+from src.service.monitoring_service import MonitoringService
+from src.service.trace_service import TraceService
 
 router = APIRouter(prefix="/api/v1", tags=["Monitoring"])
 
@@ -40,13 +41,13 @@ async def get_statistics(
 
     alerts = AlertService.check_alerts(stats)
 
-    return {
+    return APIResponse.success(data={
         **stats,
         "alerts": [
             {"name": a.name, "message": a.message, "severity": a.severity}
             for a in alerts
         ],
-    }
+    })
 
 
 @router.get("/monitoring/trend")
@@ -66,7 +67,7 @@ async def get_trend(
         metric=type,
     )
 
-    return {"trend": trend, "metric": type}
+    return APIResponse.success(data={"trend": trend, "metric": type})
 
 
 @router.get("/monitoring/model-distribution")
@@ -84,7 +85,7 @@ async def get_model_distribution(
         end_time=end_time,
     )
 
-    return {"distribution": distribution}
+    return APIResponse.success(data={"distribution": distribution})
 
 
 @router.get("/monitoring/scenarios")
@@ -102,7 +103,7 @@ async def get_scenario_statistics(
         end_time=end_time,
     )
 
-    return {"scenarios": stats}
+    return APIResponse.success(data={"scenarios": stats})
 
 
 @router.get("/monitoring/ab-comparison")
@@ -131,11 +132,11 @@ async def get_ab_comparison(
             - variant_a.get("avg_duration", 0),
         }
 
-    return {
+    return APIResponse.success(data={
         "test_name": test_name,
         "variants": variants,
         "comparison": comparison,
-    }
+    })
 
 
 # ===== 追踪系统 API =====
@@ -157,7 +158,7 @@ async def list_traces(
     items, total = await service.list_traces(
         db, page, page_size, start_time, end_time, status, user_id, trace_id
     )
-    return {
+    return APIResponse.success(data={
         "items": [
             {
                 "trace_id": item.trace_id,
@@ -175,7 +176,7 @@ async def list_traces(
         "total": total,
         "page": page,
         "page_size": page_size,
-    }
+    })
 
 
 @router.get("/monitoring/traces/{trace_id}")
@@ -187,8 +188,8 @@ async def get_trace_detail(
     service = TraceService()
     result = await service.get_trace_detail(db, trace_id)
     if not result:
-        return {"error": "Trace not found"}
-    return result
+        return APIResponse.success(data={"error": "Trace not found"})
+    return APIResponse.success(data=result)
 
 
 @router.get("/monitoring/traces/{trace_id}/spans/{span_id}")
@@ -201,8 +202,8 @@ async def get_span_detail(
     service = TraceService()
     result = await service.get_span_detail(db, trace_id, span_id)
     if not result:
-        return {"error": "Span not found"}
-    return result
+        return APIResponse.success(data={"error": "Span not found"})
+    return APIResponse.success(data=result)
 
 
 @router.get("/monitoring/logs")
@@ -221,7 +222,7 @@ async def list_llm_call_logs(
     items, total = await service.list_llm_call_logs(
         db, page, page_size, trace_id, model, level, start_time, end_time
     )
-    return {
+    return APIResponse.success(data={
         "items": [
             {
                 "id": item.id,
@@ -238,7 +239,7 @@ async def list_llm_call_logs(
         "total": total,
         "page": page,
         "page_size": page_size,
-    }
+    })
 
 
 @router.get("/monitoring/logs/{request_id}")
@@ -250,8 +251,8 @@ async def get_llm_call_log_detail(
     service = TraceService()
     result = await service.get_llm_call_log_detail(db, request_id)
     if not result:
-        return {"error": "LLM call log not found"}
-    return result
+        return APIResponse.success(data={"error": "LLM call log not found"})
+    return APIResponse.success(data=result)
 
 
 @router.get("/monitoring/cost")
@@ -262,7 +263,7 @@ async def get_cost_analysis(
 ):
     """成本分析"""
     service = TraceService()
-    return await service.get_cost_analysis(db, start_time, end_time)
+    return APIResponse.success(data=await service.get_cost_analysis(db, start_time, end_time))
 
 
 @router.get("/monitoring/latency")
@@ -273,7 +274,7 @@ async def get_latency_distribution(
 ):
     """延迟分布"""
     service = TraceService()
-    return await service.get_latency_distribution(db, start_time, end_time)
+    return APIResponse.success(data=await service.get_latency_distribution(db, start_time, end_time))
 
 
 @router.get("/monitoring/errors")
@@ -284,4 +285,4 @@ async def get_error_analysis(
 ):
     """错误分析"""
     service = TraceService()
-    return await service.get_error_analysis(db, start_time, end_time)
+    return APIResponse.success(data=await service.get_error_analysis(db, start_time, end_time))

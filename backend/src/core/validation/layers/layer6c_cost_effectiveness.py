@@ -5,6 +5,7 @@ import math
 from typing import Any
 
 from sqlalchemy import select
+
 from src.models.rag_eval.test_run import RagEvalTestRun
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,9 @@
 import asyncio
 import uuid
-from typing import Callable, Awaitable, Any, Optional
+from typing import Any, Awaitable, Callable, Optional
+
 from fastapi.encoders import jsonable_encoder
+
 from src.api.sse import SSEPublisher
 from src.utils.logger import logger
 

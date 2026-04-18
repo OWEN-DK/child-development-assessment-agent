@@ -1,19 +1,12 @@
-from sqlalchemy import (
-    String,
-    Text,
-    DECIMAL,
-    Enum,
-    Integer,
-    JSON,
-    DateTime,
-    func,
-    Index,
-)
-from sqlalchemy.orm import Mapped, mapped_column
-from src.core.database import Base
 from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Any
+
+from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Index, Integer, String,
+                        Text, func)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from src.core.database import Base
 
 
 class DocumentStatus(PyEnum):

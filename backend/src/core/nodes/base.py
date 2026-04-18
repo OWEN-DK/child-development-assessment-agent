@@ -1,6 +1,7 @@
-from typing import Dict, Any
 from abc import ABC, abstractmethod
-from src.model.schemas import AgentState
+from typing import Any, Dict
+
+from src.schemas import AgentState
 
 
 class BaseNode(ABC):

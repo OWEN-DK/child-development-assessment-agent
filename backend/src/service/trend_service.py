@@ -5,14 +5,15 @@
 
 from datetime import datetime, timedelta
 from typing import List, Optional
-from sqlalchemy import select, func, and_
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.models.rag_eval.config_change_set import RagEvalConfigChangeSet
+from src.models.rag_eval.config_version import RagEvalConfigVersion
 from src.models.rag_eval.test_run import RagEvalTestRun
 from src.models.rag_eval.test_run_result import RagEvalTestRunResult
-from src.models.rag_eval.config_version import RagEvalConfigVersion
-from src.models.rag_eval.config_change_set import RagEvalConfigChangeSet
 from src.utils.logger import logger
 
 

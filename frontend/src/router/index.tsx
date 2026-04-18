@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
-import App from '../App';
+import App from '../app/App';
 import { HomePage } from '../features/assessment';
 import { KnowledgeBasePage } from '../features/documents';
 import { KnowledgeSearchPage } from '../features/knowledge';

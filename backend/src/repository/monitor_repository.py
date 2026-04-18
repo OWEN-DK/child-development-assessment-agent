@@ -1,8 +1,10 @@
 from typing import List
+
 from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.models.monitor import ABTestMetrics, LLMCallLog
 from src.repository.base import BaseRepository
-from src.models.monitor import LLMCallLog, ABTestMetrics
 
 
 class LLMCallLogRepository(BaseRepository[LLMCallLog]):

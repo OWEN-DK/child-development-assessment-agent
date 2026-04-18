@@ -1,7 +1,10 @@
 import time
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+
 from sqlalchemy import event
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
+from sqlalchemy.orm import DeclarativeBase
+
 from src.config import database_settings, settings
 from src.utils.logger import logger
 
@@ -19,6 +22,7 @@ engine = create_async_engine(
 
 # 手动设置 SQLAlchemy 日志级别，让 InterceptHandler 接管
 import logging
+
 if settings.debug:
     logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
     logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)

@@ -1,4 +1,4 @@
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 import type { SearchResultItem } from './types';
 
 export const searchKnowledge = async (

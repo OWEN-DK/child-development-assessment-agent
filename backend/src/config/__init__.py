@@ -1,56 +1,32 @@
-import os
-import logging
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
-from pydantic import Field, BaseModel
+"""配置模块入口
+
+统一的配置类，聚合所有拆分后的配置。
+"""
+
+from typing import Any, Dict, List
+
+from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-from threading import RLock
-import asyncio
 
-# 可选导入watchdog
-try:
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler
+from src.config.core.metadata import ConfigFieldMetadata
+from src.config.modules.app import AppSettings
+from src.config.modules.database import database_settings
+from src.config.modules.logging import LogSettings
+from src.config.modules.models.embedding import EmbeddingSettings
+from src.config.modules.models.llm import LLMSettings
+from src.config.modules.models.ml_scoring import MLScoringSettings
+from src.config.modules.paths import PathSettings
+from src.config.modules.rag.chunking import RagChunkingSettings
+from src.config.modules.rag.core import RagCoreSettings
+from src.config.modules.rag.pageindex import PageIndexSettings
+from src.config.modules.rag.pipeline import RagPipelineSettings
+from src.config.modules.rag.retrieval import RagRetrievalSettings
+from src.config.modules.rag.vector_store import VectorStoreSettings
+from src.config.modules.redis import redis_settings
+from src.config.modules.tracing import TracingConfig
+from src.config.rules.rules import rules
 
-    WATCHDOG_AVAILABLE = True
-except ImportError:
-    Observer = None
-    FileSystemEventHandler = object
-    WATCHDOG_AVAILABLE = False
-
-# 导入各个配置模块（新路径）
-from .modules.app import AppSettings
-from .modules.logging import LogSettings
-from .modules.paths import PathSettings
-from .modules.models.llm import LLMSettings
-from .modules.models.embedding import EmbeddingSettings
-from .modules.models.ml_scoring import MLScoringSettings
-from .modules.rag.core import RagCoreSettings
-from .modules.rag.retrieval import RagRetrievalSettings
-from .modules.rag.chunking import RagChunkingSettings
-from .modules.rag.vector_store import VectorStoreSettings
-from .modules.rag.pageindex import PageIndexSettings
-from .modules.rag.pipeline import RagPipelineSettings
-from .modules.database import database_settings
-from .modules.redis import redis_settings
-from .modules.tracing import TracingConfig
-
-logger = logging.getLogger(__name__)
-BASE_DIR = Path(__file__).parent.parent.parent.resolve()
-
-
-@dataclass
-class ConfigFieldMetadata:
-    key: str
-    category: str
-    description: str
-    hot_reloadable: bool
-    requires_restart: bool
-    affected_components: list[str]
-    field_type: str
-    default_value: Any
-    current_value: Any = None  # 新增：当前值（用于嵌套配置）
+BASE_DIR = __import__("pathlib").Path(__file__).parent.parent.parent.resolve()
 
 
 class Settings(
@@ -70,7 +46,6 @@ class Settings(
 ):
     """统一的配置类，聚合所有拆分后的配置"""
 
-    # 规则相关配置（合并到rules.py体系）
     rule_metadata_development_domains: List[str] = Field(
         default_factory=lambda: [
             "粗大动作",
@@ -185,7 +160,7 @@ class Settings(
             "fusion_",
             "rag_layered_content_",
             "bm25_scale_factor",
-            "hybrid_weights",
+            "hybrid_weight",
             "rag_chunk_",
             "semantic_splitter_",
             "embedding_batch_size",
@@ -241,7 +216,7 @@ class Settings(
         model_class: type,
         prefix: str,
         category: str,
-        parent_value: Optional[BaseModel] = None,
+        parent_value=None,
     ) -> Dict[str, ConfigFieldMetadata]:
         """递归展开嵌套的 Pydantic 模型为扁平化的配置元数据"""
         metadata = {}
@@ -252,9 +227,7 @@ class Settings(
             full_key = f"{prefix}__{field_name}" if prefix else field_name
             annotation = field_info.annotation
 
-            # 检查是否是嵌套的 Pydantic BaseModel
             if hasattr(annotation, "model_fields"):
-                # 递归展开嵌套模型
                 nested_value = None
                 if parent_value and hasattr(parent_value, field_name):
                     nested_value = getattr(parent_value, field_name)
@@ -263,21 +236,17 @@ class Settings(
                 )
                 metadata.update(nested_meta)
             else:
-                # 基础类型字段
                 type_name = (
                     annotation.__name__
                     if hasattr(annotation, "__name__")
                     else str(annotation)
                 )
 
-                # 获取默认值和当前值
-                # 优先使用 parent_value 中的实际值，如果没有则使用字段默认值
                 current_value = None
                 default_value = field_info.default
 
                 if parent_value and hasattr(parent_value, field_name):
                     current_value = getattr(parent_value, field_name)
-                    # 如果当前值是 PydanticUndefined，则使用默认值
                     if (
                         current_value is None
                         or str(current_value) == "PydanticUndefined"
@@ -288,7 +257,6 @@ class Settings(
                 else:
                     current_value = default_value if default_value is not None else ""
 
-                # 如果默认值是 PydanticUndefined，尝试从当前值推断
                 if default_value is None or str(default_value) == "PydanticUndefined":
                     default_value = current_value
 
@@ -307,6 +275,8 @@ class Settings(
         return metadata
 
     def get_all_config_metadata(self) -> Dict[str, ConfigFieldMetadata]:
+        from pydantic_core import PydanticUndefined
+
         metadata = {}
         for field_name, field_info in self.model_fields.items():
             category = self._infer_category(field_name)
@@ -318,23 +288,17 @@ class Settings(
                 else str(annotation)
             )
 
-            # 检查是否是嵌套的 Pydantic BaseModel（非 Dict/List 类型）
             if (
                 hasattr(annotation, "model_fields")
                 and not str(annotation).startswith("Dict")
                 and not str(annotation).startswith("List")
             ):
-                # 递归展开嵌套模型
                 current_value = getattr(self, field_name, None)
                 nested_meta = self._expand_nested_model(
                     annotation, field_name, category, current_value
                 )
                 metadata.update(nested_meta)
             else:
-                # 基础类型或 Dict/List 类型，保持原有逻辑
-                # 对于有 default_factory 的字段，调用 factory 获取默认值
-                from pydantic_core import PydanticUndefined
-
                 default_value = field_info.default
                 if (
                     default_value is PydanticUndefined
@@ -357,7 +321,6 @@ class Settings(
                     default_value=default_value,
                 )
 
-        # 特殊处理：将 llm_scene_configs property 展开为可编辑的配置项
         if hasattr(self, "llm_scene_configs"):
             scene_configs = self.llm_scene_configs
             for scene_name, scene_config in scene_configs.items():
@@ -407,14 +370,14 @@ class Settings(
             "hybrid_retrieval": {
                 "bm25_weight": self.rag_hybrid_bm25_weight,
                 "vector_weight": self.rag_hybrid_vector_weight,
-                "merge_mode": self.rag_hybrid_merge_mode,  # AND/OR
+                "merge_mode": self.rag_hybrid_merge_mode,
                 "bm25_top_k": self.rag_hybrid_bm25_top_k,
                 "vector_top_k": self.rag_hybrid_vector_top_k,
             },
             "cache": {
                 "enabled": self.rag_cache_enabled,
-                "max_size": self.rag_cache_max_size,  # Maximum number of cache entries
-                "ttl_seconds": self.rag_cache_ttl_seconds,  # Cache expiration time in seconds (1 hour)
+                "max_size": self.rag_cache_max_size,
+                "ttl_seconds": self.rag_cache_ttl_seconds,
             },
             "query_rewrite": {"enabled": self.rag_query_rewrite_enabled},
             "filters": {
@@ -439,52 +402,6 @@ class Settings(
     )
 
 
-# 配置实例管理
-_settings_instance = None
-_lock = RLock()
-
-
-def get_settings() -> Settings:
-    """获取配置单例"""
-    global _settings_instance
-    if _settings_instance is None:
-        with _lock:
-            if _settings_instance is None:
-                _settings_instance = Settings()
-    return _settings_instance
-
-
-def reload_settings() -> Settings:
-    """重新加载配置并返回新的Settings实例
-
-    实现失败回退机制：重载失败时返回原有配置实例
-    """
-    global _settings_instance
-    with _lock:
-        try:
-            new_settings = Settings()
-            # 执行Pydantic校验，确保配置合法
-            new_settings.model_validate(new_settings.model_dump())
-            old_settings = _settings_instance
-            _settings_instance = new_settings
-            logger.info("配置重载成功")
-
-            # 对比变更并派发事件
-            if old_settings:
-                changed_fields = compare_config_changes(old_settings, new_settings)
-                if changed_fields:
-                    logger.info(f"配置变更字段: {list(changed_fields.keys())}")
-                    # 通过公共方法同步更新 ConfigManager 缓存
-            from .core.manager import config_manager
-
-            config_manager.sync_cache_from_settings(new_settings)
-
-            return new_settings
-        except Exception as e:
-            logger.error(f"配置重载失败，保留原有配置: {e}")
-            return _settings_instance if _settings_instance else Settings()
-
-
 def compare_config_changes(
     old_settings: Settings, new_settings: Settings
 ) -> Dict[str, tuple[Any, Any]]:
@@ -498,101 +415,21 @@ def compare_config_changes(
     return changes
 
 
-# 文件系统监控实现
-class ConfigFileChangeHandler(FileSystemEventHandler):
-    """配置文件变更处理器"""
+# 对外导出
+from src.config.core.init import (init_embedding_model, start_config_watcher,
+                                  validate_required_env_vars)
+from src.config.core.singleton import get_settings, reload_settings
 
-    def on_modified(self, event):
-        if event.is_directory:
-            return
-        file_path = Path(event.src_path)
-        if file_path.suffix in (".py", ".env") and not file_path.name.startswith("__"):
-            logger.info(f"检测到配置文件变更: {file_path}")
-            reload_settings()
-
-
-def start_config_watcher() -> Optional[Observer]:
-    """启动配置文件监控
-    如果watchdog库未安装，则返回None并记录警告
-    """
-    if not WATCHDOG_AVAILABLE:
-        logger.warning(
-            "watchdog库未安装，配置热更新功能不可用，请安装后重试: pip install watchdog"
-        )
-        return None
-
-    event_handler = ConfigFileChangeHandler()
-    observer = Observer()
-    # 监控配置目录
-    config_dir = Path(__file__).parent
-    observer.schedule(event_handler, str(config_dir), recursive=False)
-    # 监控.env文件
-    env_file = BASE_DIR / ".env.dev"
-    if env_file.exists():
-        observer.schedule(event_handler, str(env_file), recursive=False)
-    observer.start()
-    logger.info("配置文件监控已启动")
-    return observer
-
-
-# 对外导出统一的settings实例
 settings = get_settings()
 
-
-def validate_required_env_vars() -> list[str]:
-    """校验必需的环境变量是否已配置
-
-    注意：
-    1. 此函数在 settings 创建之后调用
-    2. LLM API Key 优先从数据库 system_configs 表读取（符合 CLAUDE.md 配置管理规范）
-    3. 环境变量作为兜底方案（数据库不可用时）
-
-    返回:
-        缺失的环境变量名称列表
-    """
-    import os
-
-    missing = []
-
-    # LLM 相关：优先检查 settings（来自数据库），兜底检查环境变量
-    settings_key = getattr(settings, "dashscope_api_key", None)
-    env_key = os.environ.get("DASHSCOPE_API_KEY")
-    if not settings_key and not env_key:
-        missing.append("DASHSCOPE_API_KEY")
-
-    return missing
-
-
-# 初始化嵌入模型（保持与原逻辑一致）
-def init_embedding_model():
-    """初始化嵌入模型，配置LlamaIndex使用通义千问嵌入模型"""
-    try:
-        from llama_index.core import Settings as LlamaSettings
-        from src.core.embedding import SafeDashScopeEmbedding
-
-        LlamaSettings.embed_model = SafeDashScopeEmbedding(
-            model_name=settings.embedding_model_name,
-            api_key=settings.dashscope_api_key,
-            embed_batch_size=settings.embedding_batch_size,
-        )
-        logger.info(
-            "LlamaIndex嵌入模型初始化成功，使用模型: %s", settings.embedding_model_name
-        )
-    except Exception as e:
-        logger.error(f"初始化嵌入模型失败: {e}")
-
-
-# 自动初始化嵌入模型
+# 初始化嵌入模型
 init_embedding_model()
 
-# 业务规则（独立单例）
-from .rules.rules import rules
-
 # 配置基础设施（按需导入）
-from .core.manager import ConfigManager, config_manager
-from .core.repository import ConfigRepository, JsonConfigRepository
-from .core.events import ConfigChangedEvent, ConfigRollbackEvent, ConfigResetEvent
-
+from src.config.core.events import (ConfigChangedEvent, ConfigResetEvent,
+                                    ConfigRollbackEvent)
+from src.config.core.manager import ConfigManager, config_manager
+from src.config.core.repository import ConfigRepository, JsonConfigRepository
 
 __all__ = [
     "settings",
@@ -611,4 +448,8 @@ __all__ = [
     "ConfigResetEvent",
     "database_settings",
     "redis_settings",
+    "init_embedding_model",
+    "validate_required_env_vars",
+    "compare_config_changes",
+    "BASE_DIR",
 ]

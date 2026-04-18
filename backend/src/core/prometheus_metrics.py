@@ -1,6 +1,6 @@
 """Prometheus 监控指标定义"""
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 
 LLM_CALLS_TOTAL = Counter(
     "llm_calls_total",

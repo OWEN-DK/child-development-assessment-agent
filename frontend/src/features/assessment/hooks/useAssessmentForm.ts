@@ -1,4 +1,4 @@
-import type { UserInput } from '../../../models/assessment';
+import type { UserInput } from '@entities/assessment/types';
 
 interface UseAssessmentFormReturn {
   initialValues: UserInput;

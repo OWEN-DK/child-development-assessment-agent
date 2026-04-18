@@ -1,7 +1,8 @@
 """规则引擎:根据测试指标生成参数调整建议"""
 
 from typing import Any, Dict, List
-from src.model.tuning import TuningSuggestion
+
+from src.schemas import TuningSuggestion
 from src.utils.logger import logger
 
 

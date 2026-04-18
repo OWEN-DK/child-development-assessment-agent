@@ -1,7 +1,8 @@
 """BM25/向量分数校准器"""
 
 import math
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
+
 from src.utils.logger import logger
 
 

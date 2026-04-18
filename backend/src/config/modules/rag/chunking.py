@@ -1,9 +1,10 @@
 """RAG 分块配置：基础分块、长章节分块、语义分块"""
 
 from pathlib import Path
+from typing import List
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import List
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 

@@ -1,6 +1,6 @@
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 import type { UserInput, FinalReport, LayeredProgressStatus } from './types';
-import type { StreamingReportData } from '../../models';
+import type { StreamingReportData } from '@entities/assessment/types';
 
 export const assessDevelopment = async (data: UserInput): Promise<FinalReport> => {
   const response = await apiClient.post<FinalReport>('/assess', { ...data, is_streaming: false });

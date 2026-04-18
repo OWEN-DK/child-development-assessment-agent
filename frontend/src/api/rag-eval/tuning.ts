@@ -2,7 +2,7 @@
  * 调优建议 API 客户端
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 import type { TuningSuggestion, IgnoreSuggestionRequest, IgnoreSuggestionResponse } from '@/features/rag-eval/components/RecommendationPanel/types';
 import type { SaveVersionRequest, SaveVersionResponse } from '@/features/rag-eval/components/ReviewPanel/types';
 import type { IgnoredSuggestionResponse, RestoreIgnoredSuggestionResponse } from '@/features/rag-eval/components/IgnoredSuggestionsList/types';

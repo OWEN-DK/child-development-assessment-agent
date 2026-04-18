@@ -241,14 +241,14 @@ backend/src/service/index/
 
 ## 4. 统一响应格式设计
 
-### 3.1 响应格式策略
+### 4.1 响应格式策略
 
 采用**国内常见双字段方案**：
 
 - **HTTP 状态码**：保持 HTTP 语义（200 成功、4xx 客户端错误、5xx 服务端错误）
 - **业务错误码**：`code`（数字）+ `error_code`（字符串）双字段，便于前端逻辑判断和国际化扩展
 
-### 3.2 成功响应格式
+### 4.2 成功响应格式
 
 **HTTP 200**
 ```json
@@ -279,7 +279,7 @@ backend/src/service/index/
 }
 ```
 
-### 3.3 错误响应格式
+### 4.3 错误响应格式
 
 **HTTP 4xx / 5xx**
 ```json
@@ -302,7 +302,7 @@ backend/src/service/index/
 | `details` | `object` | 可选，错误的额外上下文信息 |
 | `trace_id` | `string` | 可选，请求追踪 ID，便于排查问题 |
 
-### 3.4 HTTP 状态码与业务码映射
+### 4.4 HTTP 状态码与业务码映射
 
 | HTTP 状态码 | 使用场景 | 业务码范围 |
 |------------|---------|-----------|
@@ -318,9 +318,9 @@ backend/src/service/index/
 
 ---
 
-## 4. 冗余代码消除规范（强制）
+## 5. 冗余代码消除规范（强制）
 
-### 4.1 现状问题
+### 5.1 现状问题
 
 当前项目中存在大量**重复代码**，违反 DRY（Don't Repeat Yourself）原则，导致维护成本高、容易引入不一致的 bug：
 
@@ -336,7 +336,7 @@ backend/src/service/index/
 
 **总计可消除重复代码约 280+ 处**。
 
-### 4.2 高频重复模式及提取方案
+### 5.2 高频重复模式及提取方案
 
 #### 4.2.1 数据库 Session 管理（26 处重复）
 
@@ -586,7 +586,7 @@ def safe_timestamp(dt: datetime | None) -> str | None:
 | 用户获取 `current_user.username if current_user else "system"` | 4 处 | `utils/auth_helpers.py` | `get_user_id(current_user) -> str` |
 | 服务检查 `if not self.service: raise 501` | 5 处 | `utils/service_checker.py` | `require_service(service, name)` |
 
-### 4.3 新建工具模块清单
+### 5.3 新建工具模块清单
 
 | 新文件 | 包含函数 | 可消除重复数 | 优先级 |
 |--------|---------|-------------|--------|
@@ -601,9 +601,9 @@ def safe_timestamp(dt: datetime | None) -> str | None:
 
 ---
 
-## 5. 代码引用规范（强制）
+## 6. 代码引用规范（强制）
 
-### 5.1 现状问题
+### 6.1 现状问题
 
 当前项目中代码引用（import）存在以下混乱：
 
@@ -616,7 +616,7 @@ def safe_timestamp(dt: datetime | None) -> str | None:
 | **函数内 import 散布** | 🟢 低 | 364 处 | `import asyncio` 在函数内，部分合理部分冗余 |
 | **重复 import** | 🟢 低 | 多处 | `from src.repository import TestCaseRepository` 在同一文件出现 6 次 |
 
-### 5.2 业内最佳实践
+### 6.2 业内最佳实践
 
 基于 Python/FastAPI 项目的主流规范（如 FastAPI 官方模板、Cookiecutter、RealWorld 等）：
 
@@ -628,7 +628,7 @@ def safe_timestamp(dt: datetime | None) -> str | None:
 | **禁止函数内 import** | 除非解决循环依赖或懒加载重型库 | Google Python Style |
 | **`__init__.py` 显式导出** | 每个包都有 `__init__.py`，明确导出公共 API | 所有主流框架 |
 
-### 5.3 改造方案
+### 6.3 改造方案
 
 #### 5.3.1 重命名 `src/model/` → `src/schemas/`
 
@@ -759,7 +759,7 @@ config/core/manager.py (line 10) → from src.config import settings
 | `config/core/init.py` | 应用启动初始化（embedding init, watcher） | ~100 |
 | `config/__init__.py` | 纯聚合导出 | ~30 |
 
-### 5.4 工具化支持
+### 6.4 工具化支持
 
 **添加 `isort` 到项目**：
 
@@ -788,9 +788,9 @@ ruff check backend/src/ --select F401,F811,E402
 
 ---
 
-## 6. 前端架构重构规范（强制）
+## 7. 前端架构重构规范（强制）
 
-### 6.1 现状问题
+### 7.1 现状问题
 
 当前前端代码存在以下混乱：
 
@@ -805,7 +805,7 @@ ruff check backend/src/ --select F401,F811,E402
 | **SSE 实现重复** | 🟡 中 | 2 个 SSE hook + 1 个 Service | `useSSE.ts`、`useSseClient.ts`、`SseClient` |
 | **孤儿页面** | 🟢 低 | `src/pages/` | `SystemConfigPage.tsx`、`BookChunksPage.tsx` |
 
-### 6.2 业内最佳实践
+### 7.2 业内最佳实践
 
 基于 React/TypeScript 项目的主流架构模式：
 
@@ -820,7 +820,7 @@ ruff check backend/src/ --select F401,F811,E402
 - FSD 提供清晰的层级依赖规则，防止循环依赖
 - 适合中大型项目（当前 50+ 页面/组件文件）
 
-### 6.3 目标目录结构
+### 7.3 目标目录结构
 
 ```
 frontend/src/
@@ -896,7 +896,7 @@ frontend/src/
         └── common.ts
 ```
 
-### 6.4 分层依赖规则
+### 7.4 分层依赖规则
 
 ```
 pages → widgets → features → entities → shared
@@ -912,7 +912,7 @@ pages → widgets → features → entities → shared
 | `entities/` | 核心数据模型+展示 | 包含页面路由逻辑 |
 | `shared/` | 跨特性复用工具 | 包含业务逻辑 |
 
-### 6.5 改造方案
+### 7.5 改造方案
 
 #### 6.5.1 页面展示与逻辑分离
 
@@ -1097,7 +1097,7 @@ await handleApiCall(() => deleteTestRun(id), {
 - 迁移 `components/documents/*` → `features/documents/components/`
 - 迁移 `components/config/*`（19 个文件）→ `features/config/components/`
 
-### 6.6 工具化支持
+### 7.6 工具化支持
 
 **添加 ESLint 规则**：
 ```json
@@ -1135,9 +1135,9 @@ await handleApiCall(() => deleteTestRun(id), {
 
 ---
 
-## 7. 统一响应格式设计
+## 8. 错误码规范
 
-### 5.1 错误码分段
+### 8.1 错误码分段
 
 | 范围 | 模块 | 说明 |
 |------|------|------|
@@ -1150,7 +1150,7 @@ await handleApiCall(() => deleteTestRun(id), {
 | `15000-15999` | 提示词管理模块 | Prompt 版本、A/B 测试等 |
 | `16000-16999` | 监控模块 | LLM 调用统计、追踪等 |
 
-### 3.2 通用错误码定义
+### 8.2 通用错误码定义
 
 | 错误码 | error_code | message | 说明 |
 |--------|-----------|---------|------|
@@ -1166,7 +1166,7 @@ await handleApiCall(() => deleteTestRun(id), {
 | `10009` | `REQUEST_TIMEOUT` | 请求超时 | 处理时间过长 |
 | `10010` | `TASK_CANCELLED` | 任务已取消 | 异步任务被取消 |
 
-### 3.3 各模块错误码示例
+### 8.3 各模块错误码示例
 
 **RAG 知识库模块 (12000-12999)**：
 | 错误码 | error_code | message |
@@ -1196,11 +1196,11 @@ await handleApiCall(() => deleteTestRun(id), {
 
 ---
 
-## 6. 后端实现方案
+## 9. 后端实现方案
 
-### 6.1 核心组件
+### 9.1 核心组件
 
-#### 6.1.1 统一响应包装类
+#### 9.1.1 统一响应包装类
 
 **文件位置**：`backend/src/utils/response.py`
 
@@ -1240,7 +1240,7 @@ class APIResponse(BaseModel):
         return result
 ```
 
-#### 6.1.2 自定义业务异常
+#### 9.1.2 自定义业务异常
 
 **文件位置**：`backend/src/utils/exceptions.py`（扩展已有文件）
 
@@ -1315,7 +1315,7 @@ class InternalServerErrorException(AppException):
 # 各模块异常按同样模式定义...
 ```
 
-#### 6.1.3 全局异常处理器
+#### 9.1.3 全局异常处理器
 
 **文件位置**：`backend/src/middleware/exception_handler.py`（新建）
 
@@ -1379,7 +1379,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 ```
 
-#### 6.1.4 注册异常处理器
+#### 9.1.4 注册异常处理器
 
 **文件位置**：`backend/src/server.py`（修改）
 
@@ -1404,7 +1404,7 @@ def create_app() -> FastAPI:
     # ... 其他配置
 ```
 
-### 6.2 响应包装中间件
+### 9.2 响应包装中间件
 
 **文件位置**：`backend/src/middleware/response_wrapper.py`（新建）
 
@@ -1446,9 +1446,9 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-### 6.3 改造策略
+### 9.3 改造策略
 
-#### 6.3.1 渐进式改造
+#### 9.3.1 渐进式改造
 
 考虑到系统已有大量接口，采用**渐进式改造**策略：
 
@@ -1466,7 +1466,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
 - 移除所有 `raise HTTPException` 调用
 - 统一错误信息为中文
 
-#### 6.3.2 Controller 改造示例
+#### 9.3.2 Controller 改造示例
 
 **改造前**：
 ```python
@@ -1505,9 +1505,9 @@ async def get_task(task_id: str):
 
 ---
 
-## 7. 前端实现方案
+## 10. 前端实现方案
 
-### 7.1 统一请求拦截器改造
+### 10.1 统一请求拦截器改造
 
 **文件位置**：`frontend/src/api/client.ts`（修改）
 
@@ -1575,7 +1575,7 @@ function handleBusinessError(code: number, msg: string, errorCode?: string) {
 }
 ```
 
-### 7.2 错误码映射表
+### 10.2 错误码映射表
 
 **文件位置**：`frontend/src/constants/errorCodes.ts`（新建）
 
@@ -1608,7 +1608,7 @@ export const ErrorMessageMap: Partial<Record<ErrorCode, string>> = {
 };
 ```
 
-### 7.3 业务层调用改造
+### 10.3 业务层调用改造
 
 **改造前**：
 ```typescript
@@ -1624,19 +1624,19 @@ const data = await apiClient.get(`/rag/test/cases/${id}`);  // 拦截器已解�
 
 ---
 
-## 8. 特殊场景处理
+## 11. 特殊场景处理
 
-### 8.1 SSE 流式响应
+### 11.1 SSE 流式响应
 
 SSE 响应（如评估报告流式输出、测试进度推送）**不参与统一包装**，保持原有格式。
 
 前端通过 `EventSource` 或 `fetch` + `ReadableStream` 处理。
 
-### 8.2 文件下载
+### 11.2 文件下载
 
 文件下载接口（如导出报告、下载文件）**不参与统一包装**，直接返回二进制流。
 
-### 8.3 文件上传
+### 11.3 文件上传
 
 文件上传接口返回统一格式：
 ```json
@@ -1652,9 +1652,9 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 
 ---
 
-## 10. 验收标准
+## 12. 验收标准
 
-### 10.1 实体类迁移验收
+### 12.1 实体类迁移验收
 
 - [ ] `src/schemas/` 目录结构按规范创建完成
 - [ ] 所有 `service/` 中的 `BaseModel` 已迁移至 `schemas/`
@@ -1663,7 +1663,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] 所有导入语句已更新为从 `src.schemas` 导入
 - [ ] 原有功能回归测试通过
 
-### 10.2 冗余代码消除验收
+### 12.2 冗余代码消除验收
 
 - [ ] `utils/db.py` 创建完成，26 处 Session 获取已替换
 - [ ] `utils/response.py` 创建完成，100+ 处错误处理模板已替换
@@ -1673,7 +1673,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] 无 `datetime.utcnow()` 调用（全部替换为 `utc_now()`）
 - [ ] 原有功能回归测试通过
 
-### 10.10 兼容性验收
+### 12.3 代码引用规范化验收
 
 - [ ] `src/model/` 目录已重命名为 `src/schemas/`
 - [ ] 无 `from src.model.` 引用残留
@@ -1686,7 +1686,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] `ruff` F401/F811/E402 检查通过
 - [ ] 原有功能回归测试通过
 
-### 10.8 代码引用规范化验收
+### 12.4 类拆分验收
 
 - [ ] 单类行数不超过 200 行（含空行和注释）
 - [ ] P0 优先级类完成拆分（`RagTestManager`、`RetrievalService`）
@@ -1696,7 +1696,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] 子服务通过依赖注入获取
 - [ ] 原有功能回归测试通过
 
-### 10.4 类拆分验收
+### 12.5 后端验收（统一响应与异常）
 
 - [ ] 所有新增接口必须使用 `APIResponse.success()` 返回
 - [ ] 所有业务异常必须继承 `AppException`
@@ -1705,7 +1705,15 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] 错误信息统一使用中文
 - [ ] SSE 和文件下载接口不受影响
 
-### 10.7 前端架构重构验收
+### 12.6 前端验收（统一响应与异常）
+
+- [ ] 请求拦截器自动解包 `data` 字段
+- [ ] 业务错误自动弹出全局提示（可配置静默）
+- [ ] 网络错误有友好提示
+- [ ] 业务层可通过 `errorCode` 做特殊逻辑处理
+- [ ] 现有业务功能不受影响
+
+### 12.7 前端架构重构验收
 
 - [ ] 目录结构按 FSD Lite 规范重组完成
 - [ ] 无 `components/` 与 `features/*/components/` 并存
@@ -1717,15 +1725,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 - [ ] 类型定义无循环 re-export
 - [ ] 原有功能回归测试通过
 
-### 10.8 后端验收
-
-- [ ] 请求拦截器自动解包 `data` 字段
-- [ ] 业务错误自动弹出全局提示（可配置静默）
-- [ ] 网络错误有友好提示
-- [ ] 业务层可通过 `errorCode` 做特殊逻辑处理
-- [ ] 现有业务功能不受影响
-
-### 10.9 后端验收
+### 12.8 兼容性验收
 
 - [ ] Phase 1 完成后，新旧接口可并存
 - [ ] HTTPException 能被异常处理器正确映射
@@ -1733,7 +1733,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 
 ---
 
-## 11. 实施计划
+## 13. 实施计划
 
 ### Phase 0：实体类迁移（预计 2-3 天）
 
@@ -1837,9 +1837,9 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 
 ---
 
-## 12. 风险与注意事项
+## 14. 风险与注意事项
 
-### 12.1 风险
+### 14.1 风险
 
 1. **过渡期兼容性**：新旧接口并存期间，前端需同时处理两种响应格式
 2. **SSE/文件下载误包装**：中间件需正确识别并跳过特殊响应类型
@@ -1850,7 +1850,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 7. **前端架构重构风险**：FSD Lite 目录重组影响所有前端文件，需按 feature 逐步迁移，每迁移一个都需验证功能
 8. **工具函数替换风险**：280+ 处重复代码替换需逐步进行，每替换一处都需运行测试验证
 
-### 12.2 注意事项
+### 14.2 注意事项
 
 1. **HTTP 状态码策略**：保持 HTTP 语义（200/4xx/5xx），业务错误码 `code` + `error_code` 双字段用于机器判断和国际化
 2. **日志记录**：异常处理器需记录完整堆栈，便于排查问题
@@ -1864,9 +1864,9 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 
 ---
 
-## 13. 附录
+## 15. 附录
 
-### 13.1 现有接口响应格式统计
+### 15.1 现有接口响应格式统计
 
 | 接口 | 当前返回格式 | 改造优先级 |
 |------|-------------|-----------|
@@ -1879,7 +1879,7 @@ SSE 响应（如评估报告流式输出、测试进度推送）**不参与统�
 | `GET /api/v1/prompts` | Pydantic response_model | P2 |
 | `GET /api/v1/monitoring/*` | 直接返回数据 | P2 |
 
-### 13.2 参考项目
+### 15.2 参考项目
 
 - 阿里巴巴 Java 开发手册 - 统一响应格式规范
 - FastAPI 官方文档 - 异常处理最佳实践

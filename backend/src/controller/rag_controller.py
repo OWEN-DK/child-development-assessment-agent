@@ -1,13 +1,24 @@
+import asyncio
 import os
 import shutil
-import uuid
 import time
-import asyncio
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Query
-from src.service.rag_service import rag_service
-from src.utils.logger import logger
-from src.utils.exceptions import TaskCancelledException
+import uuid
+
+from fastapi import (APIRouter, BackgroundTasks, File, Query,
+                     UploadFile)
+
 from src.config import settings
+from src.schemas.common import APIResponse
+from src.service.rag_service import rag_service
+from src.service.task_status_service import task_status_service
+from src.utils.exceptions import (ChunkNotFoundException,
+                                   DocumentNotFoundException,
+                                   InternalServerErrorException,
+                                   InvalidParamsException,
+                                   ResourceNotFoundException,
+                                   TaskCancelledException,
+                                   UnsupportedFileTypeException)
+from src.utils.logger import logger
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -17,12 +28,6 @@ MAX_CONCURRENT_TASKS = settings.rag_upload_max_concurrent_tasks  # 最大并发�
 # Ensure upload directory exists
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
-
-import threading
-
-# 任务状态跟踪
-upload_tasks = {}
-upload_tasks_lock = threading.Lock()
 
 # 任务状态枚举
 TASK_STATUS_PENDING = "pending"
@@ -42,15 +47,17 @@ def process_book_background(task_id: str, file_path: str, original_filename: str
         async with semaphore:  # 限制并发数
             try:
                 # 更新任务状态为处理中
-                with upload_tasks_lock:
-                    if task_id in upload_tasks:
-                        upload_tasks[task_id]["status"] = TASK_STATUS_PROCESSING
-                        upload_tasks[task_id]["message"] = "文件处理中，正在解析内容"
-                        upload_tasks[task_id]["stage"] = "parsing"
-                        upload_tasks[task_id]["progress"] = 10.0
+                task = await task_status_service.get_status(task_id)
+                if task:
+                    await task_status_service.update_status(task_id, {
+                        "status": TASK_STATUS_PROCESSING,
+                        "message": "文件处理中，正在解析内容",
+                        "stage": "parsing",
+                        "progress": 10.0,
+                    })
 
                 logger.info(
-                    f"Started processing task {task_id} in background. upload_tasks_id={id(upload_tasks)}"
+                    f"Started processing task {task_id} in background"
                 )
 
                 # 自定义进度回调函数
@@ -58,19 +65,25 @@ def process_book_background(task_id: str, file_path: str, original_filename: str
                     logger.info(
                         f"Progress callback for {task_id}: {stage} {progress:.1f}%"
                     )
-                    with upload_tasks_lock:
-                        if task_id in upload_tasks:
+                    # 在同步函数中使用 asyncio.run 调用异步方法
+                    async def update():
+                        task = await task_status_service.get_status(task_id)
+                        if task:
                             # 检查任务是否已被取消
-                            if upload_tasks[task_id]["status"] == TASK_STATUS_CANCELLED:
+                            if task["status"] == TASK_STATUS_CANCELLED:
                                 raise TaskCancelledException("Task cancelled by user")
 
-                            upload_tasks[task_id]["stage"] = stage
-                            upload_tasks[task_id]["progress"] = progress
-                            upload_tasks[task_id]["message"] = message
+                            await task_status_service.update_status(task_id, {
+                                "stage": stage,
+                                "progress": progress,
+                                "message": message,
+                            })
                         else:
                             logger.error(
-                                f"Task {task_id} not found in upload_tasks during callback"
+                                f"Task {task_id} not found during callback"
                             )
+                    
+                    asyncio.run(update())
 
                 # 执行索引构建，传入进度回调
                 await rag_service.ingest_book(
@@ -80,15 +93,14 @@ def process_book_background(task_id: str, file_path: str, original_filename: str
                 )
 
                 # 更新任务状态为成功
-                with upload_tasks_lock:
-                    if (
-                        task_id in upload_tasks
-                        and upload_tasks[task_id]["status"] != TASK_STATUS_CANCELLED
-                    ):
-                        upload_tasks[task_id]["status"] = TASK_STATUS_SUCCESS
-                        upload_tasks[task_id]["message"] = "文件上传并索引成功"
-                        upload_tasks[task_id]["stage"] = "completed"
-                        upload_tasks[task_id]["progress"] = 100.0
+                task = await task_status_service.get_status(task_id)
+                if task and task.get("status") != TASK_STATUS_CANCELLED:
+                    await task_status_service.update_status(task_id, {
+                        "status": TASK_STATUS_SUCCESS,
+                        "message": "文件上传并索引成功",
+                        "stage": "completed",
+                        "progress": 100.0,
+                    })
 
                 # 清理临时文件
                 if os.path.exists(file_path):
@@ -99,11 +111,11 @@ def process_book_background(task_id: str, file_path: str, original_filename: str
             except TaskCancelledException:
                 # 任务被取消，已在 ingest_book 中清理了文档记录
                 logger.info(f"Task {task_id} cancelled by user")
-                with upload_tasks_lock:
-                    if task_id in upload_tasks:
-                        upload_tasks[task_id]["status"] = TASK_STATUS_CANCELLED
-                        upload_tasks[task_id]["message"] = "任务已取消"
-                        upload_tasks[task_id]["progress"] = 0.0
+                await task_status_service.update_status(task_id, {
+                    "status": TASK_STATUS_CANCELLED,
+                    "message": "任务已取消",
+                    "progress": 0.0,
+                })
 
                 # 清理临时文件
                 if os.path.exists(file_path):
@@ -111,11 +123,11 @@ def process_book_background(task_id: str, file_path: str, original_filename: str
 
             except Exception as e:
                 # 更新任务状态为失败
-                with upload_tasks_lock:
-                    if task_id in upload_tasks:
-                        upload_tasks[task_id]["status"] = TASK_STATUS_FAILED
-                        upload_tasks[task_id]["error"] = str(e)
-                        upload_tasks[task_id]["message"] = f"处理失败: {str(e)}"
+                await task_status_service.update_status(task_id, {
+                    "status": TASK_STATUS_FAILED,
+                    "error": str(e),
+                    "message": f"处理失败: {str(e)}",
+                })
 
                 # 清理临时文件
                 if os.path.exists(file_path):
@@ -133,9 +145,7 @@ async def upload_book(background_tasks: BackgroundTasks, file: UploadFile = File
     上传书籍文件（PDF/EPUB）并进行 RAG 索引（异步处理）。
     """
     if not (file.filename.endswith(".pdf") or file.filename.endswith(".epub")):
-        raise HTTPException(
-            status_code=400, detail="Only PDF and EPUB files are supported currently."
-        )
+        raise UnsupportedFileTypeException(file_type=os.path.splitext(file.filename)[1])
 
     # Generate a unique filename to avoid collisions
     file_ext = os.path.splitext(file.filename)[1]
@@ -151,18 +161,17 @@ async def upload_book(background_tasks: BackgroundTasks, file: UploadFile = File
             shutil.copyfileobj(file.file, buffer)
 
         # 初始化任务状态
-        with upload_tasks_lock:
-            upload_tasks[task_id] = {
-                "status": TASK_STATUS_PENDING,
-                "filename": file.filename,
-                "created_at": time.time(),
-                "message": "文件已上传，正在排队处理",
-                "progress": 0.0,
-                "stage": "pending",  # pending, parsing, chunking, embedding, indexing, completed
-            }
+        await task_status_service.set_status(task_id, {
+            "status": TASK_STATUS_PENDING,
+            "filename": file.filename,
+            "created_at": time.time(),
+            "message": "文件已上传，正在排队处理",
+            "progress": 0.0,
+            "stage": "pending",  # pending, parsing, chunking, embedding, indexing, completed
+        })
 
         logger.info(
-            f"Created upload task {task_id}. upload_tasks_id={id(upload_tasks)}"
+            f"Created upload task {task_id}"
         )
 
         # 添加到后台任务
@@ -170,18 +179,17 @@ async def upload_book(background_tasks: BackgroundTasks, file: UploadFile = File
             process_book_background, task_id, file_path, file.filename
         )
 
-        return {
-            "status": "accepted",
+        return APIResponse.success(data={
             "task_id": task_id,
             "filename": file.filename,
             "message": "文件已上传，正在后台处理中，可通过任务ID查询处理状态",
-        }
+        })
 
     except Exception as e:
         # Clean up if failed
         if os.path.exists(file_path):
             os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
+        raise InternalServerErrorException(message=f"文件上传失败: {str(e)}")
 
 
 @router.post("/tasks/{task_id}/cancel")
@@ -189,27 +197,25 @@ async def cancel_upload_task(task_id: str):
     """
     取消正在进行的上传任务
     """
-    with upload_tasks_lock:
-        if task_id not in upload_tasks:
-            raise HTTPException(status_code=404, detail="任务不存在")
+    task = await task_status_service.get_status(task_id)
+    if not task:
+        raise ResourceNotFoundException(message="任务不存在")
 
-        task = upload_tasks[task_id]
-        if task["status"] in [
-            TASK_STATUS_SUCCESS,
-            TASK_STATUS_FAILED,
-            TASK_STATUS_CANCELLED,
-        ]:
-            return {
-                "status": "ignored",
-                "message": f"任务当前状态为 {task['status']}，无需取消",
-            }
+    if task["status"] in [
+        TASK_STATUS_SUCCESS,
+        TASK_STATUS_FAILED,
+        TASK_STATUS_CANCELLED,
+    ]:
+        return APIResponse.success(message=f"任务当前状态为 {task['status']}，无需取消")
 
-        # 标记为已取消，后续 progress_callback 会检测到并中断
-        task["status"] = TASK_STATUS_CANCELLED
-        task["message"] = "正在取消任务..."
+    # 标记为已取消，后续 progress_callback 会检测到并中断
+    await task_status_service.update_status(task_id, {
+        "status": TASK_STATUS_CANCELLED,
+        "message": "正在取消任务...",
+    })
 
     logger.info(f"Task {task_id} marked for cancellation")
-    return {"status": "success", "message": "任务已标记取消"}
+    return APIResponse.success(message="任务已标记取消")
 
 
 @router.get("/tasks")
@@ -217,13 +223,11 @@ async def list_upload_tasks():
     """
     获取所有当前的上传任务（包括处理中、成功、失败的）
     """
-    with upload_tasks_lock:
-        # 返回任务列表的副本
-        tasks_list = [task.copy() for task in upload_tasks.values()]
+    tasks_list = await task_status_service.list_statuses()
 
     # 按创建时间倒序排列
     tasks_list.sort(key=lambda x: x["created_at"], reverse=True)
-    return {"tasks": tasks_list}
+    return APIResponse.success(data={"tasks": tasks_list})
 
 
 @router.get("/tasks/{task_id}")
@@ -231,15 +235,12 @@ async def get_upload_task_status(task_id: str):
     """
     查询上传任务的处理状态
     """
-    # 这里的锁不是严格必须的（GIL），但为了逻辑一致性加上
-    with upload_tasks_lock:
-        if task_id not in upload_tasks:
-            logger.warning(
-                f"Task {task_id} not found in upload_tasks. upload_tasks_id={id(upload_tasks)}"
-            )
-            raise HTTPException(status_code=404, detail="任务不存在")
-
-        task = upload_tasks[task_id].copy()  # 浅拷贝以避免并发修改
+    task = await task_status_service.get_status(task_id)
+    if not task:
+        logger.warning(
+            f"Task {task_id} not found"
+        )
+        raise ResourceNotFoundException(message="任务不存在")
 
     logger.info(
         f"Query task {task_id}: status={task['status']}, progress={task.get('progress'):.1f}%, stage={task.get('stage')}"
@@ -258,7 +259,7 @@ async def get_upload_task_status(task_id: str):
     if task["status"] == TASK_STATUS_FAILED:
         response["error"] = task.get("error", "未知错误")
 
-    return response
+    return APIResponse.success(data=response)
 
 
 @router.get("/status")
@@ -272,11 +273,11 @@ async def get_rag_status():
     has_documents = len(document_manager.list_documents()) > 0
     index_ready = rag_service.index_manager.is_index_available() and has_documents
 
-    return {
+    return APIResponse.success(data={
         "index_ready": index_ready,
         "storage_dir": os.path.abspath(settings.rag_storage_dir),
         "document_count": len(document_manager.list_documents()),
-    }
+    })
 
 
 @router.delete("/documents/{filename}")
@@ -285,7 +286,7 @@ async def delete_document(filename: str):
     删除指定文档及其索引
     """
     from src.service.document_ingestion_service import import_task_manager
-    
+
     # 先删除文档记录
     success = rag_service.delete_document(filename)
     
@@ -309,10 +310,8 @@ async def delete_document(filename: str):
         logger.error(f"Failed to cleanup task states: {e}")
     
     if not success:
-        raise HTTPException(
-            status_code=404, detail="Document not found or deletion failed."
-        )
-    return {"status": "success", "message": f"Document {filename} deleted."}
+        raise DocumentNotFoundException(document_id=filename)
+    return APIResponse.success(message=f"Document {filename} deleted.")
 
 
 @router.get("/documents")
@@ -336,7 +335,7 @@ async def list_documents():
             }
         )
 
-    return {"documents": results}
+    return APIResponse.success(data={"documents": results})
 
 
 @router.get("/search")
@@ -349,17 +348,16 @@ async def search_knowledge_content(
     搜索知识库内容，返回匹配的片段和元数据（支持分页）
     """
     if not query.strip():
-        raise HTTPException(status_code=400, detail="搜索关键词不能为空")
+        raise InvalidParamsException(message="搜索关键词不能为空")
 
     try:
         result = await rag_service.search_content(query.strip(), limit, offset)
-        return {
-            "status": "success", 
+        return APIResponse.success(data={
             "total": result["total"], 
             "results": result["results"]
-        }
+        })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
+        raise InternalServerErrorException(message=f"搜索失败: {str(e)}")
 
 
 # 分层内容生成进度查询接口
@@ -372,12 +370,12 @@ async def get_layered_content_progress(task_id: str):
     
     progress = get_task_progress(task_id)
     if not progress:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise ResourceNotFoundException(message="任务不存在")
     
-    return {
+    return APIResponse.success(data={
         "task_id": task_id,
         **progress
-    }
+    })
 
 
 @router.get("/layered-progress")
@@ -388,7 +386,7 @@ async def list_all_layered_tasks():
     from src.core.layered_content_generator import list_all_tasks
     
     tasks = list_all_tasks()
-    return {"tasks": tasks}
+    return APIResponse.success(data={"tasks": tasks})
 
 
 @router.get("/documents/{file_hash}/chunks")
@@ -407,15 +405,14 @@ async def get_document_chunks(file_hash: str, page: int = 1, page_size: int = 20
     logger.info(f"Getting chunks for file_hash: {file_hash}, page: {page}, page_size: {page_size}")
     result = rag_service.get_document_chunks(file_hash, page, page_size)
     logger.info(f"Found {result['total']} chunks for file_hash: {file_hash}")
-    return {
-        "status": "success",
+    return APIResponse.success(data={
         "file_hash": file_hash,
         "total": result["total"],
         "page": result["page"],
         "page_size": result["page_size"],
         "total_pages": result["total_pages"],
         "chunks": result["chunks"]
-    }
+    })
 
 
 @router.get("/chunks/{chunk_id}")
@@ -425,8 +422,7 @@ async def get_chunk_detail(chunk_id: str):
     """
     chunk = rag_service.get_chunk_detail(chunk_id)
     if not chunk:
-        raise HTTPException(status_code=404, detail="分块不存在")
-    return {
-        "status": "success",
+        raise ChunkNotFoundException(chunk_id=chunk_id)
+    return APIResponse.success(data={
         "chunk": chunk
-    }
+    })

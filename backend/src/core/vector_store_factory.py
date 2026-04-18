@@ -1,7 +1,10 @@
-from typing import Dict, Type, Callable
+from typing import Callable, Dict, Type
+
 from llama_index.core.vector_stores.types import BasePydanticVectorStore
+
 from src.config import settings
 from src.utils.logger import logger
+
 
 class VectorStoreFactory:
     """向量存储工厂，实现向量库无关性"""
@@ -42,7 +45,7 @@ class VectorStoreFactory:
         if store_type == "chroma" and "persist_dir" in store_config:
             import chromadb
             from llama_index.vector_stores.chroma import ChromaVectorStore
-            
+
             # 创建本地持久化客户端
             db = chromadb.PersistentClient(path=store_config["persist_dir"])
             collection = db.get_or_create_collection(

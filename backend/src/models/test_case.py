@@ -1,24 +1,15 @@
-from sqlalchemy import (
-    String,
-    Text,
-    DECIMAL,
-    Enum,
-    Integer,
-    JSON,
-    DateTime,
-    ForeignKey,
-    func,
-    Index,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.core.database import Base
 from datetime import datetime
 from enum import Enum as PyEnum
-from typing import Any, List, Tuple, Optional
-from pydantic import BaseModel
+from typing import Any, List, Optional, Tuple
 
+from pydantic import BaseModel
+from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, ForeignKey, Index,
+                        Integer, String, Text, func)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.core.database import Base
 # Re-export SourceDocument from document module to avoid duplicate class registration
-from src.models.document import SourceDocument, DocumentStatus
+from src.models.document import DocumentStatus, SourceDocument
 
 
 class TestDomain(PyEnum):
@@ -67,32 +58,11 @@ class ReportExportFormat(PyEnum):
     JSON = "json"
 
 
-class GenerationParams(BaseModel):
-    target_domains: List[str]
-    age_range: Tuple[float, float]
-    count: int = 10
-    difficulty: str = "medium"
-    llm_model: str = "qwen-plus"
-    temperature: float = 0.7
-
-
 class DocumentStatus(PyEnum):
     UPLOADED = "uploaded"
     PARSING = "parsing"
     READY = "ready"
     ARCHIVED = "archived"
-
-
-class TestResultItem(BaseModel):
-    test_case_id: str
-    passed: bool
-    precision: float
-    recall: float
-    f1: float
-    execution_time_ms: int
-    expected_knowledge_ids: List[str]
-    actual_knowledge_ids: List[str]
-    error_message: Optional[str] = None
 
 
 class KnowledgeSnapshot(Base):

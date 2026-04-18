@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { CACHE_TIME } from './constants';
+import { CACHE_TIME } from '@shared/lib/constants';
 
 export const queryClient = new QueryClient({
   defaultOptions: {

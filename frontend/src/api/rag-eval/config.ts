@@ -2,7 +2,7 @@
  * 配置版本对比与回滚 API 客户端
  */
 
-import apiClient from '../client';
+import apiClient from '@shared/api/client';
 
 export interface ConfigVersionInfo {
   id: string;

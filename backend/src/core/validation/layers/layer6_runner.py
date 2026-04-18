@@ -4,11 +4,12 @@ import asyncio
 import logging
 from typing import Any
 
-from src.core.validation.layers.layer6a_regression import Layer6aRegressionDetection
-from src.core.validation.layers.layer6b_cross_validation import Layer6bCrossValidation
-from src.core.validation.layers.layer6c_cost_effectiveness import (
-    Layer6cCostEffectiveness,
-)
+from src.core.validation.layers.layer6a_regression import \
+    Layer6aRegressionDetection
+from src.core.validation.layers.layer6b_cross_validation import \
+    Layer6bCrossValidation
+from src.core.validation.layers.layer6c_cost_effectiveness import \
+    Layer6cCostEffectiveness
 from src.core.validation.layers.layer6d_ab_test import Layer6dABShadowTest
 
 logger = logging.getLogger(__name__)

@@ -3,7 +3,7 @@ import { Input, Space, Typography } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { InputRef } from 'antd';
 import { useDebounceCallback } from '../../hooks/useDebounce';
-import { DEBOUNCE_DELAY } from '../../lib/constants';
+import { DEBOUNCE_DELAY } from '@shared/lib/constants';
 
 const { Search } = Input;
 

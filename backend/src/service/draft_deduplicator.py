@@ -1,6 +1,7 @@
 import difflib
 from typing import List
-from src.models.test_case import TestCaseDraft
+
+from src.schemas import TestCaseDraft
 from src.utils.logger import logger
 
 

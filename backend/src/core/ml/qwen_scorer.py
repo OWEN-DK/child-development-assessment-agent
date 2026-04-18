@@ -1,16 +1,12 @@
-from typing import Dict, Any, List, Tuple
 import json
+from typing import Any, Dict, List, Tuple
+
 import httpx
-from pydantic import BaseModel, Field
-from src.config import settings
-from src.model.schemas import ChildProfile, ProposedPlan, ChildState, KnowledgeItem
+from pydantic import Field
+
+from src.schemas import (ChildProfile, ChildState, KnowledgeItem, ProposedPlan,
+                         QwenScoringOutput)
 from src.utils.logger import logger
-
-
-class QwenScoringOutput(BaseModel):
-    score: float = Field(description="预测的评分，0-100之间")
-    reasoning: str = Field(description="评分理由")
-    feature_importance: Dict[str, float] = Field(description="各特征重要度，总和为100")
 
 
 class QwenScorer:

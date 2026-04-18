@@ -248,8 +248,9 @@ class Layer1RuleEngine:
 
     async def _get_metrics(self, session) -> dict:
         """从 TestRun 聚合获取指标数据"""
-        from src.models.rag_eval.test_run import RagEvalTestRun
         from sqlalchemy import select
+
+        from src.models.rag_eval.test_run import RagEvalTestRun
 
         result = await session.execute(
             select(RagEvalTestRun).where(RagEvalTestRun.id == self.test_run.id)
@@ -273,8 +274,9 @@ class Layer1RuleEngine:
 
     async def _get_rag_config(self, session) -> dict:
         """从 ConfigVersion 获取当前配置快照"""
-        from src.models.rag_eval.config_version import RagEvalConfigVersion
         from sqlalchemy import select
+
+        from src.models.rag_eval.config_version import RagEvalConfigVersion
 
         if not self.test_run.config_version_id:
             return {}

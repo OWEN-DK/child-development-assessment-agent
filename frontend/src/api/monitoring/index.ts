@@ -1,4 +1,4 @@
-import { apiClient } from '../client';
+import { apiClient } from '@shared/api/client';
 import type { MonitoringStatistics, MonitoringTrend, ModelDistribution } from './types';
 
 export const monitoringApi = {

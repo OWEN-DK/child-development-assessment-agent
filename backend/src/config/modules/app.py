@@ -1,6 +1,7 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+
 class AppSettings(BaseSettings):
     app_name: str = Field("Child Development Assessment Agent", description="应用名称")
     app_version: str = Field("0.1.0", description="应用版本号")

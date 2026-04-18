@@ -1,6 +1,8 @@
-import os
 import base64
+import os
+
 from cryptography.fernet import Fernet
+
 from src.utils.logger import logger
 
 

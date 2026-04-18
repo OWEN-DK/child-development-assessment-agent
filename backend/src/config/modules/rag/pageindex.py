@@ -1,6 +1,7 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+
 class PageIndexSettings(BaseSettings):
     pageindex_enabled: bool = Field(
         default=False,

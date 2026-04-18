@@ -1,8 +1,11 @@
 import logging
 import sys
 from pathlib import Path
+
 from loguru import logger
+
 from src.config import settings as log_config
+
 
 class InterceptHandler(logging.Handler):
     """

@@ -1,15 +1,8 @@
 """配置校验引擎 - Phase 8"""
 
-from pydantic import BaseModel, Field
 from typing import Optional
 
-
-class ValidationResult(BaseModel):
-    """校验结果"""
-
-    valid: bool
-    errors: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+from src.schemas import ValidationResult
 
 
 class ConfigValidationEngine:

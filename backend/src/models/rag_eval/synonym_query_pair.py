@@ -1,16 +1,11 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import (
-    String,
-    Text,
-    DateTime,
-    Boolean,
-    ForeignKey,
-    func,
-    Index,
-    Enum as SAEnum,
-)
+
+from sqlalchemy import Boolean, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.core.database import Base
 from src.models.rag_eval.enums import RagEvalSynonymSource
 

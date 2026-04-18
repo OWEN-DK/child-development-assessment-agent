@@ -5,14 +5,16 @@
 
 from datetime import datetime
 from typing import Any
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.rag_eval.config_version import RagEvalConfigVersion
 from src.models.rag_eval.config_change_set import RagEvalConfigChangeSet
-from src.models.rag_eval.config_change_set_prompt import RagEvalConfigChangeSetPrompt
-from src.models.rag_eval.prompt_version import RagEvalPromptVersion
+from src.models.rag_eval.config_change_set_prompt import \
+    RagEvalConfigChangeSetPrompt
+from src.models.rag_eval.config_version import RagEvalConfigVersion
 from src.models.rag_eval.enums import RagEvalChangeSetStatus
+from src.models.rag_eval.prompt_version import RagEvalPromptVersion
 from src.utils.logger import logger
 
 

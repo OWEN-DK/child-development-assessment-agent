@@ -1,6 +1,7 @@
 """Provider Registry - 多提供商适配器注册表"""
 
-from typing import Dict, Tuple, Type, Optional
+from typing import Dict, Optional, Tuple, Type
+
 from injector import singleton
 
 

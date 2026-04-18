@@ -1,28 +1,16 @@
 from injector import Injector, Module, provider, singleton
+
 from src.config import settings
-from src.core.interfaces import (
-    IIndexManager,
-    ICacheService,
-    IRetrievalService,
-    IDocumentIngestionService,
-)
 from src.core.database import async_session_factory
-from src.repository import (
-    ConfigVersionRepository,
-    ConfigAuditLogRepository,
-    SourceDocumentRepository,
-    DocumentRecordRepository,
-    TestCaseRepository,
-    TestCaseDraftRepository,
-    TestSetRepository,
-    TestSetCaseRepository,
-    TestRunRepository,
-    TestRunResultRepository,
-    PromptVersionRepository,
-    PromptABTestRepository,
-    LLMCallLogRepository,
-    ABTestMetricRepository,
-)
+from src.core.interfaces import (ICacheService, IDocumentIngestionService,
+                                 IIndexManager, IRetrievalService)
+from src.repository import (ABTestMetricRepository, ConfigAuditLogRepository,
+                            ConfigVersionRepository, DocumentRecordRepository,
+                            LLMCallLogRepository, PromptABTestRepository,
+                            PromptVersionRepository, SourceDocumentRepository,
+                            TestCaseDraftRepository, TestCaseRepository,
+                            TestRunRepository, TestRunResultRepository,
+                            TestSetCaseRepository, TestSetRepository)
 
 
 class CoreModule(Module):
@@ -54,7 +42,8 @@ class CoreModule(Module):
     def provide_document_ingestion_service(
         self, index_manager: IIndexManager
     ) -> IDocumentIngestionService:
-        from src.service.document_ingestion_service import DocumentIngestionService
+        from src.service.document_ingestion_service import \
+            DocumentIngestionService
 
         return DocumentIngestionService(index_manager)
 

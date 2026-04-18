@@ -1,0 +1,42 @@
+import axios from 'axios';
+import { API_BASE_URL, API_TIMEOUT } from '@shared/lib/constants';
+
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+apiClient.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    const message = error.response?.data?.detail || error.message || '请求失败';
+    console.error('[API Error]', message, error.config?.url);
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
+
+// 向后兼容导出
+export * from '@/api/assessment';
+export * from '@/api/documents';
+export * from '@/api/knowledge';
+export * from '@/api/rag-test';
+export * from '@/api/prompts';

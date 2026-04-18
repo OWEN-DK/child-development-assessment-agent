@@ -1,11 +1,11 @@
 import React from 'react';
-import { useConfigStore } from '../../store/configStore';
+import { useConfig } from '../../features/config/hooks/useConfig';
 import { Button, Tooltip, Modal, message } from 'antd';
 import { RollbackOutlined } from '@ant-design/icons';
 import styles from './ConfigVersionSelector.module.scss';
 
 export const ConfigVersionSelector: React.FC = () => {
-  const { versions = [], activeVersion, rollbackToVersion } = useConfigStore();
+  const { versions = [], activeVersion, rollbackToVersion } = useConfig();
 
   const handleRollback = async (versionId: string) => {
     if (versionId === activeVersion) return;

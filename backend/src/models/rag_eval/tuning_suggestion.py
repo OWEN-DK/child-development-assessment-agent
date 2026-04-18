@@ -1,18 +1,11 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import (
-    String,
-    Text,
-    DateTime,
-    JSON,
-    Boolean,
-    Float,
-    ForeignKey,
-    func,
-    Index,
-    Enum as SAEnum,
-)
+
+from sqlalchemy import JSON, Boolean, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.core.database import Base
 from src.models.rag_eval.enums import RagEvalSuggestionSource
 

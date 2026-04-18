@@ -1,7 +1,9 @@
-from typing import List, Any, Optional
-import time
 import asyncio
+import time
+from typing import Any, List, Optional
+
 from llama_index.embeddings.dashscope import DashScopeEmbedding
+
 from src.utils.logger import logger
 
 # 延迟导入 settings 以避免循环引用

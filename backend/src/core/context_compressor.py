@@ -1,7 +1,9 @@
-from typing import List, Dict, Optional
-from llama_index.core.schema import NodeWithScore
-import numpy as np
 import re
+from typing import Dict, List, Optional
+
+import numpy as np
+from llama_index.core.schema import NodeWithScore
+
 from src.utils.logger import logger
 
 try:

@@ -7,7 +7,7 @@ import {
   cancelUploadTask,
 } from '../../../api/documents';
 import type { DocumentRecord, UploadTaskStatus, RagStatus } from '../../../api/documents/types';
-import { POLLING_INTERVAL } from '../../../lib/constants';
+import { POLLING_INTERVAL } from '@shared/lib/constants';
 
 interface UseDocumentManagementReturn {
   documents: DocumentRecord[];

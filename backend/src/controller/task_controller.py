@@ -1,20 +1,24 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from src.model.schemas import UserInput, AgentState
-from src.core.graph import agent_app
-from src.config import settings
-from src.utils.logger import logger
-import json
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
 import asyncio
+import json
+
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+
+from src.config import settings
+from src.core.graph import agent_app
+from src.core.llm.factory import LLMFramework, LLMServiceFactory
 from src.core.tracing.context import trace_context
+from src.schemas import AgentState, UserInput
+from src.schemas.common import APIResponse
+from src.utils.exceptions import AssessmentFailedException, InternalServerErrorException
+from src.utils.logger import logger
 
 router = APIRouter()
 
 
 @router.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return APIResponse.success(data={"status": "ok"})
 
 
 @router.post("/assess")
@@ -54,13 +58,12 @@ async def assess_development(user_input: UserInput):
 
             # 非流式模式直接返回结果
             if "final_report" in result:
-                return result["final_report"]
+                return APIResponse.success(data=result["final_report"])
             else:
-                raise HTTPException(status_code=500, detail="Failed to generate report")
+                raise AssessmentFailedException(message="Failed to generate report")
 
     except Exception as e:
-        # TODO: 更好的错误处理
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalServerErrorException(message=str(e))
 
 
 async def stream_report_generation(result: dict):
@@ -99,7 +102,7 @@ async def stream_report_generation(result: dict):
                 )
 
                 # 构建提示词
-                from src.core.llm.base import LLMRequest, LLMMessage
+                from src.schemas import LLMMessage, LLMRequest
 
                 messages = [
                     LLMMessage(

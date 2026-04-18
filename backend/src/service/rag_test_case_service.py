@@ -4,23 +4,22 @@
 """
 
 import asyncio
-import json
 import hashlib
+import json
 from datetime import datetime, timezone
-from typing import List, Dict, Optional, Tuple
-from src.config import ConfigManager
-from src.config.modules.rag.testing import (
-    TestCaseGenerationConfig,
-    calculate_draft_count_by_pages,
-)
-from src.core.database import db_session_factory
-from src.repository.test_case_repository import TestCaseDraftRepository
-from src.core.llm.factory import LLMServiceFactory
-from src.core.prompts_fallback import TEST_CASE_DRAFT_GENERATION_PROMPT
-from src.utils.logger import logger
+from typing import Dict, List, Optional, Tuple
 
 import jieba
 from datasketch import MinHash, MinHashLSH
+
+from src.config import ConfigManager
+from src.config.modules.rag.testing import (TestCaseGenerationConfig,
+                                            calculate_draft_count_by_pages)
+from src.core.database import db_session_factory
+from src.core.llm.factory import LLMServiceFactory
+from src.core.prompts_fallback import TEST_CASE_DRAFT_GENERATION_PROMPT
+from src.repository.test_case_repository import TestCaseDraftRepository
+from src.utils.logger import logger
 
 
 class DraftDeduplicator:

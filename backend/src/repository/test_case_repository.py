@@ -1,15 +1,11 @@
-from typing import Optional, List
-from sqlalchemy import select, desc
+from typing import List, Optional
+
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.models.test_case import (TestCase, TestCaseDraft, TestRun,
+                                  TestRunResult, TestSet, TestSetCase)
 from src.repository.base import BaseRepository
-from src.models.test_case import (
-    TestCase,
-    TestCaseDraft,
-    TestSet,
-    TestSetCase,
-    TestRun,
-    TestRunResult,
-)
 
 
 class TestCaseRepository(BaseRepository[TestCase]):

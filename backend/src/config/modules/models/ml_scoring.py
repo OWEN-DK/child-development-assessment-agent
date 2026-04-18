@@ -1,6 +1,7 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+
 class MLScoringSettings(BaseSettings):
     ml_scoring_enabled: bool = Field(False, validation_alias="ML_SCORING_ENABLED",
         description="是否启用ML智能评分功能"

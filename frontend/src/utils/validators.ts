@@ -1,4 +1,4 @@
-import { MAX_FILE_SIZE_MB, ALLOWED_FILE_EXTENSIONS } from '../lib/constants';
+import { MAX_FILE_SIZE_MB, ALLOWED_FILE_EXTENSIONS } from '@shared/lib/constants';
 
 export const validateFileType = (file: File): { valid: boolean; message?: string } => {
   const extension = '.' + file.name.split('.').pop()?.toLowerCase();

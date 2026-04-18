@@ -18,9 +18,9 @@ try:
 except (ImportError, OSError):
     HTML = None
 
+from src.api.sse import SSEPublisher
 from src.core.database import db_session_factory
 from src.core.redis_client import RedisClient
-from src.api.sse import SSEPublisher
 from src.utils.logger import logger
 
 # 导出任务并发限制

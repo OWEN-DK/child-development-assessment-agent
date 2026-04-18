@@ -10,7 +10,7 @@
 生成方式: 从原 prompts.py 迁移而来（Phase 2B）
 """
 
-from typing import List, Dict
+from typing import Dict, List
 
 # --------------------------
 # Retrieval Prompts

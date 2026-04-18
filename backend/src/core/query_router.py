@@ -2,15 +2,15 @@
 查询路由器 - 智能分类查询类型并路由到合适的检索引擎
 """
 
-import re
 import json
 import logging
+import re
 from enum import Enum
 from typing import Tuple
-from pydantic import BaseModel
+
 from src.config import settings
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
-from src.core.llm.base import LLMRequest, LLMMessage
+from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.schemas import LLMMessage, LLMRequest, QueryClassification, QueryType
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,6 @@ class QueryType(str, Enum):
     COMPLEX = "complex"  # 复杂查询：推理/分析性
     DEFAULT = "default"  # 默认查询
 
-
-class QueryClassification(BaseModel):
-    """查询分类结果"""
 
     query_type: QueryType
     confidence: float

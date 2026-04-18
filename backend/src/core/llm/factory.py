@@ -1,15 +1,16 @@
 """LLM 服务工厂 - 支持多提供商和热更新"""
 
 import asyncio
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
+
 from injector import singleton
 
 from src.config.core.manager import ConfigManager
-from src.core.event_bus import event_bus, ConfigChangedEvent
-from src.core.llm.provider_registry import ProviderRegistry
-from src.core.llm.base import LLMService
+from src.core.event_bus import ConfigChangedEvent, event_bus
 from src.core.llm.adapters.langchain import LangChainLLMAdapter
 from src.core.llm.adapters.llamaindex import LlamaIndexLLMAdapter
+from src.core.llm.base import LLMService
+from src.core.llm.provider_registry import ProviderRegistry
 from src.utils.logger import logger
 
 
@@ -444,6 +445,7 @@ class LLMServiceFactoryCompat:
         # 这里使用一个简化的同步版本
         from langchain_community.chat_models import ChatTongyi
         from llama_index.llms.dashscope import DashScope
+
         from src.config import settings
 
         if framework == LLMFramework.LANGCHAIN:

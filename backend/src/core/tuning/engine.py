@@ -1,13 +1,14 @@
 """统一调参建议引擎:协调三层诊断组件"""
 
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-import time
-from src.model.tuning import TuningSuggestionResponse
-from src.core.tuning.rule_engine import RuleEngine
+
+from src.core.tuning.conflict_detector import ConflictDetector
 from src.core.tuning.history_analyzer import HistoryAnalyzer
 from src.core.tuning.llm_diagnoser import LLMDiagnoser
-from src.core.tuning.conflict_detector import ConflictDetector
+from src.core.tuning.rule_engine import RuleEngine
+from src.schemas import TuningSuggestionResponse
 from src.utils.logger import logger
 
 

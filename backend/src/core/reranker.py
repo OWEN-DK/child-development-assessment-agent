@@ -1,8 +1,10 @@
 from typing import List, Optional
+
 from llama_index.core.schema import NodeWithScore
+
 from src.config import settings
-from src.utils.logger import logger
 from src.service.monitoring_service import monitoring_service
+from src.utils.logger import logger
 
 try:
     from sentence_transformers import CrossEncoder

@@ -5,8 +5,10 @@
 
 from datetime import datetime, timezone
 from typing import List
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.models.rag_eval.ignored_suggestion import RagEvalIgnoredSuggestion
 from src.utils.logger import logger
 

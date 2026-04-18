@@ -11,13 +11,15 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.rag_eval.config_version import RagEvalConfigVersion
-from src.models.rag_eval.config_change_set import RagEvalConfigChangeSet
-from src.models.rag_eval.config_change_set_prompt import RagEvalConfigChangeSetPrompt
-from src.models.rag_eval.prompt_version import RagEvalPromptVersion
-from src.models.rag_eval.enums import RagEvalChangeSetStatus
 from src.core.redis_client import RedisClient
+from src.models.rag_eval.config_change_set import RagEvalConfigChangeSet
+from src.models.rag_eval.config_change_set_prompt import \
+    RagEvalConfigChangeSetPrompt
+from src.models.rag_eval.config_version import RagEvalConfigVersion
+from src.models.rag_eval.enums import RagEvalChangeSetStatus
+from src.models.rag_eval.prompt_version import RagEvalPromptVersion
 from src.utils.logger import logger
+from src.utils.serializers import create_serializer, safe_isoformat
 
 
 async def rollback_to_version(
@@ -196,23 +198,19 @@ async def compare_config_versions(
                 }
             )
 
+    serialize_version_info = create_serializer(
+        RagEvalConfigVersion,
+        {
+            "id": None,
+            "version_label": None,
+            "version_number": None,
+            "created_at": safe_isoformat,
+        }
+    )
+
     return {
-        "from_version": {
-            "id": from_version.id,
-            "version_label": from_version.version_label,
-            "version_number": from_version.version_number,
-            "created_at": from_version.created_at.isoformat()
-            if from_version.created_at
-            else None,
-        },
-        "to_version": {
-            "id": to_version.id,
-            "version_label": to_version.version_label,
-            "version_number": to_version.version_number,
-            "created_at": to_version.created_at.isoformat()
-            if to_version.created_at
-            else None,
-        },
+        "from_version": serialize_version_info(from_version),
+        "to_version": serialize_version_info(to_version),
         "diff": {
             "added": {key: to_snapshot[key] for key in added_keys},
             "removed": {key: from_snapshot[key] for key in removed_keys},

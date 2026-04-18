@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChildProfile } from '../models/assessment';
+import type { ChildProfile } from '@entities/assessment/types';
 
 interface ChildStore {
   currentProfile: ChildProfile | null;

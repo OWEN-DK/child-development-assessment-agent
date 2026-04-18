@@ -1,12 +1,13 @@
 """Layer 5b: 意图识别准确率"""
 
 import logging
-from typing import Any
 from collections import defaultdict
+from typing import Any
+
 from sqlalchemy import select
 
-from src.models.rag_eval.query_intent_log import RagEvalQueryIntentLog
 from src.models.rag_eval.intent_annotation import RagEvalIntentAnnotation
+from src.models.rag_eval.query_intent_log import RagEvalQueryIntentLog
 
 logger = logging.getLogger(__name__)
 

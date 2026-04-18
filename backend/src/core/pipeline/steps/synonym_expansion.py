@@ -1,9 +1,11 @@
-from src.core.pipeline.orchestrator import PipelineStep, PipelineContext
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
-from src.core.llm.base import LLMRequest, LLMMessage
-from src.utils.logger import logger
 import json
 import re
+
+from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
+from src.schemas import LLMMessage, LLMRequest
+from src.utils.logger import logger
+
 
 class SynonymExpansionStep(PipelineStep):
     """同义词扩展步骤：扩展查询的同义词，提高召回率"""

@@ -1,7 +1,8 @@
 """历史对比分析:从历史运行中提取参数变更效果"""
 
 from typing import Any, Dict, List, Optional
-from src.model.tuning import HistoryReference
+
+from src.schemas import HistoryReference
 from src.utils.logger import logger
 
 

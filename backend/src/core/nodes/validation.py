@@ -1,13 +1,12 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from src.config import settings
-from src.model.schemas import AgentState, Activity
 from src.config.rules import rules
+from src.core.llm.factory import LLMFramework, LLMServiceFactory
 from src.core.nodes.base import BaseNode
 from src.core.prompt.manager import prompt_manager
+from src.schemas import Activity, AgentState, LLMMessage, LLMRequest
 from src.utils.logger import logger
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
-from src.core.llm.base import LLMRequest, LLMMessage
-
 
 # 全局工厂实例（延迟初始化）
 _llm_factory = None

@@ -1,7 +1,8 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings
-from pydantic import Field
 from urllib.parse import quote
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 

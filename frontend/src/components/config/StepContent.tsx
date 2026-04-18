@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, Typography, Divider } from 'antd';
 import { ConfigField } from './ConfigField';
 import { RecommendationTip } from './RecommendationTip';
-import { useConfigStore } from '../../store/configStore';
+import { useConfig } from '../../features/config/hooks/useConfig';
 
 const { Title, Paragraph } = Typography;
 
@@ -17,7 +17,7 @@ interface StepContentProps {
 }
 
 export const StepContent: React.FC<StepContentProps> = ({ step }) => {
-  const { configFields, draftChanges, updateDraft } = useConfigStore();
+  const { configFields, draftChanges, updateDraft } = useConfig();
   
   const filteredFields = configFields.filter(f =>
     step.categories.some((cat: string) =>

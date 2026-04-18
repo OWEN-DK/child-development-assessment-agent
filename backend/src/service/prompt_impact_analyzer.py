@@ -1,45 +1,12 @@
 """提示词影响分析引擎 - Phase 7"""
 
-import re
 import ast
+import re
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel, Field
 
-
-class CodeReference(BaseModel):
-    """代码引用位置"""
-
-    file: str
-    line: int
-    function: Optional[str] = None
-
-
-class VariableChanges(BaseModel):
-    """变量变更"""
-
-    added: list[str] = Field(default_factory=list)
-    removed: list[str] = Field(default_factory=list)
-    modified: list[str] = Field(default_factory=list)
-
-
-class ConfigDependency(BaseModel):
-    """配置依赖"""
-
-    param: str
-    category: str
-    description: str = ""
-    current_value: Optional[str] = None
-
-
-class ImpactAnalysisResult(BaseModel):
-    """影响分析结果"""
-
-    code_references: list[CodeReference] = Field(default_factory=list)
-    variable_changes: VariableChanges = Field(default_factory=VariableChanges)
-    config_dependencies: list[ConfigDependency] = Field(default_factory=list)
-    affected_files: list[str] = Field(default_factory=list)
-    risk_level: str = "low"  # low, medium, high
+from src.schemas import (CodeReference, ConfigDependency, ImpactAnalysisResult,
+                         VariableChanges)
 
 
 class CodeReferenceScanner:

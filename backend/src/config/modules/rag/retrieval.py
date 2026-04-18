@@ -1,9 +1,10 @@
 """RAG 检索配置：BM25/向量融合、重排序、查询路由、年龄过滤"""
 
 from pathlib import Path
+from typing import Dict
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import Dict
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 

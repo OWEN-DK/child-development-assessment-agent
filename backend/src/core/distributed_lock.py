@@ -1,7 +1,9 @@
 import asyncio
+
 from redis.exceptions import LockError
-from src.core.redis_client import RedisClient
+
 from src.config import redis_settings
+from src.core.redis_client import RedisClient
 from src.utils.logger import logger
 
 

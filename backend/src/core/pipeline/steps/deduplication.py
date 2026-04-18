@@ -1,6 +1,7 @@
-from src.core.pipeline.orchestrator import PipelineStep, PipelineContext
-from src.utils.logger import logger
 import difflib
+
+from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
+from src.utils.logger import logger
 
 
 class DeduplicationStep(PipelineStep):

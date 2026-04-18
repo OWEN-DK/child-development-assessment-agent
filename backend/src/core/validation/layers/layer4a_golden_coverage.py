@@ -4,13 +4,14 @@
 """
 
 import logging
-from typing import Any
 from collections import defaultdict
+from typing import Any
 
 from sqlalchemy import select
-from src.models.rag_eval.test_set_case import RagEvalTestSetCase
-from src.models.rag_eval.test_case import RagEvalTestCase
+
 from src.models.document import SourceDocument
+from src.models.rag_eval.test_case import RagEvalTestCase
+from src.models.rag_eval.test_set_case import RagEvalTestSetCase
 
 logger = logging.getLogger(__name__)
 

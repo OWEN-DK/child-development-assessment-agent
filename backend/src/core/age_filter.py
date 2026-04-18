@@ -4,8 +4,9 @@
 
 from enum import Enum
 from typing import Tuple
-from pydantic import BaseModel
+
 from src.config import settings
+from src.schemas import AgeFilterConfig
 
 
 class AgeFilterMode(str, Enum):
@@ -23,9 +24,6 @@ class DevelopmentStage(str, Enum):
     PRESCHOOL = "preschool"  # 学龄前 (3-6 岁)
     SCHOOL_AGE = "school_age"  # 学龄期 (6-12 岁)
 
-
-class AgeFilterConfig(BaseModel):
-    """年龄过滤配置"""
 
     tolerance: int  # 年龄容忍范围（岁）
     strictness: float  # 严格程度 (0-1)
@@ -133,11 +131,9 @@ class AgeFilter:
         Returns:
             MetadataFilters 对象
         """
-        from llama_index.core.vector_stores import (
-            MetadataFilter,
-            MetadataFilters,
-            FilterOperator,
-        )
+        from llama_index.core.vector_stores import (FilterOperator,
+                                                    MetadataFilter,
+                                                    MetadataFilters)
 
         if mode == AgeFilterMode.STRICT:
             tolerance = 1
@@ -216,11 +212,9 @@ class DynamicAgeFilter:
         min_age = max(0, age - config.tolerance)
         max_age = age + config.tolerance
 
-        from llama_index.core.vector_stores import (
-            MetadataFilter,
-            MetadataFilters,
-            FilterOperator,
-        )
+        from llama_index.core.vector_stores import (FilterOperator,
+                                                    MetadataFilter,
+                                                    MetadataFilters)
 
         filters = MetadataFilters(
             filters=[

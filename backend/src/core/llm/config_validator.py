@@ -1,6 +1,7 @@
 """配置校验层 - 复用 Pydantic 模型校验"""
 
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
+
 from src.config.modules.models.llm import LLMSceneConfig
 from src.utils.logger import logger
 

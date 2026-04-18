@@ -1,8 +1,10 @@
-from typing import Optional, List
-from sqlalchemy import select, desc
+from typing import List, Optional
+
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.models.prompt import PromptABTest, PromptVersion
 from src.repository.base import BaseRepository
-from src.models.prompt import PromptVersion, PromptABTest
 
 
 class PromptVersionRepository(BaseRepository[PromptVersion]):

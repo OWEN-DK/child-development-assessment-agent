@@ -25,5 +25,24 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'warn',
     'react-hooks/rules-of-hooks': 'error',
     'react-hooks/exhaustive-deps': 'warn',
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: ['**/features/**'],
+            message: '禁止跨 feature 导入，请使用 shared 层或 entities 层',
+          },
+          {
+            group: ['**/pages/**'],
+            message: '禁止从 pages 导入，pages 层只能由路由使用',
+          },
+          {
+            group: ['**/widgets/**'],
+            message: '禁止从 widgets 导入，除非当前是 pages 层',
+          },
+        ],
+      },
+    ],
   },
 };

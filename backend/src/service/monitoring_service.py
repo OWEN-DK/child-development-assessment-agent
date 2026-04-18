@@ -1,22 +1,19 @@
 """RAG 监控服务 - 采集和上报 RAG 系统运行指标"""
 
-import time
 import threading
-from typing import Dict, List, Optional
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import aliased
 
-from src.core.database import db_session_factory
-from src.models.monitor import LLMCallLog, LLMCallStatus, ABTestMetrics
-from src.core.prometheus_metrics import (
-    LLM_CALLS_TOTAL,
-    LLM_CALL_DURATION,
-    LLM_TOKENS_TOTAL,
-)
 from src.config import settings
+from src.core.database import db_session_factory
+from src.core.prometheus_metrics import (LLM_CALL_DURATION, LLM_CALLS_TOTAL,
+                                         LLM_TOKENS_TOTAL)
+from src.models.monitor import ABTestMetrics, LLMCallLog, LLMCallStatus
 from src.utils.logger import logger
 
 
@@ -55,7 +52,8 @@ class MonitoringService:
     def _get_repos(self):
         """懒加载Repository实例"""
         if self._llm_log_repo is None:
-            from src.repository import LLMCallLogRepository, ABTestMetricRepository
+            from src.repository import (ABTestMetricRepository,
+                                        LLMCallLogRepository)
 
             self._llm_log_repo = LLMCallLogRepository(self.db_session_factory)
             self._ab_metric_repo = ABTestMetricRepository(self.db_session_factory)

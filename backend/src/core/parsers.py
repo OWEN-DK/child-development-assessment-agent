@@ -1,19 +1,21 @@
-import fitz  # PyMuPDF
-import ebooklib
-from ebooklib import epub
-from bs4 import BeautifulSoup
-from typing import List, Optional, Tuple, Dict, Any
 import os
 import re
-import warnings
 import tempfile
-from http import HTTPStatus
-import dashscope
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from http import HTTPStatus
+from typing import Any, Dict, List, Optional, Tuple
+
+import dashscope
+import ebooklib
+import fitz  # PyMuPDF
+from bs4 import BeautifulSoup
+from ebooklib import epub
 from llama_index.core.schema import Document
+
 from src.config import settings
-from src.utils.logger import logger
 from src.config.modules.models.llm import LLMSceneConfig
+from src.utils.logger import logger
 
 
 class PDFParseError(Exception):

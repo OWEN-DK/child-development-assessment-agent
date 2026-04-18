@@ -1,9 +1,12 @@
-from sqlalchemy import String, Integer, DateTime, DECIMAL, Enum, func, Index, Text, JSON
-from sqlalchemy.orm import Mapped, mapped_column
-from src.core.database import Base
 from datetime import datetime
-from enum import Enum as PyEnum
 from decimal import Decimal
+from enum import Enum as PyEnum
+
+from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Index, Integer, String,
+                        Text, func)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from src.core.database import Base
 
 
 class LLMCallStatus(PyEnum):

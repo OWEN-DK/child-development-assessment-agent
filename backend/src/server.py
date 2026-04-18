@@ -1,29 +1,31 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from src.config import settings, validate_required_env_vars
-from src.controller import (
-    task_controller,
-    rag_controller,
-    rag_test_controller,
-    config_controller,
-    monitoring_controller,
-    prompt_controller,
-    tuning_controller,
-    trend_controller,
-    export_controller,
-    rollback_controller,
-)
-from fastapi.middleware.cors import CORSMiddleware
-from src.utils.logger import logger
-from pathlib import Path
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from prometheus_client import make_asgi_app
+
+from src.config import settings, validate_required_env_vars
+from src.controller import (config_controller, export_controller,
+                            monitoring_controller, prompt_controller,
+                            rag_controller, rag_test_controller,
+                            rollback_controller, task_controller,
+                            trend_controller, tuning_controller)
+from src.core.config.cache import ConfigCache
 from src.core.llm.log_collector import LLMLogCollector
+from src.core.redis_client import RedisClient
 from src.core.scheduler import start_scheduler, stop_scheduler
 from src.core.tracing.writer import get_trace_writer
-from src.core.config.cache import ConfigCache
-from src.core.redis_client import RedisClient
-from prometheus_client import make_asgi_app
-import os
+from src.utils.exceptions import ResourceNotFoundException
+from src.middleware.exception_handler import (app_exception_handler,
+                                               global_exception_handler,
+                                               validation_exception_handler)
+from src.middleware.response_wrapper import ResponseWrapperMiddleware
+from src.utils.exceptions import AppException
+from fastapi.exceptions import RequestValidationError
+from src.utils.logger import logger
 
 
 @asynccontextmanager
@@ -119,6 +121,14 @@ def create_app() -> FastAPI:
     else:
         app.state.env_vars_missing = []
 
+    # 注册响应包装中间件
+    app.add_middleware(ResponseWrapperMiddleware)
+
+    # 注册异常处理器(按优先级从高到低)
+    app.add_exception_handler(AppException, app_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, global_exception_handler)
+
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )
@@ -146,13 +156,9 @@ def create_app() -> FastAPI:
     app.include_router(export_controller.router)
     app.include_router(rollback_controller.router)
 
-    from src.core.tuning import (
-        TuningSuggestionEngine,
-        RuleEngine,
-        HistoryAnalyzer,
-        LLMDiagnoser,
-        ConflictDetector,
-    )
+    from src.core.tuning import (ConflictDetector, HistoryAnalyzer,
+                                 LLMDiagnoser, RuleEngine,
+                                 TuningSuggestionEngine)
 
     tuning_engine = TuningSuggestionEngine(
         rule_engine=RuleEngine(),
@@ -174,12 +180,12 @@ def create_app() -> FastAPI:
     async def spa_fallback(full_path: str):
         """SPA回退路由：将所有非API路径的请求返回index.html，由前端React Router处理"""
         if not spa_enabled:
-            raise HTTPException(status_code=404, detail="Not Found")
+            raise ResourceNotFoundException(message="页面不存在")
 
         if full_path.startswith(
             ("api/", "docs", "openapi.json", "metrics", "rag/", "health")
         ):
-            raise HTTPException(status_code=404, detail="Not Found")
+            raise ResourceNotFoundException(message="页面不存在")
 
         file_path = os.path.join(frontend_dist_dir, full_path)
         if os.path.isfile(file_path):
@@ -189,7 +195,7 @@ def create_app() -> FastAPI:
         if os.path.isfile(index_path):
             return FileResponse(index_path)
 
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise ResourceNotFoundException(message="页面不存在")
 
     return app
 

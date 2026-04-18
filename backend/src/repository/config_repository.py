@@ -1,8 +1,10 @@
-from typing import Optional, List
-from sqlalchemy import select, desc, or_
+from typing import List, Optional
+
+from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.models.config import ConfigAuditLog, ConfigVersion
 from src.repository.base import BaseRepository
-from src.models.config import ConfigVersion, ConfigAuditLog
 
 
 class ConfigVersionRepository(BaseRepository[ConfigVersion]):

@@ -4,24 +4,20 @@
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 from src.config import settings
 from src.core.database import db_session_factory
-from src.repository.test_case_repository import (
-    TestRunRepository,
-    TestRunResultRepository,
-)
-from src.core.rag.metrics_calculator import (
-    calculate_mrr,
-    calculate_ndcg,
-    calculate_precision,
-    calculate_recall,
-)
-from src.utils.logger import logger
+from src.core.rag.metrics_calculator import (calculate_mrr, calculate_ndcg,
+                                             calculate_precision,
+                                             calculate_recall)
 from src.core.redis_client import RedisClient
-from src.models.test_case import TestRunStatus, ReportExportFormat
+from src.repository.test_case_repository import (TestRunRepository,
+                                                 TestRunResultRepository)
+from src.schemas import ReportExportFormat, TestRunStatus
+from src.utils.logger import logger
 
 
 class RagReportService:
@@ -388,7 +384,7 @@ class RagReportService:
 
         elif format == ReportExportFormat.PDF:
             try:
-                from weasyprint import HTML, CSS
+                from weasyprint import CSS, HTML
 
                 md_content = await self.export_report(
                     run_id, ReportExportFormat.MARKDOWN
@@ -457,7 +453,7 @@ class RagReportService:
             from sqlalchemy import select
 
             async with db_session_factory() as session:
-                from src.models.test_case import TestRun
+                from src.schemas import TestRun
 
                 stmt = select(TestRun).where(
                     TestRun.status == TestRunStatus.COMPLETED,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useConfigStore } from '../store/configStore';
+import { useConfig } from '../features/config/hooks/useConfig';
 import { DynamicConfigForm } from '../components/config/DynamicConfigForm';
 import { WizardMode } from '../components/config/WizardMode';
 import { ConfigVersionSelector } from '../components/config/ConfigVersionSelector';
@@ -23,7 +23,7 @@ export const SystemConfigPage: React.FC = () => {
     resetToFactory,
     modePreference,
     switchMode,
-  } = useConfigStore();
+  } = useConfig();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
