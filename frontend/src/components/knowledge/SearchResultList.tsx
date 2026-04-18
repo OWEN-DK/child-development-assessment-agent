@@ -2,7 +2,7 @@ import React from 'react';
 import { List, Button, Space, Tag, Typography, Pagination, Empty, Tooltip } from 'antd';
 import { EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { SearchResultItem } from '../../api/knowledge/types';
-import { highlightKeywords } from '../../utils/highlight';
+import { highlightKeywords } from '@shared/lib/highlight';
 import styles from './SearchResultList.module.scss';
 
 const getAgeFitScoreColor = (score: number): string => {

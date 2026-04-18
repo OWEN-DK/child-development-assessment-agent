@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Typography, List, Button, Space, Tag, Input, Descriptions, Modal, App } from 'antd';
+import { Card, Typography, List, Button, Space, Tag, Input, Descriptions, Modal } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { getDocumentChunks, getChunkDetail } from '../api/documents';
 import type { DocumentChunk, ChunkDetail } from '../api/documents/types';
+import { extractApiError, notification } from '@shared/lib/notification';
 import styles from './BookChunksPage.module.scss';
 
 const { Title, Text, Paragraph } = Typography;
@@ -12,7 +13,6 @@ const { Search } = Input;
 const BookChunksPage = () => {
   const { fileHash, fileName } = useParams<{ fileHash: string; fileName: string }>();
   const navigate = useNavigate();
-  const { message } = App.useApp();
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
   const [filteredChunks, setFilteredChunks] = useState<DocumentChunk[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,7 +57,8 @@ const BookChunksPage = () => {
       setCurrentPage(res.page);
       setPageSize(res.page_size);
     } catch (e: any) {
-      message.error(`加载分块失败：${e.response?.data?.detail || e.message}`);
+      const apiError = extractApiError(e);
+      notification.error(`加载分块失败：${apiError.message}`);
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,8 @@ const BookChunksPage = () => {
       setSelectedChunk(res.chunk);
       setDetailModalVisible(true);
     } catch (e: any) {
-      message.error(`加载分块详情失败: ${e.response?.data?.detail || e.message}`);
+      const apiError = extractApiError(e);
+      notification.error(`加载分块详情失败: ${apiError.message}`);
     } finally {
       setDetailLoading(false);
     }

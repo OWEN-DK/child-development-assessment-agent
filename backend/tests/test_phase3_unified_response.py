@@ -222,7 +222,7 @@ class TestExceptions:
 
     def test_task_cancelled_exception(self):
         exc = TaskCancelledException()
-        assert exc.status_code == 400
+        assert exc.status_code == 200
         assert exc.code == 10010
         assert exc.error_code == "TASK_CANCELLED"
 

@@ -2,8 +2,8 @@ import React from 'react';
 import { Modal, Descriptions, Divider, Typography, Space, Tag, Button, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import type { SearchResultItem } from '../../api/knowledge/types';
-import { highlightKeywords } from '../../utils/highlight';
-import { formatPageLabel } from '../../utils/formatters';
+import { highlightKeywords } from '@shared/lib/highlight';
+import { formatPageLabel } from '@shared/lib/formatters';
 
 const getAgeFitScoreColor = (score: number): string => {
   if (score >= 0.8) return '#52c41a';

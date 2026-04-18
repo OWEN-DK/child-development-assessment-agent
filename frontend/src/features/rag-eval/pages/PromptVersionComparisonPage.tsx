@@ -11,7 +11,6 @@ import {
   Space,
   Typography,
   Spin,
-  message,
   Table,
   Tag,
   Row,
@@ -19,6 +18,7 @@ import {
   Divider,
   Alert,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { ArrowLeftOutlined, DiffOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Input } from 'antd';
@@ -56,7 +56,7 @@ const PromptVersionComparisonPage: React.FC = () => {
         setVersion2(data.versions[1].version_label);
       }
     } catch (error) {
-      message.error('获取提示词详情失败');
+      notification.error('获取提示词详情失败');
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ const PromptVersionComparisonPage: React.FC = () => {
       const data = await comparePromptVersions(id, version1, version2);
       setComparison(data);
     } catch (error) {
-      message.error('对比失败');
+      notification.error('对比失败');
     } finally {
       setComparing(false);
     }

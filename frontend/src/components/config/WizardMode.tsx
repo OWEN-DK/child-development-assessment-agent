@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Steps, Button, Space, Result, message } from 'antd';
+import { Steps, Button, Space, Result } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { StepContent } from './StepContent';
 import { useConfig } from '../../features/config/hooks/useConfig';
 
@@ -54,9 +55,9 @@ export const WizardMode: React.FC = () => {
     try {
       await saveConfig('向导模式配置完成');
       setCompleted(true);
-      message.success('配置已保存');
+      notification.success('配置已保存');
     } catch (error) {
-      message.error('保存失败');
+      notification.error('保存失败');
     }
   };
   

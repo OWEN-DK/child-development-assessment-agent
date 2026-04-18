@@ -6,7 +6,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from src.core.prompt.manager import PromptManager
+from src.core.prompt_impl.facade import PromptManager
 
 
 class TestPromptRendering:
@@ -148,10 +148,10 @@ class TestPromptManagerGetPrompt:
         mock_version = MagicMock()
         mock_version.content = "你好 {name}，你的年龄是 {age} 岁"
 
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(return_value=mock_version)
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             result = await prompt_manager.get_prompt(
                 "test_prompt", variables={"name": "小明", "age": 5}
@@ -166,10 +166,10 @@ class TestPromptManagerGetPrompt:
         mock_version = MagicMock()
         mock_version.content = "这是一个固定提示词"
 
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(return_value=mock_version)
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             result = await prompt_manager.get_prompt("test_prompt")
 
@@ -178,10 +178,10 @@ class TestPromptManagerGetPrompt:
     @pytest.mark.asyncio
     async def test_get_prompt_fallback(self, prompt_manager):
         """测试提示词不存在时使用 fallback"""
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(return_value=None)
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             result = await prompt_manager.get_prompt("nonexistent_prompt")
 

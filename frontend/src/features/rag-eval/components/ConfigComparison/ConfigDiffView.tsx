@@ -3,7 +3,8 @@
  */
 
 import { useState } from 'react';
-import { Row, Col, InputNumber, Typography, Tag, Space, Button, message } from 'antd';
+import { Row, Col, InputNumber, Typography, Tag, Space, Button } from 'antd';
+import { notification } from '@shared/lib/notification';
 import type { ConfigComparison } from './types';
 
 const { Text } = Typography;
@@ -38,7 +39,7 @@ export default function ConfigDiffView({ comparison, onAdoptSuggested, onAdoptCu
 
   const handleAdoptCustom = () => {
     if (customValue === null) {
-      message.warning('请输入自定义值');
+      notification.warning('请输入自定义值');
       return;
     }
     onAdoptCustom(customValue);

@@ -1,17 +1,17 @@
 import React, { useCallback } from 'react';
-import { Card, Typography, Space, App, Button } from 'antd';
+import { Card, Typography, Space, Button } from 'antd';
 import { CloudSyncOutlined } from '@ant-design/icons';
 import { useDocumentManagement } from '../hooks/useDocumentManagement';
 import { DocumentUploader } from '../../../components/documents/DocumentUploader';
 import { DocumentList } from '../../../components/documents/DocumentList';
 import { TaskProgressList } from '../../../components/documents/TaskProgressList';
 import type { UploadTaskStatus } from '../../../api/documents/types';
+import { extractApiError, notification } from '@shared/lib/notification';
 import styles from './KnowledgeBasePage.module.scss';
 
 const { Title, Text } = Typography;
 
 const KnowledgeBasePage: React.FC = () => {
-  const { message } = App.useApp();
   const {
     documents,
     loading,
@@ -35,11 +35,12 @@ const KnowledgeBasePage: React.FC = () => {
   const handleCancelTask = useCallback(async (taskId: string) => {
     try {
       await handleCancel(taskId);
-      message.info('已请求取消任务...');
+      notification.info('已请求取消任务...');
     } catch (e: any) {
-      message.error(`取消失败: ${e.response?.data?.detail || e.message}`);
+      const apiError = extractApiError(e);
+      notification.error(`取消失败: ${apiError.message}`);
     }
-  }, [handleCancel, message]);
+  }, [handleCancel]);
 
   const processingFilenames = new Set(
     processingTasks

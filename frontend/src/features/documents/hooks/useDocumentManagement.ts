@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { App } from 'antd';
+import { notification } from '@shared/lib/notification';
 import {
   getDocuments,
   getRagStatus,
@@ -21,7 +21,6 @@ interface UseDocumentManagementReturn {
 }
 
 export const useDocumentManagement = (): UseDocumentManagementReturn => {
-  const { message } = App.useApp();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [ragStatus, setRagStatus] = useState<RagStatus | null>(null);
@@ -116,15 +115,15 @@ export const useDocumentManagement = (): UseDocumentManagementReturn => {
               getUploadTasks().then(res => {
                 const completedTask = res.tasks.find(t => t.task_id === oldTask.task_id);
                 if (completedTask && completedTask.status === 'success') {
-                  message.success(`${completedTask.filename} 上传并索引成功`);
+                  notification.success(`${completedTask.filename} 上传并索引成功`);
                   loadDocuments();
                   loadRagStatus();
                 } else if (completedTask && completedTask.status === 'failed') {
-                  message.error(`${completedTask.filename} 处理失败：${completedTask.error || '未知错误'}`);
+                  notification.error(`${completedTask.filename} 处理失败：${completedTask.error || '未知错误'}`);
                 }
               });
             } else if (!stillActive && oldTask.status === 'cancelled') {
-              message.info(`${oldTask.filename} 已取消`);
+              notification.info(`${oldTask.filename} 已取消`);
               loadDocuments();
             }
           });

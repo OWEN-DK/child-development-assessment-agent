@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import json
 from src.core.ml.qwen_scorer import QwenScorer
-from src.model.schemas import (
+from src.schemas.assessment import (
     ChildProfile,
     ProposedPlan,
     Activity,

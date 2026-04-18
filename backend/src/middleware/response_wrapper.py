@@ -28,21 +28,26 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
 
+        # 跳过 SSE 流式响应
         if isinstance(response, StreamingResponse):
             content_type = response.headers.get("content-type", "")
             if "text/event-stream" in content_type:
                 return response
 
+        # 跳过 204/304
         if response.status_code in (204, 304):
             return response
 
+        # 跳过错误响应
         if response.status_code >= 400:
             return response
 
+        # 检查 Content-Type
         content_type = response.headers.get("content-type", "")
         if "application/json" not in content_type and "json" not in content_type:
             return response
 
+        # 读取响应体
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
@@ -50,19 +55,20 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         try:
             original_data = json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            return JSONResponse(
+            return Response(
+                content=body,
                 status_code=response.status_code,
-                content=body.decode("utf-8", errors="replace"),
                 headers=dict(response.headers),
             )
 
+        # 跳过已包装的响应
         if isinstance(original_data, dict) and "code" in original_data:
             return JSONResponse(
                 status_code=response.status_code,
                 content=original_data,
-                headers=dict(response.headers),
             )
 
+        # 包装响应
         wrapped = {
             "code": 0,
             "message": "success",
@@ -71,5 +77,4 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         return JSONResponse(
             status_code=response.status_code,
             content=wrapped,
-            headers=dict(response.headers),
         )

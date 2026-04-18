@@ -13,11 +13,11 @@ import {
   Typography,
   Tag,
   Spin,
-  message,
   Descriptions,
   Alert,
   Collapse,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { ArrowLeftOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -62,7 +62,7 @@ const PromptEditPage: React.FC = () => {
         change_summary: '',
       });
     } catch (error) {
-      message.error('获取提示词详情失败');
+      notification.error('获取提示词详情失败');
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ const PromptEditPage: React.FC = () => {
       const impactData = await analyzePromptImpact(id, content);
       setImpact(impactData);
     } catch (error) {
-      message.error('分析影响失败');
+      notification.error('分析影响失败');
     } finally {
       setAnalyzing(false);
     }
@@ -94,10 +94,10 @@ const PromptEditPage: React.FC = () => {
         change_summary: values.change_summary,
         created_by: 'user',
       });
-      message.success(`提示词已更新到 ${result.version}`);
+      notification.success(`提示词已更新到 ${result.version}`);
       fetchDetail(id);
     } catch (error) {
-      message.error('保存失败');
+      notification.error('保存失败');
     } finally {
       setSaving(false);
     }

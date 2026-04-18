@@ -1,14 +1,14 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.core.nodes.assessment import AssessmentNode
-from src.model.schemas import (
+from src.schemas.assessment import (
     AgentState,
     ChildProfile,
     CondensedContext,
     ProposedPlan,
     Activity,
 )
-from src.model.schemas import ChildState
+from src.schemas.assessment import ChildState
 
 
 @pytest.fixture

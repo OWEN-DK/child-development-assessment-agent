@@ -3,7 +3,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Button, List, message, Typography, Spin, Empty } from 'antd';
+import { Button, List, Typography, Spin, Empty } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { UndoOutlined } from '@ant-design/icons';
 import IgnoredSuggestionItem from './IgnoredSuggestionItem';
 import {
@@ -35,7 +36,7 @@ export default function IgnoredSuggestionsList({
       const response = await getIgnoredSuggestions(testSetId, reportId);
       setSuggestions(response.items);
     } catch (error) {
-      message.error('获取已忽略建议列表失败');
+      notification.error('获取已忽略建议列表失败');
     } finally {
       setLoading(false);
     }
@@ -48,31 +49,31 @@ export default function IgnoredSuggestionsList({
   const handleRestore = async (id: string) => {
     try {
       const response = await restoreIgnoredSuggestion(id);
-      message.success(response.message);
+      notification.success(response.message);
       setSuggestions((prev) => prev.filter((s) => s.id !== id));
       onRestore?.(id);
     } catch (error) {
-      message.error('恢复失败');
+      notification.error('恢复失败');
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteIgnoredSuggestion(id);
-      message.success('已删除');
+      notification.success('已删除');
       setSuggestions((prev) => prev.filter((s) => s.id !== id));
     } catch (error) {
-      message.error('删除失败');
+      notification.error('删除失败');
     }
   };
 
   const handleRestoreAll = async () => {
     try {
       await Promise.all(suggestions.map((s) => restoreIgnoredSuggestion(s.id)));
-      message.success('已恢复全部建议');
+      notification.success('已恢复全部建议');
       setSuggestions([]);
     } catch (error) {
-      message.error('批量恢复失败');
+      notification.error('批量恢复失败');
     }
   };
 

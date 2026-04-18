@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Select, Space, message } from 'antd';
+import { Card, Select, Space } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { getTrendData } from '@/api/rag-eval/trend';
 import type { TrendDataPoint } from './types';
 import ChartCanvas from './ChartCanvas';
@@ -49,7 +50,7 @@ const TrendChart: React.FC<TrendChartProps> = ({
       const response = await getTrendData(testSetId, selectedMetric, selectedDays);
       setData(response.data);
     } catch {
-      message.error('获取趋势数据失败');
+      notification.error('获取趋势数据失败');
     } finally {
       setLoading(false);
     }

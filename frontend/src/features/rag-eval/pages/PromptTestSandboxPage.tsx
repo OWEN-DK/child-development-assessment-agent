@@ -12,7 +12,6 @@ import {
   Space,
   Typography,
   Spin,
-  message,
   Select,
   Tag,
   Descriptions,
@@ -20,6 +19,7 @@ import {
   Row,
   Col,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { ArrowLeftOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPromptDetail, testPrompt, PromptDetail, PromptTestResult } from '@/api/rag-eval/prompts';
@@ -53,7 +53,7 @@ const PromptTestSandboxPage: React.FC = () => {
       });
       form.setFieldsValue({ variables });
     } catch (error) {
-      message.error('获取提示词详情失败');
+      notification.error('获取提示词详情失败');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ const PromptTestSandboxPage: React.FC = () => {
       );
       setTestResult(result);
     } catch (error) {
-      message.error('测试失败');
+      notification.error('测试失败');
     } finally {
       setTesting(false);
     }

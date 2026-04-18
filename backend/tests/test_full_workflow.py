@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock
-from src.model.schemas import (
+from src.schemas.assessment import (
     UserInput,
     ChildProfile,
     ProposedPlan,

@@ -2,7 +2,7 @@ import React from 'react';
 import { List, Progress, Button, Space, Typography } from 'antd';
 import { LoadingOutlined, StopOutlined } from '@ant-design/icons';
 import type { UploadTaskStatus } from '../../api/documents/types';
-import { formatTaskStatus } from '../../utils/formatters';
+import { formatTaskStatus } from '@shared/lib/formatters';
 import { TASK_STATUS } from '@shared/lib/constants';
 
 interface TaskProgressListProps {

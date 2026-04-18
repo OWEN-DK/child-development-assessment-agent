@@ -572,7 +572,7 @@ async def create_test_set(request: CreateTestSetRequest):
 async def list_test_sets():
     """列出所有测试集"""
     result = await rag_test_manager.list_test_sets()
-    return APIResponse.success(data=result)
+    return APIResponse.success(data=[ts.model_dump() for ts in result])
 
 
 @router.get("/sets/{set_id}")

@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Select, Space, Spin, Empty, message } from 'antd';
+import { Card, Select, Space, Spin, Empty } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { compareConfigVersions } from '@/api/rag-eval/config';
 import type { ConfigComparisonData } from './types';
 import ComparisonTable from './ComparisonTable';
@@ -41,7 +42,7 @@ const ConfigVersionComparison: React.FC<ConfigVersionComparisonInnerProps> = ({
       const response = await compareConfigVersions(selectedFrom, selectedTo);
       setData(response.data);
     } catch {
-      message.error('获取配置对比数据失败');
+      notification.error('获取配置对比数据失败');
     } finally {
       setLoading(false);
     }

@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Modal, Spin, Typography, Divider, message, Button } from 'antd';
+import { Modal, Spin, Typography, Divider, Button } from 'antd';
+import { notification } from '@shared/lib/notification';
 import PromptDiffView from './PromptDiffView';
 import ChangeSummary from './ChangeSummary';
 import ImpactAnalysis from './ImpactAnalysis';
@@ -44,7 +45,7 @@ export default function PromptComparisonModal({
       const data = await getPromptComparison(promptKey, currentVersion, targetVersion);
       setComparison(data);
     } catch {
-      message.error('加载提示词对比数据失败');
+      notification.error('加载提示词对比数据失败');
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export default function PromptComparisonModal({
   const handleAdopt = () => {
     if (!comparison) return;
     onAdopt?.(comparison.prompt_key, comparison.suggested_version.version);
-    message.success('已采纳建议版本');
+    notification.success('已采纳建议版本');
     onClose();
   };
 

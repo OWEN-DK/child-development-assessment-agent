@@ -101,8 +101,7 @@ async def test_full_rag_test_workflow():
     run_id = await rag_test_manager.create_test_run(
         name="全链路测试运行",
         description="全链路测试",
-        test_set_ids=[test_set_id],
-        report_export_format=ReportExportFormat.MARKDOWN,
+        test_set_ids=[test_set_id]
     )
 
     print(f"✅ 步骤4: 测试运行创建成功: {run_id}")

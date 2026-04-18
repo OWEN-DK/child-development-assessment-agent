@@ -6,7 +6,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
-from fastapi import HTTPException
+from src.utils.exceptions import AppException
 
 
 class TestConfigValidateEndpoint:
@@ -152,11 +152,11 @@ class TestConfigExportEndpoint:
         with patch("src.controller.config_controller.config_manager") as mock_manager:
             mock_manager.get_version = AsyncMock(return_value=None)
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AppException) as exc_info:
                 await export_config(version_id="v_not_exist", current_user=mock_user)
 
-            assert exc_info.value.status_code == 404
-            assert "配置版本不存在" in exc_info.value.detail
+            assert exc_info.value.status_code == 500
+            assert "配置版本不存在" in exc_info.value.message
 
 
 class TestConfigImportEndpoint:
@@ -229,8 +229,8 @@ class TestConfigImportEndpoint:
             )
             mock_validator_class.return_value = mock_validator
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AppException) as exc_info:
                 await import_config(request, mock_user)
 
-            assert exc_info.value.status_code == 400
-            assert exc_info.value.detail["message"] == "配置校验失败"
+            assert exc_info.value.status_code == 500
+            assert "配置校验失败" in exc_info.value.message

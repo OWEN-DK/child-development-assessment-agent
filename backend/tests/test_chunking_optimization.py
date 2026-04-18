@@ -3,7 +3,7 @@
 验证配置参数调整、小 chunk 合并机制、语言检测功能
 """
 
-from src.core.metadata_processor import MetadataProcessor, detect_language
+from src.core.metadata_processor import MetadataProcessor
 from llama_index.core.schema import Document
 
 

@@ -6,7 +6,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from src.core.prompt.manager import PromptManager
+from src.core.prompt_impl.facade import PromptManager
 
 
 class TestPromptFallback:
@@ -17,19 +17,19 @@ class TestPromptFallback:
         """创建 PromptManager 实例"""
         manager = PromptManager()
         # Mock cache
-        manager.cache = AsyncMock()
-        manager.cache.get = AsyncMock(return_value=None)
-        manager.cache.set_with_jitter = AsyncMock()
+        manager.prompt_storage.cache = AsyncMock()
+        manager.prompt_storage.cache.get = AsyncMock(return_value=None)
+        manager.prompt_storage.cache.set_with_jitter = AsyncMock()
         return manager
 
     def test_get_fallback_prompt_known_key(self, prompt_manager):
         """测试已知 key 的 fallback 提示词"""
         # 测试 assessment_system
-        result = prompt_manager._get_fallback_prompt("assessment_system")
+        result = prompt_manager.prompt_storage._get_fallback_prompt("assessment_system")
         assert "儿童发展评估专家" in result
 
         # 测试 reporting_system
-        result = prompt_manager._get_fallback_prompt("reporting_system")
+        result = prompt_manager.prompt_storage._get_fallback_prompt("reporting_system")
         assert "资深儿童发展专家" in result or "感觉统合" in result
 
         # 测试 validation
@@ -38,7 +38,7 @@ class TestPromptFallback:
 
     def test_get_fallback_prompt_unknown_key(self, prompt_manager):
         """测试未知 key 返回默认 fallback"""
-        result = prompt_manager._get_fallback_prompt("nonexistent_key")
+        result = prompt_manager.prompt_storage._get_fallback_prompt("nonexistent_key")
         assert result == "You are a helpful assistant."
 
     def test_get_fallback_prompt_all_keys(self, prompt_manager):
@@ -60,7 +60,7 @@ class TestPromptFallback:
         ]
 
         for key in known_keys:
-            result = prompt_manager._get_fallback_prompt(key)
+            result = prompt_manager.prompt_storage._get_fallback_prompt(key)
             # 不应该返回默认英文提示词
             assert result != "You are a helpful assistant.", (
                 f"Key '{key}' 没有配置 fallback"
@@ -70,12 +70,12 @@ class TestPromptFallback:
     async def test_fallback_when_database_unavailable(self, prompt_manager):
         """测试数据库不可用时降级到 fallback"""
         # Mock repository 抛出异常
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(
                 side_effect=Exception("Database connection failed")
             )
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             # 应该降级到 fallback
             result = await prompt_manager.get_prompt("assessment_system")
@@ -87,10 +87,10 @@ class TestPromptFallback:
     async def test_fallback_with_variables(self, prompt_manager):
         """测试 fallback 提示词也能渲染变量"""
         # Mock repository 返回 None（提示词不存在）
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(return_value=None)
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             # 使用 intensity_inference 的 fallback，它包含 {age} 和 {activity_name}
             result = await prompt_manager.get_prompt(
@@ -104,10 +104,10 @@ class TestPromptFallback:
     @pytest.mark.asyncio
     async def test_fallback_preserves_formatting(self, prompt_manager):
         """测试 fallback 提示词保留原始格式"""
-        with patch.object(prompt_manager, "_get_repos") as mock_repos:
+        with patch.object(prompt_manager.prompt_storage, "_get_repo") as mock_repos:
             mock_version_repo = AsyncMock()
             mock_version_repo.get_latest_version = AsyncMock(return_value=None)
-            mock_repos.return_value = (mock_version_repo, None)
+            mock_repos.return_value = mock_version_repo
 
             result = await prompt_manager.get_prompt("assessment_system")
 
@@ -135,7 +135,7 @@ class TestPromptFallback:
         ]
 
         for key in known_keys:
-            result = prompt_manager._get_fallback_prompt(key)
+            result = prompt_manager.prompt_storage._get_fallback_prompt(key)
             assert len(result) > 10, f"Key '{key}' 的 fallback 提示词过短"
 
     def test_fallback_prompts_in_chinese(self, prompt_manager):
@@ -149,7 +149,7 @@ class TestPromptFallback:
         ]
 
         for key in known_keys:
-            result = prompt_manager._get_fallback_prompt(key)
+            result = prompt_manager.prompt_storage._get_fallback_prompt(key)
             # 检查是否包含中文字符
             has_chinese = any("\u4e00" <= char <= "\u9fff" for char in result)
             assert has_chinese, f"Key '{key}' 的 fallback 提示词不包含中文"

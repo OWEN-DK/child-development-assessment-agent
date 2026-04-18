@@ -78,7 +78,11 @@
   - `utils/exceptions.py`：10 个异常类（AppException + 9 个子类）
   - `middleware/exception_handler.py`：全局异常处理器（新建）
   - `server.py`：注册异常处理器
-- 测试用例：26 个，全部通过
+- 测试用例：82 个，全部通过
+  - `test_phase3_unified_response.py`：26 个（APIResponse、PaginatedResponse、异常类基础测试）
+  - `test_exception_handlers.py`：8 个（全局异常处理器集成测试）
+  - `test_response_wrapper_middleware.py`：7 个（响应包装中间件测试）
+  - `test_error_codes.py`：41 个（错误码常量与异常类一致性测试）
 - 验证：server 启动正常，异常处理器已注册
 
 ---
@@ -187,6 +191,10 @@
   - `core/validation/orchestrator.py`：1 处 HTTPException → ServiceUnavailableException
 - 错误码覆盖：10000-16999，共 7000 个码位
 - 向后兼容代码：已全部删除（http_exception_handler 函数及注册）
+- 测试用例：56 个，全部通过
+  - `test_exception_handlers.py`：8 个（全局异常处理器集成测试）
+  - `test_response_wrapper_middleware.py`：7 个（响应包装中间件测试）
+  - `test_error_codes.py`：41 个（错误码常量与异常类一致性测试）
 
 ---
 

@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Modal, Spin, Typography, Divider, message } from 'antd';
+import { Modal, Spin, Typography, Divider } from 'antd';
+import { notification } from '@shared/lib/notification';
 import ConfigDiffView from './ConfigDiffView';
 import HistoryReference from './HistoryReference';
 import { getConfigComparison } from '@/api/rag-eval/tuning';
@@ -41,7 +42,7 @@ export default function ConfigComparisonModal({
       const data = await getConfigComparison(paramName, currentVersion);
       setComparison(data);
     } catch {
-      message.error('加载配置对比数据失败');
+      notification.error('加载配置对比数据失败');
     } finally {
       setLoading(false);
     }
@@ -50,14 +51,14 @@ export default function ConfigComparisonModal({
   const handleAdoptSuggested = () => {
     if (!comparison) return;
     onAdopt?.(comparison.param_name, comparison.suggested_value);
-    message.success('已采纳建议值');
+    notification.success('已采纳建议值');
     onClose();
   };
 
   const handleAdoptCustom = (value: number) => {
     if (!comparison) return;
     onAdopt?.(comparison.param_name, value);
-    message.success('已采纳自定义值');
+    notification.success('已采纳自定义值');
     onClose();
   };
 

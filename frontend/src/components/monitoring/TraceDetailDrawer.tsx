@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { tracingApi } from '@/api/tracing';
 import { SpanTreeView } from './SpanTreeView';
 import { SpanDetailPanel } from './SpanDetailPanel';
-import type { Span } from '@/types/tracing';
+import type { Span } from '@entities/tracing/types';
 
 interface TraceDetailDrawerProps {
   traceId: string | null;

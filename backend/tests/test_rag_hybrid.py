@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # Mock api key before importing modules that instantiate DashScope
 os.environ["DASHSCOPE_API_KEY"] = "test-key"
 
-from src.config.settings import settings
+from src.config import settings
 settings.dashscope_api_key = "test-key"
 
 from src.service.rag_service import RagService

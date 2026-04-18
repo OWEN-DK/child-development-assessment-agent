@@ -63,18 +63,18 @@ class TestConfigResetEndpoint:
             reset_to_factory,
             ConfigResetRequest,
         )
-        from fastapi import HTTPException
+        from src.utils.exceptions import AppException
 
         mock_user = MagicMock()
         mock_user.username = "testuser"
 
         request = ConfigResetRequest(confirm=False)
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AppException) as exc_info:
             await reset_to_factory(request, mock_user)
 
-        assert exc_info.value.status_code == 400
-        assert "需要二次确认" in exc_info.value.detail
+        assert exc_info.value.status_code == 500
+        assert "需要二次确认" in exc_info.value.message
 
     @pytest.mark.asyncio
     async def test_reset_to_factory_error_handling(self):
@@ -83,7 +83,7 @@ class TestConfigResetEndpoint:
             reset_to_factory,
             ConfigResetRequest,
         )
-        from fastapi import HTTPException
+        from src.utils.exceptions import AppException
 
         mock_user = MagicMock()
         mock_user.username = "testuser"
@@ -95,11 +95,11 @@ class TestConfigResetEndpoint:
                 side_effect=Exception("数据库连接失败")
             )
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AppException) as exc_info:
                 await reset_to_factory(request, mock_user)
 
             assert exc_info.value.status_code == 500
-            assert "恢复出厂设置失败" in exc_info.value.detail
+            assert "恢复出厂设置失败" in exc_info.value.message
 
 
 class TestConfigSaveEndpoint:

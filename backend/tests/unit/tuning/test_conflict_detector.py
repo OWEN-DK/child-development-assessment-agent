@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import MagicMock
-from src.model.tuning import TuningSuggestion
+from src.schemas.tuning import TuningSuggestion
 
 
 @pytest.mark.asyncio

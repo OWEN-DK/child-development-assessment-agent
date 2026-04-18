@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Input, Space, Typography } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { InputRef } from 'antd';
-import { useDebounceCallback } from '../../hooks/useDebounce';
+import { useDebounceCallback } from '@shared/hooks/useDebounce';
 import { DEBOUNCE_DELAY } from '@shared/lib/constants';
 
 const { Search } = Input;

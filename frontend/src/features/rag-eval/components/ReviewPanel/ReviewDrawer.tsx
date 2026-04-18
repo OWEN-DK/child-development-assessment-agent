@@ -2,7 +2,8 @@
  * 审查抽屉容器组件
  */
 
-import { Drawer, Button, Space, Typography, Divider, Empty, message } from 'antd';
+import { Drawer, Button, Space, Typography, Divider, Empty } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { useState, useMemo } from 'react';
 import ReviewItem from './ReviewItem';
 import ImpactPreview from './ImpactPreview';
@@ -88,10 +89,10 @@ export default function ReviewDrawer({
     setSaving(true);
     try {
       await onSaveVersion(adoptedSuggestions);
-      message.success('新版本已保存');
+      notification.success('新版本已保存');
       onClose();
     } catch {
-      message.error('保存失败');
+      notification.error('保存失败');
     } finally {
       setSaving(false);
     }

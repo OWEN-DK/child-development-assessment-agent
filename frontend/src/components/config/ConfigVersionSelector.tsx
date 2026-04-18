@@ -1,6 +1,7 @@
 import React from 'react';
 import { useConfig } from '../../features/config/hooks/useConfig';
-import { Button, Tooltip, Modal, message } from 'antd';
+import { Button, Tooltip, Modal } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { RollbackOutlined } from '@ant-design/icons';
 import styles from './ConfigVersionSelector.module.scss';
 
@@ -15,9 +16,9 @@ export const ConfigVersionSelector: React.FC = () => {
       onOk: async () => {
         try {
           await rollbackToVersion(versionId);
-          message.success('已回滚到指定版本');
+          notification.success('已回滚到指定版本');
         } catch (error) {
-          message.error('回滚失败');
+          notification.error('回滚失败');
         }
       },
     });

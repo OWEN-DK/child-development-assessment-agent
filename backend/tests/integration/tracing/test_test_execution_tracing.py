@@ -9,7 +9,7 @@ from src.core.tracing.context import (
     get_current_trace_id,
     trace_context,
 )
-from src.core.tracing.schemas import TraceMetadata
+from src.schemas.monitoring import TraceMetadata
 from src.core.tracing.writer import reset_trace_writer
 
 

@@ -1,7 +1,8 @@
 import React from 'react';
 import { ConfigFieldMetadata } from '../../api/config/types';
 import { useConfig } from '../../features/config/hooks/useConfig';
-import { Switch, InputNumber, Input, Tooltip, message, Button, Select, Collapse } from 'antd';
+import { Switch, InputNumber, Input, Tooltip, Button, Select, Collapse } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { QuestionCircleOutlined, WarningOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import styles from './DynamicConfigForm.module.scss';
 
@@ -725,7 +726,7 @@ function renderControl(
             const parsedValue = JSON.parse(e.target.value);
             onChange(field.key, parsedValue);
           } catch (err) {
-            message.error('JSON格式不正确，请检查');
+            notification.error('JSON格式不正确，请检查');
           }
         }}
         rows={6}
@@ -789,7 +790,7 @@ function renderControl(
             const parsedValue = JSON.parse(e.target.value);
             onChange(field.key, parsedValue);
           } catch (err) {
-            message.error('JSON格式不正确，请检查');
+            notification.error('JSON格式不正确，请检查');
           }
         }}
         rows={6}
@@ -844,7 +845,7 @@ function renderControl(
                 const parsedValue = JSON.parse(e.target.value);
                 onChange(field.key, parsedValue);
               } catch (err) {
-                message.error('JSON格式不正确，请检查');
+                notification.error('JSON格式不正确，请检查');
               }
             }}
             rows={4}

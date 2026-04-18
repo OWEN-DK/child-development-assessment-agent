@@ -18,8 +18,8 @@ import {
   Tabs,
   Empty,
   Spin,
-  message,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import {
   ArrowLeftOutlined,
   FilePdfOutlined,
@@ -63,15 +63,15 @@ export default function ReportPage() {
       if (eventType === 'export_ready') {
         try {
           await downloadExport(event.export_id);
-          message.success('PDF 下载已开始');
+          notification.success('PDF 下载已开始');
         } catch (err) {
-          message.error('下载导出文件失败');
+          notification.error('下载导出文件失败');
         } finally {
           setExporting(false);
           disconnectExportSse();
         }
       } else if (eventType === 'export_failed') {
-        message.error(`PDF 导出失败: ${event.error || '未知错误'}`);
+        notification.error(`PDF 导出失败: ${event.error || '未知错误'}`);
         setExporting(false);
         disconnectExportSse();
       }
@@ -102,7 +102,7 @@ export default function ReportPage() {
         }
       }
     } catch {
-      message.error('加载报告失败');
+      notification.error('加载报告失败');
     } finally {
       setLoading(false);
     }
@@ -115,9 +115,9 @@ export default function ReportPage() {
     try {
       connectExportSse();
       await createExportTask(id);
-      message.success('PDF 导出任务已提交，请稍后查看下载状态');
+      notification.success('PDF 导出任务已提交，请稍后查看下载状态');
     } catch {
-      message.error('创建 PDF 导出任务失败');
+      notification.error('创建 PDF 导出任务失败');
       setExporting(false);
       disconnectExportSse();
     }
@@ -129,7 +129,7 @@ export default function ReportPage() {
     try {
       await exportCasesToCSV(id, `rag_eval_results_${id.slice(0, 8)}`);
     } catch {
-      message.error('导出 CSV 失败');
+      notification.error('导出 CSV 失败');
     }
   };
 
@@ -139,7 +139,7 @@ export default function ReportPage() {
     try {
       await exportReportToJSON(id, `rag_eval_report_${id.slice(0, 8)}`);
     } catch {
-      message.error('导出 JSON 失败');
+      notification.error('导出 JSON 失败');
     }
   };
 
@@ -149,10 +149,10 @@ export default function ReportPage() {
     setRollbackLoading(true);
     try {
       await rollbackToVersion(run.config_version_id, reason);
-      message.success('配置回滚成功');
+      notification.success('配置回滚成功');
       setRollbackVisible(false);
     } catch {
-      message.error('配置回滚失败');
+      notification.error('配置回滚失败');
     } finally {
       setRollbackLoading(false);
     }

@@ -11,9 +11,10 @@ from src.constants.test_case import (TEST_CASE_DOMAINS,
                                      TEST_CASE_REQUIRED_FIELDS)
 from src.core.database import db_session_factory
 from src.models.test_case import (KnowledgeSnapshot, TestCase, TestCaseDraft,
-                                  TestRun, TestSet)
+                                  TestRun, TestSet as TestSetModel)
 from src.schemas import (DifficultyLevel, DraftStatus, GenerationParams,
                          SourceDocument, TestDomain, TestResult, TestRunStatus)
+from src.schemas.test_case import TestSet
 from src.service.rag_test.draft_service import DraftService, draft_service
 from src.service.rag_test.snapshot_service import (SnapshotService,
                                                    snapshot_service)
@@ -390,16 +391,59 @@ class RagTestFacade:
     async def create_test_set(
         self, name: str, description: str = "", source_type: str = "manual"
     ) -> TestSet:
-        return await self.test_set_service.create_test_set(name, description, source_type)
+        orm_set = await self.test_set_service.create_test_set(name, description, source_type)
+        return TestSet(
+            id=orm_set.id,
+            name=orm_set.name,
+            description=orm_set.description or "",
+            source_type=orm_set.source_type.value if hasattr(orm_set.source_type, 'value') else str(orm_set.source_type),
+            test_case_ids=[],
+            created_at=orm_set.created_at,
+            updated_at=orm_set.updated_at,
+        )
 
     async def list_test_sets(self) -> List[TestSet]:
-        return await self.test_set_service.list_test_sets()
+        orm_sets = await self.test_set_service.list_test_sets()
+        return [
+            TestSet(
+                id=ts.id,
+                name=ts.name,
+                description=ts.description or "",
+                source_type=ts.source_type.value if hasattr(ts.source_type, 'value') else str(ts.source_type),
+                test_case_ids=[],
+                created_at=ts.created_at,
+                updated_at=ts.updated_at,
+            )
+            for ts in orm_sets
+        ]
 
     async def get_test_set(self, test_set_id: str) -> Optional[TestSet]:
-        return await self.test_set_service.get_test_set(test_set_id)
+        orm_set = await self.test_set_service.get_test_set(test_set_id)
+        if not orm_set:
+            return None
+        return TestSet(
+            id=orm_set.id,
+            name=orm_set.name,
+            description=orm_set.description or "",
+            source_type=orm_set.source_type.value if hasattr(orm_set.source_type, 'value') else str(orm_set.source_type),
+            test_case_ids=getattr(orm_set, 'test_case_ids', []),
+            created_at=orm_set.created_at,
+            updated_at=orm_set.updated_at,
+        )
 
     async def update_test_set(self, test_set_id: str, updates: Dict) -> Optional[TestSet]:
-        return await self.test_set_service.update_test_set(test_set_id, updates)
+        orm_set = await self.test_set_service.update_test_set(test_set_id, updates)
+        if not orm_set:
+            return None
+        return TestSet(
+            id=orm_set.id,
+            name=orm_set.name,
+            description=orm_set.description or "",
+            source_type=orm_set.source_type.value if hasattr(orm_set.source_type, 'value') else str(orm_set.source_type),
+            test_case_ids=getattr(orm_set, 'test_case_ids', []),
+            created_at=orm_set.created_at,
+            updated_at=orm_set.updated_at,
+        )
 
     async def delete_test_set(self, test_set_id: str) -> bool:
         return await self.test_set_service.delete_test_set(test_set_id)
@@ -407,13 +451,35 @@ class RagTestFacade:
     async def add_test_cases_to_set(
         self, test_set_id: str, case_ids: List[str]
     ) -> Optional[TestSet]:
-        return await self.test_set_service.add_test_cases_to_set(test_set_id, case_ids)
+        orm_set = await self.test_set_service.add_test_cases_to_set(test_set_id, case_ids)
+        if not orm_set:
+            return None
+        return TestSet(
+            id=orm_set.id,
+            name=orm_set.name,
+            description=orm_set.description or "",
+            source_type=orm_set.source_type.value if hasattr(orm_set.source_type, 'value') else str(orm_set.source_type),
+            test_case_ids=getattr(orm_set, 'test_case_ids', []),
+            created_at=orm_set.created_at,
+            updated_at=orm_set.updated_at,
+        )
 
     async def remove_test_cases_from_set(
         self, test_set_id: str, case_ids: List[str]
     ) -> Optional[TestSet]:
-        return await self.test_set_service.remove_test_cases_from_set(
+        orm_set = await self.test_set_service.remove_test_cases_from_set(
             test_set_id, case_ids
+        )
+        if not orm_set:
+            return None
+        return TestSet(
+            id=orm_set.id,
+            name=orm_set.name,
+            description=orm_set.description or "",
+            source_type=orm_set.source_type.value if hasattr(orm_set.source_type, 'value') else str(orm_set.source_type),
+            test_case_ids=getattr(orm_set, 'test_case_ids', []),
+            created_at=orm_set.created_at,
+            updated_at=orm_set.updated_at,
         )
 
     async def export_test_set(self, test_set_id: str) -> Optional[List[Dict]]:

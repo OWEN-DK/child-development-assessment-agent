@@ -3,7 +3,7 @@ import { Table, Tag, Space, Button, Tooltip } from 'antd';
 import { CopyOutlined, EyeOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { tracingApi } from '@/api/tracing';
-import type { Trace } from '@/types/tracing';
+import type { Trace } from '@entities/tracing/types';
 
 interface TraceListViewProps {
   filters?: Record<string, any>;

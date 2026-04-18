@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import patch
 from src.core.nodes.scoring import ScoringNode
-from src.config.settings import settings
-from src.model.schemas import (
+from src.config import settings
+from src.schemas.assessment import (
     AgentState,
     ChildProfile,
     ProposedPlan,

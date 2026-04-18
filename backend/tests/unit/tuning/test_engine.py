@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.model.tuning import TuningSuggestion, HistoryReference, LLMDiagnosis
+from src.schemas.tuning import TuningSuggestion, HistoryReference, LLMDiagnosis
 
 
 @pytest.mark.asyncio

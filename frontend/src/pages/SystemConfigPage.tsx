@@ -7,7 +7,8 @@ import { Sidebar } from '../components/config/Sidebar';
 import { TopToolbar } from '../components/config/TopToolbar';
 import { MobileNav } from '../components/config/MobileNav';
 import { ConfigErrorBoundary } from '../components/config/ConfigErrorBoundary';
-import { message, Modal, Button } from 'antd';
+import { Modal, Button } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { getBreakpoint } from '../components/config/constants';
 import styles from './SystemConfigPage.module.scss';
 
@@ -50,9 +51,9 @@ export const SystemConfigPage: React.FC = () => {
       onOk: async () => {
         try {
           await saveConfig('Manual update from config page');
-          message.success('配置已保存');
+          notification.success('配置已保存');
         } catch (error) {
-          message.error('保存失败');
+          notification.error('保存失败');
         }
       },
     });
@@ -67,9 +68,9 @@ export const SystemConfigPage: React.FC = () => {
       onOk: async () => {
         try {
           await resetToFactory();
-          message.success('已恢复出厂设置');
+          notification.success('已恢复出厂设置');
         } catch (error) {
-          message.error('恢复失败');
+          notification.error('恢复失败');
         }
       },
     });

@@ -52,7 +52,7 @@ export const downloadExport = async (taskId: string): Promise<void> => {
   const response = await fetch(`${apiBaseUrl}/api/v1/rag/test/exports/${taskId}/download`);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: '下载失败' }));
-    throw new Error(errorData.detail || '下载失败');
+    throw new Error(errorData.message || errorData.detail || '下载失败');
   }
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);

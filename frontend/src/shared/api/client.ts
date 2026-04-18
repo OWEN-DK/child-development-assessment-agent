@@ -23,20 +23,49 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response) => {
-    return response;
+    // 解包统一响应格式 {code, message, data}
+    const { code, message: msg, data } = response.data;
+    
+    if (code === 0) {
+      // 成功响应，返回 data 字段中的业务数据
+      response.data = data;
+      return response;
+    }
+    
+    // 业务错误（HTTP 200 但 code !== 0）
+    const error = new Error(msg || '请求失败');
+    (error as any).code = code;
+    (error as any).error_code = response.data.error_code;
+    (error as any).details = response.data.details;
+    return Promise.reject(error);
   },
   (error) => {
-    const message = error.response?.data?.detail || error.message || '请求失败';
-    console.error('[API Error]', message, error.config?.url);
+    // HTTP 错误处理（4xx/5xx）
+    const responseData = error.response?.data;
+    
+    if (responseData) {
+      // 优先使用后端返回的错误信息
+      const errorMsg = responseData.message || responseData.detail || error.message;
+      const errorCode = responseData.error_code || '';
+      const details = responseData.details || null;
+      
+      console.error(
+        `[API Error] code=${responseData.code || error.response?.status}, error_code=${errorCode}`,
+        errorMsg,
+        details,
+        error.config?.url
+      );
+      
+      error.message = errorMsg;
+      error.code = responseData.code;
+      error.error_code = errorCode;
+      error.details = details;
+    } else {
+      console.error('[API Error]', error.message, error.config?.url);
+    }
+    
     return Promise.reject(error);
   }
 );
 
 export default apiClient;
-
-// 向后兼容导出
-export * from '@/api/assessment';
-export * from '@/api/documents';
-export * from '@/api/knowledge';
-export * from '@/api/rag-test';
-export * from '@/api/prompts';

@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 from src.core.pageindex_wrapper import PageIndexWrapper
-from src.config.settings import settings
+from src.config import settings
 
 @pytest.mark.asyncio
 async def test_index_document_success():

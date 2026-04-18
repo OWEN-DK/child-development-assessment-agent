@@ -4,7 +4,8 @@ import { Card, Button, Space, Typography, App, Flex, Spin, Empty } from 'antd';
 import { DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { DocumentRecord } from '../../api/documents/types';
 import { deleteDocument } from '../../api/documents';
-import { formatDateTime } from '../../utils/formatters';
+import { formatDateTime } from '@shared/lib/formatters';
+import { extractApiError, notification } from '@shared/lib/notification';
 
 interface DocumentListProps {
   documents: DocumentRecord[];
@@ -20,7 +21,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   excludeFilenames = new Set(),
 }) => {
   const navigate = useNavigate();
-  const { modal, message } = App.useApp();
+  const { modal } = App.useApp();
 
   const handleDelete = (doc: DocumentRecord) => {
     modal.confirm({
@@ -29,10 +30,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       onOk: async () => {
         try {
           await deleteDocument(doc.file_name);
-          message.success('删除成功');
+          notification.success('删除成功');
           onRefresh();
         } catch (e: any) {
-          message.error(`删除失败: ${e.response?.data?.detail || e.message}`);
+          const apiError = extractApiError(e);
+          notification.error(`删除失败: ${apiError.message}`);
         }
       },
     });

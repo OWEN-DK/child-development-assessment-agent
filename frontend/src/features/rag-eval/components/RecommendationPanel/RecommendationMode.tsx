@@ -3,11 +3,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Card, Button, Space, Tag, Typography, Empty, Spin, message, Popconfirm } from 'antd';
+import { Card, Button, Space, Tag, Typography, Empty, Spin, Popconfirm } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { CheckOutlined, CloseOutlined, DiffOutlined } from '@ant-design/icons';
 import type { TuningSuggestion } from './types';
 import { getSuggestions, ignoreSuggestion } from '@/api/rag-eval/tuning';
-import { useRecommendationPanelStore } from '@/store/recommendationPanelStore';
+import { useRecommendationPanelStore } from '@/features/rag-eval/stores/recommendationPanelStore';
 import ConfigComparisonModal from '../ConfigComparison';
 import PromptComparisonModal from '../PromptComparison';
 
@@ -52,7 +53,7 @@ export default function RecommendationMode({ reportId, testSetId }: Recommendati
       const data = await getSuggestions(reportId, testSetId);
       setSuggestions(data);
     } catch {
-      message.error('加载建议失败');
+      notification.error('加载建议失败');
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ export default function RecommendationMode({ reportId, testSetId }: Recommendati
       expected_effect: suggestion.expected_effect,
       source_version: suggestion.source,
     });
-    message.success('已采纳建议');
+    notification.success('已采纳建议');
   };
 
   const handleIgnore = async (suggestion: TuningSuggestion) => {
@@ -80,9 +81,9 @@ export default function RecommendationMode({ reportId, testSetId }: Recommendati
         param_name: suggestion.param_name,
       });
       markIgnored(suggestion.id);
-      message.success('已忽略建议');
+      notification.success('已忽略建议');
     } catch {
-      message.error('忽略建议失败');
+      notification.error('忽略建议失败');
     }
   };
 

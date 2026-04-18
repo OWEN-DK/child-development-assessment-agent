@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 import os
-from src.config.settings import settings
+from src.config import settings
 from src.service.document_ingestion_service import DocumentIngestionService
 from src.service.index_manager_service import IndexManagerService
 

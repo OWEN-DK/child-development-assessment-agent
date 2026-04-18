@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Tree, Tag } from 'antd';
 import type { DataNode } from 'antd/es/tree';
-import type { Span } from '@/types/tracing';
+import type { Span } from '@entities/tracing/types';
 
 interface SpanTreeViewProps {
   spans: Span[];

@@ -1,17 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { Card, Typography, Spin, App } from 'antd';
+import { Card, Typography, Spin } from 'antd';
 import { useKnowledgeSearch } from '../hooks/useKnowledgeSearch';
 import { SearchInput } from '../../../components/knowledge/SearchInput';
 import { SearchResultList } from '../../../components/knowledge/SearchResultList';
 import { ResultDetailModal } from '../../../components/knowledge/ResultDetailModal';
 import type { SearchResultItem } from '../../../api/knowledge/types';
-import { usePagination } from '../../../hooks/usePagination';
+import { usePagination } from '@shared/hooks/usePagination';
+import { extractApiError, notification } from '@shared/lib/notification';
 import styles from './KnowledgeSearchPage.module.scss';
 
 const { Title, Text } = Typography;
 
 const KnowledgeSearchPage: React.FC = () => {
-  const { message } = App.useApp();
   const {
     query,
     results,
@@ -39,9 +39,10 @@ const KnowledgeSearchPage: React.FC = () => {
     try {
       await handleSearch(searchQuery, size, offset);
     } catch (e: any) {
-      message.error(`搜索失败: ${e.response?.data?.detail || e.message}`);
+      const apiError = extractApiError(e);
+      notification.error(`搜索失败: ${apiError.message}`);
     }
-  }, [handleSearch, message]);
+  }, [handleSearch]);
 
   const handleSearchWithError = useCallback(async (searchQuery: string) => {
     setCurrentSearchQuery(searchQuery);

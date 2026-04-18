@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { extractApiError } from '@shared/lib/notification';
 import { assessDevelopment, assessDevelopmentStream } from '../../../api/assessment';
 import type { UserInput, FinalReport, StreamingReportData } from '@entities/assessment/types';
 
@@ -41,7 +42,8 @@ export const useAssessment = (): UseAssessmentReturn => {
         }
       } catch (err: any) {
         console.error(err);
-        setError(err.response?.data?.detail || err.message || '发生错误，请重试');
+        const apiError = extractApiError(err);
+        setError(apiError.message || '发生错误，请重试');
       } finally {
         setLoading(false);
       }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Collapse, Descriptions, Tabs, Typography } from 'antd';
-import type { Span } from '@/types/tracing';
+import type { Span } from '@entities/tracing/types';
 
 const { Text } = Typography;
 

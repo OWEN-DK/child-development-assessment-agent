@@ -4,7 +4,7 @@
 
 import { Tabs } from 'antd';
 import type { RecommendationMode } from './types';
-import { useRecommendationPanelStore } from '@/store/recommendationPanelStore';
+import { useRecommendationPanelStore } from '@/features/rag-eval/stores/recommendationPanelStore';
 
 const MODE_TABS = [
   { key: 'recommendation', label: '智能推荐' },

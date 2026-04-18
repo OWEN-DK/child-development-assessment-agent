@@ -19,7 +19,7 @@ export const CostAnalysisDashboard: React.FC<CostAnalysisDashboardProps> = ({
   });
 
   const pieConfig = {
-    data: data?.model_stats.map((s) => ({
+    data: data?.model_stats.map((s: { model: string; cost: number }) => ({
       type: s.model,
       value: s.cost,
     })) || [],

@@ -11,7 +11,7 @@ import type {
   LatencyDistribution,
   ErrorAnalysis,
   TraceFilters,
-} from '@/types/tracing';
+} from '@entities/tracing/types';
 
 export const tracingApi = {
   getTraces: async (

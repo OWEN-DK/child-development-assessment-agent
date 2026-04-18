@@ -11,13 +11,13 @@ import {
   Tag,
   Space,
   Popconfirm,
-  message,
   Typography,
   Spin,
   Select,
   Input,
   Modal,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { getDrafts, reviewDraft, getTestSet } from '@/api/rag-test';
@@ -56,7 +56,7 @@ export default function DraftReviewPage() {
       // 草稿通过 source_document_id 关联，当前无直接 test_set 关联，展示全部草稿
       setDrafts(allDrafts);
     } catch {
-      message.error('加载失败');
+      notification.error('加载失败');
     } finally {
       setLoading(false);
     }
@@ -65,10 +65,10 @@ export default function DraftReviewPage() {
   const handleReview = async (draftId: string, action: 'reviewed' | 'rejected') => {
     try {
       await reviewDraft(draftId, action);
-      message.success(action === 'reviewed' ? '已通过' : '已拒绝');
+      notification.success(action === 'reviewed' ? '已通过' : '已拒绝');
       loadData();
     } catch {
-      message.error('操作失败');
+      notification.error('操作失败');
     }
   };
 
@@ -79,11 +79,11 @@ export default function DraftReviewPage() {
       for (const key of selectedRowKeys) {
         await reviewDraft(key as string, 'reviewed');
       }
-      message.success('批量归入成功');
+      notification.success('批量归入成功');
       setSelectedRowKeys([]);
       loadData();
     } catch {
-      message.error('批量归入失败');
+      notification.error('批量归入失败');
     }
   };
 
@@ -94,13 +94,13 @@ export default function DraftReviewPage() {
       for (const key of selectedRowKeys) {
         await reviewDraft(key as string, 'rejected');
       }
-      message.success('批量拒绝成功');
+      notification.success('批量拒绝成功');
       setSelectedRowKeys([]);
       setRejectModalVisible(false);
       setRejectReason('');
       loadData();
     } catch {
-      message.error('批量拒绝失败');
+      notification.error('批量拒绝失败');
     }
   };
 

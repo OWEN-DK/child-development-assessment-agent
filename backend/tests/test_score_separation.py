@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from llama_index.core.schema import NodeWithScore, TextNode
-from src.model.schemas import KnowledgeItem
+from src.schemas.assessment import KnowledgeItem
 from src.service.retrieval_service import RetrievalService
 
 

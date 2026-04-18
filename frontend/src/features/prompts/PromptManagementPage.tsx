@@ -9,13 +9,13 @@ import {
   Input,
   Space,
   Tag,
-  message,
   Tabs,
   Typography,
   Divider,
   Switch,
   Descriptions,
 } from 'antd';
+import { notification } from '@shared/lib/notification';
 import {
   PlusOutlined,
   DiffOutlined,
@@ -96,7 +96,7 @@ export const PromptManagementPage: React.FC = () => {
       const data = await promptsApi.listVersions(selectedPrompt);
       setVersions(data);
     } catch (error) {
-      message.error('加载版本列表失败');
+      notification.error('加载版本列表失败');
     } finally {
       setLoading(false);
     }
@@ -107,7 +107,7 @@ export const PromptManagementPage: React.FC = () => {
       const data = await promptsApi.listABTests(selectedPrompt);
       setAbTests(data);
     } catch (error) {
-      message.error('加载 A/B 测试失败');
+      notification.error('加载 A/B 测试失败');
     }
   };
 
@@ -125,12 +125,12 @@ export const PromptManagementPage: React.FC = () => {
           : undefined,
         fallback: values.fallback,
       });
-      message.success('版本已创建');
+      notification.success('版本已创建');
       setVersionModalVisible(false);
       form.resetFields();
       loadVersions();
     } catch (error) {
-      message.error('创建版本失败');
+      notification.error('创建版本失败');
     }
   };
 
@@ -143,13 +143,13 @@ export const PromptManagementPage: React.FC = () => {
       setVersionDetail(detail);
       setDetailModalVisible(true);
     } catch (error) {
-      message.error('加载版本详情失败');
+      notification.error('加载版本详情失败');
     }
   };
 
   const handleCompare = async () => {
     if (compareVersions.length !== 2) {
-      message.warning('请选择两个版本进行对比');
+      notification.warning('请选择两个版本进行对比');
       return;
     }
     try {
@@ -161,7 +161,7 @@ export const PromptManagementPage: React.FC = () => {
       setCompareData(diff);
       setCompareModalVisible(true);
     } catch (error) {
-      message.error('对比失败');
+      notification.error('对比失败');
     }
   };
 
@@ -173,22 +173,22 @@ export const PromptManagementPage: React.FC = () => {
         variant_b_version: values.variant_b_version,
         variant_a_ratio: values.variant_a_ratio / 100,
       });
-      message.success('A/B 测试已创建');
+      notification.success('A/B 测试已创建');
       setAbTestModalVisible(false);
       abTestForm.resetFields();
       loadABTests();
     } catch (error) {
-      message.error('创建 A/B 测试失败');
+      notification.error('创建 A/B 测试失败');
     }
   };
 
   const handleToggleABTest = async (testId: string, isActive: boolean) => {
     try {
       await promptsApi.toggleABTest(testId, isActive);
-      message.success(`A/B 测试已${isActive ? '启用' : '禁用'}`);
+      notification.success(`A/B 测试已${isActive ? '启用' : '禁用'}`);
       loadABTests();
     } catch (error) {
-      message.error('切换状态失败');
+      notification.error('切换状态失败');
     }
   };
 

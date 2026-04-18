@@ -12,17 +12,14 @@ class TestConfigChangeSetRequest:
 
     def test_request_with_all_fields(self):
         """应接受完整字段"""
-        from src.controller.tuning_controller import (
-            ConfigChangeSetRequest,
-            PromptItem,
-        )
+        from src.schemas.config import PromptItem, ConfigChangeSetRequest
 
         request = ConfigChangeSetRequest(
             config_snapshot={"bm25_top_k": 15},
             prompts=[
                 PromptItem(
                     key="rag_query_rewrite",
-                    version_string="v4",
+                    version="v4",
                     content="提示词内容",
                     summary="变更摘要",
                 )
@@ -36,7 +33,7 @@ class TestConfigChangeSetRequest:
 
     def test_request_with_empty_prompts(self):
         """应接受空提示词列表"""
-        from src.controller.tuning_controller import ConfigChangeSetRequest
+        from src.schemas.config import ConfigChangeSetRequest
 
         request = ConfigChangeSetRequest(
             config_snapshot={"bm25_top_k": 15},
@@ -48,11 +45,11 @@ class TestConfigChangeSetRequest:
 
     def test_prompt_item_validation(self):
         """提示词项应校验必填字段"""
-        from src.controller.tuning_controller import PromptItem
+        from src.schemas.config import PromptItem
 
         prompt = PromptItem(
             key="rag_query_rewrite",
-            version_string="v4",
+            version="v4",
             content="提示词内容",
             summary="变更摘要",
         )
@@ -62,15 +59,14 @@ class TestConfigChangeSetRequest:
 
     def test_prompt_item_optional_summary(self):
         """提示词项的 summary 应为可选"""
-        from src.controller.tuning_controller import PromptItem
-
+        from src.schemas.config import PromptItem
         prompt = PromptItem(
             key="rag_query_rewrite",
             version_string="v4",
             content="提示词内容",
         )
 
-        assert prompt.summary is None
+        assert prompt.description is None
 
 
 class TestConfigChangeSetResponse:
@@ -78,7 +74,7 @@ class TestConfigChangeSetResponse:
 
     def test_response_serialization(self):
         """响应应可序列化为字典"""
-        from src.controller.tuning_controller import ConfigChangeSetResponse
+        from src.schemas.config import ConfigChangeSetResponse
 
         response = ConfigChangeSetResponse(
             id="cs_001",
@@ -96,7 +92,7 @@ class TestConfigChangeSetResponse:
 
     def test_response_with_optional_config_version(self):
         """config_version_id 应为可选"""
-        from src.controller.tuning_controller import ConfigChangeSetResponse
+        from src.schemas.config import ConfigChangeSetResponse
 
         response = ConfigChangeSetResponse(
             id="cs_001",
@@ -114,7 +110,7 @@ class TestCreateConfigChangeSetEndpoint:
     @pytest.mark.asyncio
     async def test_empty_config_raises_400(self):
         """配置快照为空时应返回 400"""
-        from src.controller.tuning_controller import ConfigChangeSetRequest
+        from src.schemas.config import ConfigChangeSetRequest
 
         request = ConfigChangeSetRequest(
             config_snapshot={},

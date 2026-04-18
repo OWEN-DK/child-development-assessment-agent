@@ -9,7 +9,7 @@ import ExpertMode from './ExpertMode';
 import LayoutAdapter from './LayoutAdapter';
 import ReviewPanel from '../ReviewPanel';
 import IgnoredSuggestionsList from '../IgnoredSuggestionsList';
-import { useRecommendationPanelStore } from '@/store/recommendationPanelStore';
+import { useRecommendationPanelStore } from '@/features/rag-eval/stores/recommendationPanelStore';
 import { Button, Space } from 'antd';
 import { FileTextOutlined, EyeOutlined } from '@ant-design/icons';
 import { saveAdoptedAsVersion } from '@/api/rag-eval/tuning';

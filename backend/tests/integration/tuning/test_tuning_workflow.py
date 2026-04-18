@@ -7,7 +7,7 @@ from src.core.tuning.rule_engine import RuleEngine
 from src.core.tuning.history_analyzer import HistoryAnalyzer
 from src.core.tuning.llm_diagnoser import LLMDiagnoser
 from src.core.tuning.conflict_detector import ConflictDetector
-from src.model.tuning import TuningSuggestion, HistoryReference, LLMDiagnosis
+from src.schemas.tuning import TuningSuggestion, HistoryReference, LLMDiagnosis
 
 
 @pytest.fixture
