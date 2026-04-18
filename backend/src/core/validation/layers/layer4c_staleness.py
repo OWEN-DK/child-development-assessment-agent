@@ -9,7 +9,7 @@ from typing import Any
 from collections import defaultdict
 
 from sqlalchemy import select
-from src.models.test_case import SourceDocument
+from src.models.document import SourceDocument
 
 logger = logging.getLogger(__name__)
 

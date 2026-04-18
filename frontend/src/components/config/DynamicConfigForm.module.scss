@@ -4,6 +4,61 @@
   gap: 20px;
 }
 
+.configGuide {
+  margin-bottom: 32px;
+  padding: 20px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  border-left: 4px solid #1677ff;
+
+  h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    color: #1f2937;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.8;
+
+    li {
+      margin-bottom: 4px;
+
+      strong {
+        color: #1f2937;
+      }
+    }
+  }
+}
+
+.credentialGuide {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+
+  p {
+    margin: 0 0 8px 0;
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .warningMessage {
+    padding: 10px 14px;
+    background: #fff2e8;
+    border: 1px solid #ffbb96;
+    border-radius: 4px;
+    color: #d4380d;
+    font-size: 13px;
+    font-weight: 500;
+  }
+}
+
 .mainCategory {
   margin-bottom: 48px;
   padding: 24px;
@@ -132,6 +187,95 @@
   font-size: 11px;
 }
 
+.nestedItem {
+  background: #fafbfc;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 16px;
+  
+  &:hover {
+    background: #f0f7ff;
+    border-color: #91caff;
+  }
+
+  .configLabel {
+    font-size: 13px;
+    color: #595959;
+  }
+
+  .configMeta {
+    font-size: 11px;
+  }
+}
+
+.nestedPrefix {
+  color: #8c8c8c;
+  font-size: 12px;
+  font-weight: 400;
+  margin-right: 4px;
+}
+
+.sceneConfigGroup {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  .sceneHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  
+  .sceneTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1677ff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background: #1677ff;
+      border-radius: 2px;
+    }
+  }
+
+  .sceneHelpIcon {
+    color: #8c8c8c;
+    cursor: help;
+    font-size: 14px;
+
+    &:hover {
+      color: #1677ff;
+    }
+  }
+
+  .sceneDescription {
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border-left: 3px solid #1677ff;
+    color: #4b5563;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .sceneFields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+  }
+}
+
 .listEditor,
 .dictEditor {
   width: 100%;
@@ -146,6 +290,79 @@
       color: #1677ff;
       border-color: #1677ff;
       background: #f0f7ff;
+    }
+  }
+}
+
+.nestedDictEditor {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nestedDictItem {
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.nestedDictKey {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1f2937;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.nestedDictValue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nestedDictRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nestedDictSubKey {
+  font-size: 12px;
+  color: #6b7280;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.allProvidersAdded {
+  padding: 12px;
+  text-align: center;
+  color: #52c41a;
+  font-size: 14px;
+  font-weight: 500;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  border-radius: 6px;
+  margin-top: 12px;
+}
+
+.pricingGuide {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+
+  p {
+    margin: 0 0 6px 0;
+    color: #6b7280;
+    font-size: 13px;
+    line-height: 1.5;
+
+    &:last-child {
+      margin-bottom: 0;
     }
   }
 }
@@ -170,5 +387,58 @@
       color: #dc2626;
       transform: scale(1.1);
     }
+  }
+}
+
+.providerList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.providerCard {
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: #1677ff;
+    box-shadow: 0 2px 8px rgba(22, 119, 255, 0.1);
+  }
+}
+
+.providerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.providerName {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1f2937;
+}
+
+.providerFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
   }
 }

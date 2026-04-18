@@ -14,8 +14,9 @@ from .test_case import (
     TestSourceType,
 )
 from .document import SourceDocument, DocumentRecord, DocumentStatus, ImportStatus
-from .monitor import ABTestMetrics, LLMCallLog, LLMCallStatus
+from .monitor import ABTestMetrics, LLMCallLog, LLMCallStatus, CallLevel
 from .prompt import PromptVersion, PromptABTest
+from .trace import Trace, TraceStatus
 
 __all__ = [
     "Base",
@@ -39,6 +40,9 @@ __all__ = [
     "ABTestMetrics",
     "LLMCallLog",
     "LLMCallStatus",
+    "CallLevel",
     "PromptVersion",
     "PromptABTest",
+    "Trace",
+    "TraceStatus",
 ]

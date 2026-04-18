@@ -1,9 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useConfigStore } from '../store/configStore';
 import { DynamicConfigForm } from '../components/config/DynamicConfigForm';
+import { WizardMode } from '../components/config/WizardMode';
 import { ConfigVersionSelector } from '../components/config/ConfigVersionSelector';
-import { Button, message, Modal, Space, Tree } from 'antd';
-import type { TreeProps } from 'antd';
+import { Sidebar } from '../components/config/Sidebar';
+import { TopToolbar } from '../components/config/TopToolbar';
+import { MobileNav } from '../components/config/MobileNav';
+import { ConfigErrorBoundary } from '../components/config/ConfigErrorBoundary';
+import { message, Modal, Button } from 'antd';
+import { getBreakpoint } from '../components/config/constants';
 import styles from './SystemConfigPage.module.scss';
 
 export const SystemConfigPage: React.FC = () => {
@@ -16,123 +21,27 @@ export const SystemConfigPage: React.FC = () => {
     loadVersions,
     saveConfig,
     resetToFactory,
+    modePreference,
+    switchMode,
   } = useConfigStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     loadConfig();
     loadVersions();
   }, []);
 
-  // 配置分类映射 - 适配新的配置层级结构
-  const categoryMapping: Record<string, string> = {
-    'app': '📦 应用设置',
-    'logging': '日志配置',
-    'paths': '路径配置',
-    'models': '🤖 AI模型',
-    'llm': 'LLM模型',
-    'embedding': 'Embedding模型',
-    'ml_scoring': 'ML评分模型',
-    'rag': '📚 RAG知识库',
-    'core': '核心设置',
-    'retrieval': '检索配置',
-    'chunking': '分块配置',
-    'vector_store': '向量存储',
-    'pageindex': 'PageIndex索引',
-    'pipeline': '导入流水线',
-    'rules': '⚙️ 业务规则',
-    'validation': '校验规则',
-    'assessment': '评估规则',
-    'scoring': '评分规则',
-    'preprocessing': '预处理规则',
-    'metadata': '元数据规则',
-    'other': '其他配置'
-  };
-
-  // Build tree data for sidebar
-  const treeData = useMemo<any[]>(() => {
-    const root: any[] = [
-      {
-        title: '全部配置',
-        key: 'all',
-        isLeaf: true,
-      }
-    ];
-
-    // Group categories by main category
-    const categoryGroups = configFields.reduce((groups, field) => {
-      const fullCategory = field.category || 'other';
-      const [mainCategory, subCategory] = fullCategory.split('.', 2);
-      
-      if (!groups[mainCategory]) {
-        groups[mainCategory] = new Set();
-      }
-      
-      if (subCategory) {
-        groups[mainCategory].add(subCategory);
-      }
-      
-      return groups;
-    }, {} as Record<string, Set<string>>);
-
-    // 预设的分类顺序，按照我们新的层级结构排序
-    const categoryOrder = ['app', 'models', 'rag', 'rules', 'other'];
-    
-    // Build tree nodes
-    categoryOrder.forEach(mainCategory => {
-      if (!categoryGroups[mainCategory]) return;
-      
-      const subCategories = categoryGroups[mainCategory];
-      const mainTitle = categoryMapping[mainCategory] || mainCategory;
-      
-      if (subCategories.size === 0) {
-        root.push({
-          title: mainTitle,
-          key: mainCategory,
-          isLeaf: true,
-        });
-      } else {
-        // 子分类排序
-        const subCategoryOrder: Record<string, number> = {
-          // 应用设置子分类
-          'app': 1, 'logging': 2, 'paths': 3,
-          // AI模型子分类
-          'llm': 1, 'embedding': 2, 'ml_scoring': 3,
-          // RAG子分类
-          'core': 1, 'retrieval': 2, 'chunking': 3, 'vector_store': 4, 'pageindex': 5, 'pipeline': 6,
-          // 业务规则子分类
-          'validation': 1, 'assessment': 2, 'scoring': 3, 'preprocessing': 4, 'metadata':5
-        };
-        
-        const children = Array.from(subCategories)
-          .sort((a, b) => (subCategoryOrder[a] || 99) - (subCategoryOrder[b] || 99))
-          .map(subCategory => {
-            const subTitle = categoryMapping[subCategory] || subCategory;
-            return {
-              title: subTitle,
-              key: `${mainCategory}.${subCategory}`,
-              isLeaf: true,
-            };
-          });
-        
-        root.push({
-          title: mainTitle,
-          key: mainCategory,
-          children: children as any,
-          isLeaf: false,
-        });
-      }
-    });
-
-    return root;
-  }, [configFields]);
-
-  const handleTreeSelect: TreeProps['onSelect'] = (selectedKeys) => {
-    if (selectedKeys.length > 0) {
-      setSelectedCategory(selectedKeys[0] as string);
-    }
-  };
+  const breakpoint = getBreakpoint(windowWidth);
+  const isMobile = breakpoint === 'mobile';
 
   const handleSave = async () => {
     Modal.confirm({
@@ -152,7 +61,9 @@ export const SystemConfigPage: React.FC = () => {
   const handleReset = () => {
     Modal.confirm({
       title: '恢复出厂设置',
-      content: '确定要恢复到.env.dev的默认配置吗？',
+      content: '确定要恢复到.env.dev的默认配置吗？此操作将清除所有自定义配置。',
+      okText: '确认恢复',
+      okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await resetToFactory();
@@ -164,47 +75,119 @@ export const SystemConfigPage: React.FC = () => {
     });
   };
 
+  const handleSearch = (query: string) => {
+    console.log('搜索:', query);
+  };
+
+  const handleSelectSearch = (key: string) => {
+    console.log('选中搜索:', key);
+  };
+
+  const changeCount = Object.keys(draftChanges).length;
+  const hasChanges = changeCount > 0;
+
+  // 映射 UI 分类 Key 到后端 Category
+  const effectiveCategory = useMemo(() => {
+    if (selectedCategory === 'all') return undefined;
+    // 场景模型 UI Key 映射到后端 models.llm
+    if (selectedCategory === 'models.llm.scenes') return 'models.llm';
+    // 其他 UI Key 直接作为后端 category（已修正为与后端一致）
+    return selectedCategory;
+  }, [selectedCategory]);
+
+  const handleSwitchMode = () => {
+    switchMode(modePreference === 'expert' ? 'wizard' : 'expert');
+  };
+
   return (
-    <div className={styles.container}>
-      <div className={styles.sidebar}>
-        <h2>配置分类</h2>
-        <Tree
-          treeData={treeData}
-          defaultExpandAll
-          selectedKeys={[selectedCategory]}
-          onSelect={handleTreeSelect}
-          className={styles.categoryTree}
-          showLine
-        />
+    <ConfigErrorBoundary>
+      <div className={styles.container}>
+        {/* 侧边栏（桌面端显示，仅专家模式） */}
+        {!isMobile && modePreference === 'expert' && (
+          <div className={styles.sidebar}>
+            <Sidebar
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+            />
+            <ConfigVersionSelector />
+            
+            {/* 模式切换按钮 */}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+              <Button
+                type="link"
+                onClick={handleSwitchMode}
+                style={{ width: '100%' }}
+              >
+                → 切换到向导模式
+              </Button>
+            </div>
+          </div>
+        )}
 
-        <ConfigVersionSelector />
-      </div>
+        {/* 主内容区 */}
+        <div className={styles.main}>
+          {/* 顶部工具栏（仅专家模式显示） */}
+          {modePreference === 'expert' && (
+            <TopToolbar
+              configFields={configFields.map(f => ({
+                key: f.key,
+                label: f.key,
+                category: f.category,
+                description: f.description
+              }))}
+              onSearch={handleSearch}
+              onSelectSearch={handleSelectSearch}
+              onSave={handleSave}
+              onReset={handleReset}
+              isSaving={isSaving}
+              hasChanges={hasChanges}
+              changeCount={changeCount}
+            />
+          )}
 
-      <div className={styles.main}>
-        <div className={styles.header}>
-          <h1>系统全局配置</h1>
-          <Space>
-            <Button onClick={handleReset} danger>
-              恢复出厂设置
-            </Button>
-            <Button
-              type="primary"
-              onClick={handleSave}
-              loading={isSaving}
-              disabled={Object.keys(draftChanges).length === 0}
-            >
-              保存配置 ({Object.keys(draftChanges).length} 项修改)
-            </Button>
-          </Space>
+          {/* 向导模式头部 */}
+          {modePreference === 'wizard' && (
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid #f0f0f0',
+              backgroundColor: '#fff',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>🔧 系统配置 - 向导模式</h2>
+              <Button onClick={handleSwitchMode}>
+                ← 切换专家模式
+              </Button>
+            </div>
+          )}
+
+          <div className={styles.content}>
+            {isLoading && <div className={styles.loading}>加载中...</div>}
+
+            {!isLoading && (
+              <>
+                {modePreference === 'expert' && (
+                  <DynamicConfigForm
+                    fields={configFields}
+                    category={effectiveCategory}
+                  />
+                )}
+                
+                {modePreference === 'wizard' && <WizardMode />}
+              </>
+            )}
+          </div>
         </div>
 
-        {isLoading && <div className={styles.loading}>加载中...</div>}
-
-        <DynamicConfigForm
-          fields={configFields}
-          category={selectedCategory === 'all' ? undefined : selectedCategory}
-        />
+        {/* 移动端底部导航 */}
+        {isMobile && (
+          <MobileNav
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
+        )}
       </div>
-    </div>
+    </ConfigErrorBoundary>
   );
 };

@@ -12,15 +12,18 @@ from src.utils.logger import logger
 from src.core.hybrid_retrieval import HybridRetrievalMerger
 from src.core.reranker import CrossEncoderReranker
 from src.model.schemas import KnowledgeItem
-from src.core.prompts import QUERY_REWRITE_PROMPT, SYNONYM_EXPANSION_PROMPT
+from src.core.prompt.manager import prompt_manager
 from src.service.index_manager_service import IndexManagerService
 from src.service.cache_service import CacheService
 from src.core.child_development_engine import child_development_engine
 from src.service.content_audit_service import content_audit_service
 from src.core.ab_test_framework import ab_test_framework
 from src.core.prompt_injection_guard import prompt_injection_guard
-from src.service.monitoring_service import monitoring_service
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.factory import (
+    LLMServiceFactory,
+    LLMServiceFactoryCompat,
+    LLMFramework,
+)
 from src.core.llm.base import LLMRequest, LLMMessage
 
 
@@ -42,6 +45,21 @@ class RetrievalService:
         self.bm25_weight = 0.5
         self.vector_weight = 0.5
         self.merge_mode = "OR"
+
+        # 初始化 QueryAnalyzer
+        from src.core.rag.query_analyzer import QueryAnalyzer
+
+        self._query_analyzer = QueryAnalyzer()
+
+        # 初始化 SynonymValidator (Phase C-1)
+        from src.core.rag.synonym_validator import SynonymValidator
+
+        self._synonym_validator = SynonymValidator()
+
+        # 初始化 LocalSynonymExpander (Phase C-2)
+        from src.core.rag.local_synonym_expander import LocalSynonymExpander
+
+        self._local_expander = LocalSynonymExpander()
 
         # 初始化 Cross-Encoder 重排序器
         self.reranker = CrossEncoderReranker(
@@ -183,6 +201,34 @@ class RetrievalService:
                 user_id=user_id,
             )
 
+            # 精确年龄过滤（二次过滤）
+            if age > 0 and results:
+                from src.core.age_filter import AgeFilter, AgeFilterMode
+
+                mode_str = getattr(settings, "rag_age_filter_mode", "strict")
+                mode = (
+                    AgeFilterMode.STRICT
+                    if mode_str == "strict"
+                    else AgeFilterMode.LOOSE
+                )
+
+                filtered_nodes = []
+                for node_with_score in results:
+                    metadata = node_with_score.node.metadata or {}
+                    target_min = metadata.get("target_age_min", 0)
+                    target_max = metadata.get("target_age_max", 18)
+
+                    if not AgeFilter.should_filter(target_min, target_max, age, mode):
+                        filtered_nodes.append(node_with_score)
+                    else:
+                        logger.info(
+                            f"精确年龄过滤：用户 {age} 岁，内容年龄 [{target_min}, {target_max}]，"
+                            f"模式 {mode}，分数 {node_with_score.score:.4f}"
+                        )
+
+                logger.info(f"年龄过滤：{len(results)} -> {len(filtered_nodes)} 个结果")
+                results = filtered_nodes
+
             # # 内容审核：在检索后审核每个结果（暂时禁用）
             # audited_results = []
             # for node_with_score in results:
@@ -316,33 +362,18 @@ class RetrievalService:
             return {"total": 0, "results": []}
 
     def _build_age_filters(self, age: int):
-        """构建弹性年龄过滤器"""
-        if age <= 0 or settings.rag_age_filter_strictness == 0:
+        """构建年龄过滤器（使用新的 AgeFilter 类）"""
+        if age <= 0:
             return None
 
-        from llama_index.core.vector_stores import (
-            MetadataFilter,
-            MetadataFilters,
-            FilterOperator,
-        )
+        from src.core.age_filter import AgeFilter, AgeFilterMode
 
-        tolerance = settings.rag_age_filter_tolerance
-        min_age = max(0, age - tolerance)
-        max_age = age + tolerance
+        # 从配置读取过滤模式
+        mode_str = getattr(settings, "rag_age_filter_mode", "strict")
+        mode = AgeFilterMode.STRICT if mode_str == "strict" else AgeFilterMode.LOOSE
 
-        # 宽松过滤：只要年龄范围有重叠就返回
-        filters = [
-            # 目标最小年龄 ≤ 最大容忍年龄
-            MetadataFilter(
-                key="target_age_min", value=max_age, operator=FilterOperator.LTE
-            ),
-            # 目标最大年龄 ≥ 最小容忍年龄
-            MetadataFilter(
-                key="target_age_max", value=min_age, operator=FilterOperator.GTE
-            ),
-        ]
-
-        return MetadataFilters(filters=filters)
+        # 构建 MetadataFilter（用于向量检索阶段的基础过滤）
+        return AgeFilter.build_metadata_filters(age, mode)
 
     def _calculate_age_fit_score(
         self, age: int, target_min: int, target_max: int
@@ -396,7 +427,10 @@ class RetrievalService:
             else:
                 # control 或默认：使用动态权重
                 bm25_weight, vector_weight = HybridRetrievalMerger.get_dynamic_weights(
-                    query, age
+                    query,
+                    age,
+                    query_analyzer=self._query_analyzer,
+                    strategy=settings.rag_weight_strategy,
                 )
 
             # 并行检索
@@ -488,11 +522,13 @@ class RetrievalService:
             chapter_title = metadata.get("chapter_title")
             page_label = metadata.get("page_label")
 
-            # 计算最终得分：基础相关性得分 * (1 - 年龄权重) + 年龄适配度 * 年龄权重
-            final_score = base_score
-            age_fit_score = 1.0
+            # relevance_score 直接使用 base_score（来自 Cross-Encoder 重排序后的分数）
+            relevance_score = base_score
+
+            # age_fit_score 独立计算（不混合到 relevance_score）
+            age_fit_score = 1.0  # 默认值（无年龄时）
             if user_age is not None:
-                # 使用儿童发展引擎计算更精准的年龄适配度
+                # 使用儿童发展引擎计算年龄适配度
                 age_fit_score = child_development_engine.calculate_age_appropriateness(
                     content, user_age
                 )
@@ -500,11 +536,8 @@ class RetrievalService:
                 metadata_age_fit = self._calculate_age_fit_score(
                     user_age, target_age_min, target_age_max
                 )
-                # 综合两种评分，儿童发展引擎权重更高
+                # 综合两种评分
                 age_fit_score = 0.7 * age_fit_score + 0.3 * metadata_age_fit
-
-                age_weight = settings.rag_age_fit_weight
-                final_score = base_score * (1 - age_weight) + age_fit_score * age_weight
 
             # 检查重复内容
             is_duplicate = False
@@ -528,11 +561,12 @@ class RetrievalService:
                 target_age_min=target_age_min,
                 target_age_max=target_age_max,
                 activity_type=activity_type,
-                relevance_score=float(final_score),
+                relevance_score=float(relevance_score),  # 仅检索相关性
+                age_fit_score=float(age_fit_score),  # 独立年龄适配度
             )
             results.append(item)
 
-        # 按最终得分重新排序
+        # 按 relevance_score 排序（仅基于检索相关性）
         results.sort(key=lambda x: x.relevance_score, reverse=True)
 
         return results
@@ -561,24 +595,27 @@ class RetrievalService:
         if l1 == 0 or l2 == 0:
             return False
 
-        # 包含关系（较短的是较长的子集，且长度占比超过80%）
+        # 包含关系（较短的是较长的子集，且长度占比超过阈值）
+        containment_threshold = settings.rag_dedup_containment_threshold
         if l1 < l2:
-            if c1 in c2 and l1 / l2 > 0.8:
+            if c1 in c2 and l1 / l2 > containment_threshold:
                 return True
         else:
-            if c2 in c1 and l2 / l1 > 0.8:
+            if c2 in c1 and l2 / l1 > containment_threshold:
                 return True
 
         # 相似度比较 (针对只有少量字符差异的情况，如标点符号差异)
         # 只有长度接近时才计算，提高性能
-        if abs(l1 - l2) / max(l1, l2) < 0.2:
+        length_diff_threshold = settings.rag_dedup_length_diff_threshold
+        if abs(l1 - l2) / max(l1, l2) < length_diff_threshold:
             # 快速检查前缀和后缀是否大部分相同
             min_len = min(l1, l2)
-            check_len = min(50, min_len)
+            check_len = min(settings.rag_dedup_prefix_check_length, min_len)
             if c1[:check_len] == c2[:check_len] and c1[-check_len:] == c2[-check_len:]:
                 # 如果首尾都相同，则大概率是重复内容，进行完整比对
                 ratio = difflib.SequenceMatcher(None, c1, c2).ratio()
-                if ratio > 0.9:
+                similarity_threshold = settings.rag_dedup_similarity_threshold
+                if ratio > similarity_threshold:
                     return True
 
         return False
@@ -710,7 +747,9 @@ class RetrievalService:
                     if original_keywords
                     else 0
                 )
-                keyword_bonus = original_match_ratio * 0.2
+                keyword_bonus = (
+                    original_match_ratio * settings.rag_scoring_keyword_bonus_multiplier
+                )
                 logger.debug(
                     f"Processing result {i}: 关键词匹配={matched_original}/{len(original_keywords)}, 加成={keyword_bonus:.4f}"
                 )
@@ -720,11 +759,11 @@ class RetrievalService:
                 f"Processing result {i}: 内部绝对分数={final_score:.4f} (原始={raw_score:.4f} + 加成={keyword_bonus:.4f})"
             )
 
-            # 将内部绝对分数映射为人类友好的展示分数 (60% - 98%)
-            # 内部绝对分数通常在 0.25 (阈值) 到 0.65 之间
-            max_expected_score = 0.65
-            base_display_score = 0.60
-            max_display_score = 0.98
+            # 将内部绝对分数映射为人类友好的展示分数
+            # 内部绝对分数通常在阈值到 max_expected_score 之间
+            max_expected_score = settings.rag_scoring_max_expected_score
+            base_display_score = settings.rag_scoring_base_display_score
+            max_display_score = settings.rag_scoring_max_display_score
 
             if final_score >= max_expected_score:
                 display_score = max_display_score
@@ -781,6 +820,7 @@ class RetrievalService:
                     "content": content,
                     "score": display_score,
                     "raw_score": final_score,
+                    "age_fit_score": None,  # 搜索页不计算年龄适配度，后续如需支持需修改 search_content 签名
                     "source_book": source_book,
                     "chapter_title": metadata.get("chapter_title"),
                     "page_label": page_label,
@@ -816,24 +856,24 @@ class RetrievalService:
                 logger.warning(f"Prompt injection detected in query rewrite: {reason}")
                 query = prompt_injection_guard.sanitize_content(query)
 
-            # 使用工厂创建 LLM 实例
-            llm = LLMServiceFactory.create(
+            # 使用工厂创建 LLM 实例（使用兼容层保持向后兼容）
+            llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LANGCHAIN,
                 model_name=settings.llm_models["query_rewrite"],
                 scenario="query_rewrite",
                 temperature=0.6,
             )
 
+            # 通过 PromptManager 获取提示词并渲染
+            system_prompt = await prompt_manager.get_prompt("rag_query_rewrite")
+            user_prompt = await prompt_manager.get_prompt(
+                "rag_query_rewrite", variables={"age": age, "query": query}
+            )
+
             # 构建提示词
             messages = [
-                LLMMessage(
-                    role="system",
-                    content="你是一个查询优化专家，负责将用户的自然语言查询重写为更适合检索的关键词组合。",
-                ),
-                LLMMessage(
-                    role="user",
-                    content=QUERY_REWRITE_PROMPT.format(age=age, query=query),
-                ),
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=user_prompt),
             ]
 
             # 调用 LLM
@@ -921,9 +961,12 @@ class RetrievalService:
             # Use LangChain structured output parser to enforce JSON format
             parser = PydanticOutputParser(pydantic_object=SynonymExpansionResult)
 
+            # 通过 PromptManager 获取提示词并渲染
+            base_prompt = await prompt_manager.get_prompt("synonym_expansion")
+
             # Create prompt template with format instructions
             prompt = PromptTemplate(
-                template=SYNONYM_EXPANSION_PROMPT + "\n{format_instructions}\n",
+                template=base_prompt + "\n{format_instructions}\n",
                 input_variables=["query"],
                 partial_variables={
                     "format_instructions": parser.get_format_instructions()
@@ -936,8 +979,11 @@ class RetrievalService:
             # 使用安全包装的提示词
             safe_prompt = formatted_prompt
 
-            # 使用工厂创建 LLM 实例
-            llm = LLMServiceFactory.create(
+            # 通过 PromptManager 获取系统提示词
+            system_prompt = await prompt_manager.get_prompt("synonym_expansion")
+
+            # 使用工厂创建 LLM 实例（使用兼容层保持向后兼容）
+            llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LANGCHAIN,
                 model_name=settings.llm_models["query_rewrite"],
                 scenario="synonym_expansion",
@@ -946,10 +992,7 @@ class RetrievalService:
 
             # 构建提示词
             messages = [
-                LLMMessage(
-                    role="system",
-                    content="你是一个同义词扩展专家，负责为用户的查询生成相关的同义词和相关术语，以提高检索召回率。",
-                ),
+                LLMMessage(role="system", content=system_prompt),
                 LLMMessage(role="user", content=safe_prompt),
             ]
 
@@ -992,11 +1035,32 @@ class RetrievalService:
             if query not in synonym_list:
                 synonym_list.insert(0, query)
 
-            # 去重后拼接
+            # 去重
             all_terms = list(dict.fromkeys(synonym_list))
+
+            # 质量验证（Phase C-1 新增）
+            if self._synonym_validator:
+                report = self._synonym_validator.validate(all_terms, query)
+
+                if not report.is_valid:
+                    logger.warning(
+                        f"同义词质量验证未通过：{len(report.rejected_terms)} 个词被拒绝，"
+                        f"原因：{report.rejected_terms[:3]}"
+                    )
+                    all_terms = report.valid_terms
+
+                    if len(all_terms) <= 1:
+                        logger.warning("同义词质量验证后无有效扩展词，使用本地扩展")
+                        return self._local_expand_synonyms(query)
+
+                logger.info(
+                    f"同义词验证通过：{len(report.valid_terms)} 个有效词，"
+                    f"{len(report.rejected_terms)} 个被过滤"
+                )
+
             expanded_query = " ".join(all_terms)
 
-            # 质量验证
+            # 保留原有验证作为二次检查
             if not self._validate_expansion(expanded_query, query):
                 logger.warning(f"同义词扩展质量验证失败，使用本地扩展")
                 return self._local_expand_synonyms(query)
@@ -1009,24 +1073,17 @@ class RetrievalService:
             return self._local_expand_synonyms(query)
 
     def _local_expand_synonyms(self, query: str) -> str:
-        """本地同义词扩展兜底逻辑"""
-        synonyms_dict = {
-            "大运动": ["粗大动作", "运动能力", "平衡能力"],
-            "精细动作": ["手眼协调", "手指灵活性"],
-            "语言": ["表达能力", "沟通能力", "词汇量"],
-            "认知": ["思维能力", "逻辑推理", "注意力"],
-            "社交": ["人际交往", "情绪管理", "同伴关系"],
-            "专注力": ["注意力", "集中力"],
-            "感统": ["感觉统合", "前庭觉", "触觉"],
-            "家长": ["父母", "家长教育", "家庭教育", "亲子", "育儿"],
-        }
+        """本地同义词扩展兜底逻辑（Phase C-2 升级）"""
+        if not self._local_expander:
+            return query
 
-        expanded_terms = [query]
-        for word, syns in synonyms_dict.items():
-            if word in query:
-                expanded_terms.extend(syns)
+        synonyms = self._local_expander.expand(query)
 
-        return " ".join(list(dict.fromkeys(expanded_terms)))
+        if self._synonym_validator:
+            report = self._synonym_validator.validate(synonyms, query)
+            synonyms = report.valid_terms
+
+        return " ".join(synonyms)
 
     def _get_cache_key(self, query: str, age: int, limit: int) -> tuple:
         """生成包含索引版本和配置指纹的缓存键"""

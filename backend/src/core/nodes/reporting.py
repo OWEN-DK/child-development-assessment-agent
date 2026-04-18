@@ -10,11 +10,27 @@ from src.model.schemas import (
     EvaluationResult,
 )
 from src.core.nodes.base import BaseNode
-from src.core.prompts import REPORTING_SYSTEM_PROMPT
+from src.core.prompt.manager import prompt_manager
 from src.utils.logger import logger
 import asyncio
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
 from src.core.llm.base import LLMRequest, LLMMessage
+
+
+# 全局工厂实例（延迟初始化）
+_llm_factory = None
+
+
+def _get_llm_factory() -> LLMServiceFactory:
+    """获取 LLM 工厂实例（延迟初始化）"""
+    global _llm_factory
+    if _llm_factory is None:
+        from src.config.core.manager import config_manager
+        from src.core.llm.provider_registry import ProviderRegistry
+
+        provider_registry = ProviderRegistry()
+        _llm_factory = LLMServiceFactory(config_manager, provider_registry)
+    return _llm_factory
 
 
 class ReportingNode(BaseNode):
@@ -183,8 +199,12 @@ class ReportingNode(BaseNode):
                     p = p.replace(k, v)
                 return p
 
-            # Single-pass generation
-            formatted_prompt_full = format_prompt(REPORTING_SYSTEM_PROMPT, replacements)
+            # Single-pass generation - 通过 PromptManager 获取提示词并渲染
+            # 注意：replacements 的键是带花括号的格式，需要转换为 str.format() 所需的格式
+            format_variables = {k.strip("{}"): v for k, v in replacements.items()}
+            formatted_prompt_full = await prompt_manager.get_prompt(
+                "reporting_system", variables=format_variables
+            )
 
         except Exception as e:
             logger.error(f"Prompt formatting failed: {e}")
@@ -211,13 +231,9 @@ class ReportingNode(BaseNode):
         markdown_content = ""
         if settings.dashscope_api_key:
             try:
-                # 使用工厂创建 LLM 实例
-                llm = LLMServiceFactory.create(
-                    framework=LLMFramework.LLAMAINDEX,
-                    model_name=settings.llm_models["report_generation"],
-                    scenario="report_generation",
-                    temperature=0.7,
-                )
+                # 使用新的异步工厂创建 LLM 实例
+                factory = _get_llm_factory()
+                llm = await factory.create("report_generation", framework="llamaindex")
 
                 # 构建提示词
                 messages = [
@@ -228,20 +244,21 @@ class ReportingNode(BaseNode):
                     LLMMessage(role="user", content=formatted_prompt_full),
                 ]
 
-                # 调用 LLM
+                # 调用 LLM（temperature/max_tokens 由工厂从配置自动读取）
                 logger.info("Starting report generation...")
                 response = await llm.chat(
                     LLMRequest(
                         messages=messages,
-                        model_name=settings.llm_models["report_generation"],
-                        temperature=0.7,
-                        max_tokens=8000,
+                        model_name=settings.model_report_generation,
                         scenario="report_generation",
                         prompt_key="report_generation",
                     )
                 )
                 markdown_content = response.content.strip()
                 logger.info("Report generation completed.")
+
+                # 释放引用
+                await factory.release("report_generation", framework="llamaindex")
 
             except Exception as e:
                 logger.error(f"Reporting failed: {e}")

@@ -3,6 +3,7 @@ import { PageContainer, ProLayout } from '@ant-design/pro-components';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
+import { ExperimentOutlined } from '@ant-design/icons';
 
 function App() {
   const location = useLocation();
@@ -29,7 +30,15 @@ function App() {
               { path: '/', name: '首页' },
               { path: '/knowledge-base', name: '知识库' },
                { path: '/knowledge-search', name: '内容搜索' },
-               { path: '/rag-evaluation', name: '回撤测试' },
+               {
+                 path: '/rag-eval',
+                 name: 'RAG 评估',
+                 icon: <ExperimentOutlined />,
+                 children: [
+                   { path: '/rag-eval/test-sets', name: '测试集管理' },
+                   { path: '/rag-eval/runs', name: '运行历史' },
+                 ],
+               },
                { path: '/prompt-management', name: '提示词管理' },
                { path: '/monitoring', name: 'LLM监控' },
                { path: '/system-config', name: '系统配置' },

@@ -188,6 +188,73 @@ class ConfigManager:
             logger.info(f"新配置版本已保存: {new_version.id}")
             return new_version
 
+    async def reset_to_factory(
+        self, config_snapshot: dict[str, Any], created_by: str = "system"
+    ) -> ConfigVersion:
+        """
+        恢复出厂设置
+
+        - 创建新版本（is_factory_reset=True）
+        - 记录 RESET 审计日志
+        - 更新当前版本
+        """
+        from src.core.distributed_lock import DistributedLock
+        from src.models.config import ConfigAction
+
+        async with DistributedLock.execute_with_lock(self._lock_name):
+            version_repo, audit_repo = self._get_repos()
+            version_id = (
+                f"v_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
+
+            await version_repo.create(
+                {
+                    "id": version_id,
+                    "created_at": datetime.now(),
+                    "created_by": created_by,
+                    "description": "恢复出厂设置",
+                    "config_snapshot": config_snapshot,
+                    "parent_version_id": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "is_factory_reset": True,
+                }
+            )
+
+            await audit_repo.create(
+                {
+                    "action": ConfigAction.RESET,
+                    "from_version": self._current_version.id
+                    if self._current_version
+                    else None,
+                    "to_version": version_id,
+                    "user": created_by,
+                }
+            )
+
+            new_version = ConfigVersion(
+                id=version_id,
+                created_at=datetime.now(),
+                created_by=created_by,
+                description="恢复出厂设置",
+                config_snapshot=config_snapshot,
+                parent_version_id=self._current_version.id
+                if self._current_version
+                else None,
+                is_factory_reset=True,
+            )
+            self._current_version = new_version
+            await cache_service.delete(f"{self._cache_key_prefix}latest")
+            await cache_service.invalidate_tag("config")
+            event_bus.publish(
+                ConfigChangedEvent(
+                    version_id=new_version.id,
+                    changed_keys=list(config_snapshot.keys()),
+                )
+            )
+            logger.info(f"配置已恢复出厂设置: {new_version.id}")
+            return new_version
+
     async def rollback_to_version(
         self, version_id: str, created_by: str = "system"
     ) -> ConfigVersion:

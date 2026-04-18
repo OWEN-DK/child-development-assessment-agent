@@ -32,6 +32,7 @@
 | **RAG 完整技术文档**| `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` | RAG 系统完整的技术细节与 API 规范 |
 | **RAG+LLM 重构计划**| `docs/superpowers/plans/rag-llm-refactoring/` | RAG 与 LLM 架构重构的详细实施方案、进度追踪与验收标准 |
 | **RAG页面重构计划**| `docs/superpowers/plans/rag-evaluation-page-refactoring/` | RAG 评估页面的6层校验诊断、工作流及 SSE 推送的详细重构计划 |
+| **统一响应与异常规范**| `docs/specs/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
 
 ---
 
@@ -62,6 +63,23 @@
    - 系统全局配置页面通过独立路由 `/system-config` 访问。
 3. **依赖管理**: 后端依赖只允许在 `pyproject.toml` 中声明，使用 `uv add`。前端使用 `package.json`。
 4. **代码风格**: Python 遵循 PEP 8，使用强类型注解；前端使用 TS 严格模式。**代码注释必须全中文**。
+5. **实体类集中管理（强制）**: 
+   - **绝对禁止**在 `service/`、`controller/`、`core/` 中定义 `class xxx(BaseModel)`。
+   - 所有 Pydantic 实体类必须统一放置在 `backend/src/schemas/` 目录下，按业务模块组织（如 `schemas/assessment.py`、`schemas/rag.py`）。
+   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 2 章。
+6. **类职责拆分（强制）**: 
+   - 单类不超过 **200 行**（含空行和注释），违反则必须拆分。
+   - 使用门面模式（Facade）对外提供统一 API，内部协调子服务。
+   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 3 章。
+7. **冗余代码消除（强制）**: 
+   - 禁止重复定义相同功能的函数，必须提取至 `utils/` 目录下的对应工具模块。
+   - 高频重复模式：Session 管理、错误处理、模型序列化、文件操作、时间处理。
+   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 4 章。
+8. **统一响应与异常（强制）**: 
+   - 所有接口返回统一格式：`{code: 0, message: "success", data: {...}}`（成功）或 `{code, message, error_code, details}`（错误）。
+   - 保持 HTTP 语义（200/4xx/5xx），业务错误码采用双字段：`code`（数字）+ `error_code`（字符串）。
+   - 所有业务异常必须继承 `AppException`，禁止直接使用 `HTTPException`。
+   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 5-7 章。
 
 ---
 
@@ -92,6 +110,13 @@
 
 ### 5. 前端 SPA 路由
 - **刷新 404 问题**: 前端使用 BrowserHistory，后端必须配置 SPA 回退路由，将非 API 路径的 404 请求返回 `index.html`。
+
+### 6. 统一响应与异常处理
+- **禁止 HTTPException**: 所有业务异常必须使用 `AppException` 或其子类，通过全局异常处理器统一格式化。
+- **响应格式**: 成功响应必须使用 `APIResponse.success(data)` 包装，禁止直接返回字典。
+- **实体类位置**: 发现 `class xxx(BaseModel)` 在 controller/service 中定义，必须迁移至 `schemas/` 目录。
+- **类长度限制**: 单类超过 200 行必须拆分，使用门面模式协调子服务。
+- **工具函数优先**: 遇到重复代码（Session 管理、文件操作、时间处理等），必须先检查 `utils/` 是否已有对应函数，禁止重复定义。
 
 ---
 

@@ -1,0 +1,219 @@
+"""配置缓存单例
+
+提供配置快照的内存缓存，支持 Redis Pub/Sub 事件驱动的自动刷新和过期清理。
+"""
+
+import asyncio
+from datetime import datetime, timedelta
+from typing import Any
+
+from sqlalchemy import select, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.database import async_session_factory
+from src.models.rag_eval.config_version import RagEvalConfigVersion
+from src.utils.logger import logger
+
+
+class ConfigCache:
+    """配置缓存单例
+
+    Features:
+        - 单例模式：全局唯一实例
+        - 内存缓存：以 config_version_id 为键存储配置快照
+        - 自动过期：缓存条目 5 分钟后自动清理
+        - Redis 事件驱动：监听 config_changed 事件自动刷新
+        - 并发安全：使用 asyncio.Lock 防止并发刷新
+    """
+
+    _instance: "ConfigCache | None" = None
+
+    def __new__(cls) -> "ConfigCache":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init()
+        return cls._instance
+
+    def _init(self) -> None:
+        """初始化实例属性"""
+        self._cache: dict[str, dict[str, Any]] = {}
+        self._lock = asyncio.Lock()
+        self._redis_client = None
+        self._latest_config_id: str | None = None
+        self._cache_ttl_minutes = 5  # 缓存过期时间（分钟）
+        self._listen_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task | None = None
+        self._initialized = False
+
+    @classmethod
+    def get_instance(cls) -> "ConfigCache":
+        """获取单例实例
+
+        Returns:
+            ConfigCache: 单例实例
+        """
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    async def initialize(self, redis_client: Any) -> None:
+        """初始化缓存
+
+        加载最新配置并订阅 Redis 事件。
+
+        Args:
+            redis_client: Redis 异步客户端实例
+        """
+        self._redis_client = redis_client
+
+        # 加载最新配置
+        await self.reload()
+
+        # 订阅 Redis 配置变更事件
+        try:
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe("config_changed")
+            # 启动后台监听任务
+            self._listen_task = asyncio.create_task(self._listen_config_changes(pubsub))
+            logger.info("ConfigCache 已初始化，已订阅 Redis config_changed 事件")
+        except Exception as e:
+            logger.warning(f"ConfigCache Redis 订阅失败，将使用手动刷新: {e}")
+
+        # 启动后台清理任务
+        self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+        self._initialized = True
+
+    async def reload(self) -> None:
+        """从数据库重新加载最新配置
+
+        使用锁防止并发刷新。
+        """
+        async with self._lock:
+            try:
+                async with async_session_factory() as session:
+                    stmt = (
+                        select(RagEvalConfigVersion)
+                        .order_by(desc(RagEvalConfigVersion.created_at))
+                        .limit(1)
+                    )
+                    result = await session.execute(stmt)
+                    latest = result.scalars().first()
+
+                    if latest:
+                        now = datetime.now()
+                        self._cache[latest.id] = {
+                            "config_snapshot": latest.config_snapshot,
+                            "loaded_at": now,
+                            "expires_at": now
+                            + timedelta(minutes=self._cache_ttl_minutes),
+                        }
+                        self._latest_config_id = latest.id
+                        logger.info(
+                            f"ConfigCache 已加载最新配置: version_id={latest.id}"
+                        )
+                    else:
+                        logger.info("ConfigCache 数据库中无配置记录")
+            except Exception as e:
+                logger.error(f"ConfigCache 重新加载失败: {e}")
+
+    def get_config(self, config_version_id: str) -> dict[str, Any] | None:
+        """获取缓存中的配置快照
+
+        Args:
+            config_version_id: 配置版本ID
+
+        Returns:
+            dict | None: 配置快照，不存在或已过期时返回 None
+        """
+        entry = self._cache.get(config_version_id)
+        if entry is None:
+            return None
+
+        # 检查是否过期
+        if datetime.now() > entry["expires_at"]:
+            # 过期条目将在后台清理任务中移除
+            return None
+
+        return entry["config_snapshot"]
+
+    def get_latest_config(self) -> dict[str, Any] | None:
+        """获取最近加载的配置快照
+
+        Returns:
+            dict | None: 最新配置快照，未加载时返回 None
+        """
+        if self._latest_config_id is None:
+            return None
+        return self.get_config(self._latest_config_id)
+
+    async def _listen_config_changes(self, pubsub: Any) -> None:
+        """后台任务：监听 Redis 配置变更事件
+
+        收到 config_changed 事件后自动重新加载配置。
+
+        Args:
+            pubsub: Redis Pub/Sub 客户端
+        """
+        try:
+            async for message in pubsub.listen():
+                if (
+                    message["type"] == "message"
+                    and message["channel"] == "config_changed"
+                ):
+                    logger.info("ConfigCache 收到 config_changed 事件，开始重新加载")
+                    await self.reload()
+        except asyncio.CancelledError:
+            logger.info("ConfigCache 监听任务已取消")
+        except Exception as e:
+            logger.error(f"ConfigCache 监听事件异常: {e}")
+
+    async def _cleanup_expired(self) -> None:
+        """清理已过期的缓存条目"""
+        now = datetime.now()
+        expired_keys = [
+            key for key, entry in self._cache.items() if now > entry["expires_at"]
+        ]
+        for key in expired_keys:
+            del self._cache[key]
+        if expired_keys:
+            logger.info(f"ConfigCache 已清理 {len(expired_keys)} 个过期条目")
+
+    async def _periodic_cleanup(self) -> None:
+        """定期清理过期缓存条目"""
+        while True:
+            try:
+                await asyncio.sleep(60)  # 每分钟检查一次
+                await self._cleanup_expired()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"ConfigCache 定期清理异常: {e}")
+
+    def clear(self) -> None:
+        """清空所有缓存（主要用于测试）"""
+        self._cache.clear()
+        self._latest_config_id = None
+
+    async def shutdown(self) -> None:
+        """关闭缓存服务，取消后台任务
+
+        在应用关闭时调用，确保后台任务正确清理。
+        """
+        # 取消监听任务
+        if self._listen_task and not self._listen_task.done():
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                logger.info("ConfigCache 监听任务已关闭")
+
+        # 取消清理任务
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                logger.info("ConfigCache 清理任务已关闭")
+
+        self._initialized = False
+        logger.info("ConfigCache 已关闭")

@@ -4,6 +4,9 @@ import {
   ConfigVersion,
   ConfigUpdateRequest,
   ConfigUpdateResponse,
+  ConfigResetRequest,
+  HealthDiagnosticRequest,
+  HealthDiagnosticResponse,
 } from './types';
 
 export const configApi = {
@@ -15,7 +18,7 @@ export const configApi = {
     request: ConfigUpdateRequest
   ): Promise<ConfigUpdateResponse> => {
     return apiClient.post('/api/v1/config/save', {
-      config_snapshot: request.config,
+      config_snapshot: request.config_snapshot,
       description: request.description
     }).then((r) => r.data);
   },
@@ -30,7 +33,18 @@ export const configApi = {
     }).then((r) => r.data);
   },
 
-  resetToFactory: async (): Promise<any> => {
-    return apiClient.post('/api/v1/config/reset').then((r) => r.data);
+  resetToFactory: async (request: ConfigResetRequest): Promise<any> => {
+    return apiClient.post('/api/v1/config/reset', {
+      confirm: request.confirm,
+      reason: request.reason
+    }).then((r) => r.data);
+  },
+
+  runHealthDiagnostic: async (
+    request: HealthDiagnosticRequest
+  ): Promise<HealthDiagnosticResponse> => {
+    return apiClient.post('/api/v1/config/health', {
+      config: request.config
+    }).then((r) => r.data);
   },
 };

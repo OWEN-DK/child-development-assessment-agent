@@ -32,6 +32,7 @@ export const ConfigVersionSelector: React.FC = () => {
         )}
         {versions.map((v) => {
           const versionId = v.id || v.version_id;
+          if (!versionId) return null;
           const isActive = v.id === activeVersion || v.version_id === activeVersion;
           return (
             <div key={versionId} className={styles.versionItem}>

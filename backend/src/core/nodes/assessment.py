@@ -4,10 +4,26 @@ from src.config import settings
 from src.config.rules import rules
 from src.model.schemas import AgentState, ChildState, DevelopmentStatus
 from src.core.nodes.base import BaseNode
-from src.core.prompts import ASSESSMENT_SYSTEM_PROMPT
+from src.core.prompt.manager import prompt_manager
 from src.utils.logger import logger
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
 from src.core.llm.base import LLMRequest, LLMMessage
+
+
+# 全局工厂实例（延迟初始化）
+_llm_factory = None
+
+
+def _get_llm_factory() -> LLMServiceFactory:
+    """获取 LLM 工厂实例（延迟初始化）"""
+    global _llm_factory
+    if _llm_factory is None:
+        from src.config.core.manager import config_manager
+        from src.core.llm.provider_registry import ProviderRegistry
+
+        provider_registry = ProviderRegistry()
+        _llm_factory = LLMServiceFactory(config_manager, provider_registry)
+    return _llm_factory
 
 
 class AssessmentNode(BaseNode):
@@ -32,8 +48,7 @@ class AssessmentNode(BaseNode):
         # 2. 获取年龄里程碑（后续可替换为MCP调用）
         milestones = self._get_age_milestones(child.age)
 
-        # 3. 构建 Prompt
-        # 动态构建输入数据部分，没有历史数据则跳过历史特征
+        # 3. 构建输入数据
         input_lines = [
             f"- 姓名: {child.name}",
             f"- 年龄: {child.age} 岁",
@@ -44,44 +59,46 @@ class AssessmentNode(BaseNode):
             input_lines.append(f"- 历史运动特征: {history_summary}")
 
         input_data = "\n".join(input_lines)
-        prompt = ASSESSMENT_SYSTEM_PROMPT.format(
-            milestones=milestones,
-            input_data=input_data,
+
+        # 4. 通过 PromptManager 获取提示词并渲染
+        system_prompt = await prompt_manager.get_prompt(
+            "assessment_system",
+            variables={
+                "milestones": milestones,
+                "input_data": input_data,
+            },
         )
 
-        # 4. 调用 LLM (评估使用qwen-plus模型，专业推理能力)
+        # 5. 调用 LLM (评估使用qwen-plus模型，专业推理能力)
         if settings.dashscope_api_key:
             try:
-                # 使用工厂创建 LLM 实例
-                llm = LLMServiceFactory.create(
-                    framework=LLMFramework.LLAMAINDEX,
-                    model_name=settings.llm_models["assessment"],
-                    scenario="assessment",
-                    temperature=0.5,
-                )
+                # 使用新的异步工厂创建 LLM 实例
+                factory = _get_llm_factory()
+                llm = await factory.create("assessment", framework="llamaindex")
 
                 # 构建提示词
                 messages = [
                     LLMMessage(
                         role="system",
-                        content="你是一个专业的儿童发展评估专家，根据提供的儿童信息和发展里程碑生成结构化的评估结果。",
+                        content=system_prompt,
                     ),
-                    LLMMessage(role="user", content=prompt),
+                    LLMMessage(role="user", content="请根据上述信息生成评估结果。"),
                 ]
 
-                # 调用 LLM
+                # 调用 LLM（temperature/max_tokens 由工厂从配置自动读取）
                 response = await llm.chat(
                     LLMRequest(
                         messages=messages,
-                        model_name=settings.llm_models["assessment"],
-                        temperature=0.5,
-                        max_tokens=1024,
+                        model_name=settings.model_assessment,
                         scenario="assessment",
                         prompt_key="assessment",
                     )
                 )
                 response_text = response.content.strip()
                 logger.debug(f"LLM Assessment Raw Response: {response_text}")
+
+                # 释放引用
+                await factory.release("assessment", framework="llamaindex")
 
                 # 清理可能的 Markdown 标记
                 if response_text.startswith("```json"):

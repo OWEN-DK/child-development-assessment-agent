@@ -10,7 +10,7 @@ from collections import defaultdict
 from sqlalchemy import select
 from src.models.rag_eval.test_set_case import RagEvalTestSetCase
 from src.models.rag_eval.test_case import RagEvalTestCase
-from src.models.test_case import SourceDocument
+from src.models.document import SourceDocument
 
 logger = logging.getLogger(__name__)
 

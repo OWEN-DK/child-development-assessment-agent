@@ -78,6 +78,23 @@ class RagRetrievalSettings(BaseSettings):
         description="不同查询类型的 BM25 权重",
     )
 
+    # 查询权重动态策略
+    rag_weight_strategy: str = Field(
+        default="dynamic",
+        validation_alias="RAG_WEIGHT_STRATEGY",
+        description="权重策略：dynamic（动态）/ fixed（固定）",
+    )
+    rag_weight_by_query_type: Dict[str, Dict[str, float]] = Field(
+        default_factory=lambda: {
+            "short": {"bm25": 0.3, "vector": 0.7},
+            "terminology": {"bm25": 0.7, "vector": 0.3},
+            "descriptive": {"bm25": 0.4, "vector": 0.6},
+            "complex": {"bm25": 0.5, "vector": 0.5},
+            "default": {"bm25": 0.5, "vector": 0.5},
+        },
+        description="按查询类型的权重配置",
+    )
+
     # 搜索页面专用
     rag_search_bm25_weight: float = Field(
         default=0.5,
@@ -116,6 +133,11 @@ class RagRetrievalSettings(BaseSettings):
     )
 
     # 重排序相关
+    rag_reranker_provider: str = Field(
+        default="local",
+        validation_alias="RAG_RERANKER_PROVIDER",
+        description="Reranker 提供商（local/cohere/voyage）",
+    )
     rag_reranker_model: str = Field(
         default="BAAI/bge-reranker-v2-m3",
         validation_alias="RAG_RERANKER_MODEL",
@@ -155,15 +177,30 @@ class RagRetrievalSettings(BaseSettings):
     )
 
     # 年龄过滤相关
+    rag_age_filter_mode: str = Field(
+        default="strict",
+        validation_alias="RAG_AGE_FILTER_MODE",
+        description="年龄过滤模式：strict（严格）| loose（宽松）",
+    )
+    rag_age_filter_tolerance_strict: int = Field(
+        default=1,
+        validation_alias="RAG_AGE_FILTER_TOLERANCE_STRICT",
+        description="严格模式 tolerance（岁）",
+    )
+    rag_age_filter_tolerance_loose: int = Field(
+        default=2,
+        validation_alias="RAG_AGE_FILTER_TOLERANCE_LOOSE",
+        description="宽松模式 tolerance（岁）",
+    )
     rag_age_filter_strictness: float = Field(
         default=0.7,
         validation_alias="RAG_AGE_FILTER_STRICTNESS",
-        description="年龄过滤严格程度",
+        description="年龄过滤严格程度（向后兼容）",
     )
     rag_age_filter_tolerance: int = Field(
         default=2,
         validation_alias="RAG_AGE_FILTER_TOLERANCE",
-        description="年龄容忍范围（岁）",
+        description="年龄容忍范围（岁）（向后兼容）",
     )
     rag_age_fit_weight: float = Field(
         default=0.3, validation_alias="RAG_AGE_FIT_WEIGHT", description="年龄适配度权重"
@@ -184,6 +221,28 @@ class RagRetrievalSettings(BaseSettings):
         default=True,
         validation_alias="FUSION_DEDUP_NORMALIZE",
         description="去重归一化",
+    )
+
+    # 去重相关
+    rag_dedup_containment_threshold: float = Field(
+        default=0.8,
+        validation_alias="RAG_DEDUP_CONTAINMENT_THRESHOLD",
+        description="去重包含关系阈值（较短内容占较长内容的比例）",
+    )
+    rag_dedup_length_diff_threshold: float = Field(
+        default=0.2,
+        validation_alias="RAG_DEDUP_LENGTH_DIFF_THRESHOLD",
+        description="去重长度差异阈值（长度接近才进行相似度比较）",
+    )
+    rag_dedup_similarity_threshold: float = Field(
+        default=0.9,
+        validation_alias="RAG_DEDUP_SIMILARITY_THRESHOLD",
+        description="去重相似度阈值（difflib.SequenceMatcher 比值）",
+    )
+    rag_dedup_prefix_check_length: int = Field(
+        default=50,
+        validation_alias="RAG_DEDUP_PREFIX_CHECK_LENGTH",
+        description="去重前缀/后缀检查长度",
     )
 
     # 通用阈值

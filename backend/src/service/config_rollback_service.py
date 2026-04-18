@@ -65,54 +65,56 @@ async def rollback_to_version(
     max_version_result = await session.execute(max_version_stmt)
     max_version_number = max_version_result.scalar_one_or_none() or 0
 
-    # 3. 创建新的 ConfigVersion（复制目标版本的快照）
-    new_version = RagEvalConfigVersion(
-        id=str(uuid.uuid4()),
-        version_number=max_version_number + 1,
-        version_label=f"rollback-{target_version.version_label}",
-        config_snapshot=target_version.config_snapshot.copy(),
-        created_by=user_id,
-        change_summary=f"回滚到版本 {target_version.version_label}: {reason}",
-    )
-    session.add(new_version)
-    await session.flush()  # 获取 new_version.id
-
-    # 4. 创建新的 ConfigChangeSet（status=rolled_back）
-    change_set_label = (
-        f"CS-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid.uuid4())[:3].upper()}"
-    )
-    change_set = RagEvalConfigChangeSet(
-        id=str(uuid.uuid4()),
-        change_set_label=change_set_label,
-        config_version_id=new_version.id,
-        status=RagEvalChangeSetStatus.ROLLED_BACK,
-        rollback_reason=reason,
-    )
-    session.add(change_set)
-    await session.flush()
-
-    # 5. 复制目标版本关联的 PromptVersions
-    prompt_stmt = (
-        select(RagEvalPromptVersion)
-        .where(
-            RagEvalPromptVersion.created_by
-            == user_id  # 简化处理：复制用户相关的 prompt
-        )
-        .order_by(RagEvalPromptVersion.created_at.desc())
-    )
-    prompt_result = await session.execute(prompt_stmt)
-    prompt_versions = prompt_result.scalars().all()
-
-    # 创建 ChangeSetPrompt 关联
-    for prompt_version in prompt_versions:
-        change_set_prompt = RagEvalConfigChangeSetPrompt(
+    # 3-5. 原子事务：创建新版本、变更集、复制提示词
+    async with session.begin():
+        # 创建新的 ConfigVersion（复制目标版本的快照）
+        new_version = RagEvalConfigVersion(
             id=str(uuid.uuid4()),
-            change_set_id=change_set.id,
-            prompt_id=prompt_version.id,
+            version_number=max_version_number + 1,
+            version_label=f"rollback-{target_version.version_label}",
+            config_snapshot=target_version.config_snapshot.copy(),
+            created_by=user_id,
+            change_summary=f"回滚到版本 {target_version.version_label}: {reason}",
         )
-        session.add(change_set_prompt)
+        session.add(new_version)
+        await session.flush()  # 获取 new_version.id
 
-    # 6. 发布 Redis config_changed 事件
+        # 创建新的 ConfigChangeSet（status=rolled_back）
+        change_set_label = (
+            f"CS-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid.uuid4())[:3].upper()}"
+        )
+        change_set = RagEvalConfigChangeSet(
+            id=str(uuid.uuid4()),
+            change_set_label=change_set_label,
+            config_version_id=new_version.id,
+            status=RagEvalChangeSetStatus.ROLLED_BACK,
+            rollback_reason=reason,
+        )
+        session.add(change_set)
+        await session.flush()
+
+        # 复制目标版本关联的 PromptVersions
+        prompt_stmt = (
+            select(RagEvalPromptVersion)
+            .where(
+                RagEvalPromptVersion.created_by
+                == user_id  # 简化处理：复制用户相关的 prompt
+            )
+            .order_by(RagEvalPromptVersion.created_at.desc())
+        )
+        prompt_result = await session.execute(prompt_stmt)
+        prompt_versions = prompt_result.scalars().all()
+
+        # 创建 ChangeSetPrompt 关联
+        for prompt_version in prompt_versions:
+            change_set_prompt = RagEvalConfigChangeSetPrompt(
+                id=str(uuid.uuid4()),
+                change_set_id=change_set.id,
+                prompt_id=prompt_version.id,
+            )
+            session.add(change_set_prompt)
+
+    # 6. 发布 Redis config_changed 事件（在事务外执行）
     try:
         redis_client = RedisClient.get_client()
         await redis_client.publish(

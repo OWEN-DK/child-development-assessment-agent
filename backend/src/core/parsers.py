@@ -13,28 +13,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from llama_index.core.schema import Document
 from src.config import settings
 from src.utils.logger import logger
+from src.config.modules.models.llm import LLMSceneConfig
 
 
 class PDFParseError(Exception):
     """PDF解析失败异常"""
+
     pass
 
 
 class PDFCorruptedError(PDFParseError):
     """PDF文件损坏异常"""
+
     pass
 
 
 class ParserServiceError(PDFParseError):
     """解析服务不可用异常"""
+
     pass
 
 
 class ParserType:
     """解析器类型枚举"""
-    TEXT = "text"      # 传统文本提取
-    OCR = "ocr"        # OCR解析（TBD，当前使用VL作为OCR替代）
-    VLM = "vlm"        # VLM解析
+
+    TEXT = "text"  # 传统文本提取
+    OCR = "ocr"  # OCR解析（TBD，当前使用VL作为OCR替代）
+    VLM = "vlm"  # VLM解析
+
 
 # Suppress ebooklib warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="ebooklib")
@@ -180,6 +186,22 @@ class PDFVLParser:
             tmp_img_path = tmp_img.name
 
         try:
+            # 获取 VL 场景配置（使用新的配置结构）
+            vl_scene_config = settings.llm_scene_configs.get("vl_parsing")
+            if vl_scene_config:
+                vl_model = vl_scene_config.model
+                vl_provider = vl_scene_config.provider
+            else:
+                # 向后兼容：使用旧字段
+                vl_model = settings.model_vl_parsing
+                vl_provider = "dashscope"
+
+            # 检查 API Key
+            api_key = settings.dashscope_api_key
+            if vl_provider == "dashscope" and not api_key:
+                logger.warning(f"VL parsing skipped: no API key for {vl_provider}")
+                return None
+
             # Call Qwen-VL
             messages = [
                 {
@@ -194,9 +216,9 @@ class PDFVLParser:
             ]
 
             response = dashscope.MultiModalConversation.call(
-                model=settings.model_vl_parsing,
+                model=vl_model,
                 messages=messages,
-                api_key=settings.dashscope_api_key,
+                api_key=api_key,
             )
 
             text = ""
@@ -223,7 +245,7 @@ class PDFVLParser:
                 "file_name": file_name,
                 "page_label": str(page_num + 1),
                 "total_pages": total_pages,
-                "parsing_method": "qwen-vl",
+                "parsing_method": f"{vl_provider}-{vl_model}",
             }
 
             logger.info(f"Parsed page {page_num + 1}/{total_pages} via VL.")
@@ -237,7 +259,9 @@ class PDFVLParser:
                 os.remove(tmp_img_path)
 
     @staticmethod
-    def parse(file_path: str, max_workers: int = None, progress_callback=None) -> List[Document]:
+    def parse(
+        file_path: str, max_workers: int = None, progress_callback=None
+    ) -> List[Document]:
         """
         Parse PDF file using Qwen-VL for OCR/understanding (for scanned PDFs).
         使用多线程并行解析，大幅提升速度。
@@ -246,8 +270,13 @@ class PDFVLParser:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        if not settings.dashscope_api_key:
-            raise ValueError("DashScope API Key is required for VL parsing.")
+        # 检查 API Key（使用新的配置结构）
+        vl_scene_config = settings.llm_scene_configs.get("vl_parsing")
+        vl_provider = vl_scene_config.provider if vl_scene_config else "dashscope"
+        if vl_provider == "dashscope" and not settings.dashscope_api_key:
+            raise ParserServiceError(
+                f"{vl_provider.capitalize()} API Key is required for VL parsing."
+            )
 
         doc = fitz.open(file_path)
         file_name = os.path.basename(file_path)
@@ -280,7 +309,7 @@ class PDFVLParser:
                 result = future.result()
                 if result:
                     documents.append(result)
-                
+
                 completed += 1
                 # 报告进度
                 if progress_callback:
@@ -415,7 +444,7 @@ class EPUBParser:
                 }
 
                 documents.append(Document(text=text.strip(), metadata=metadata))
-                
+
                 # 报告进度
                 if progress_callback:
                     progress_callback(idx + 1, len(processed_toc))
@@ -424,8 +453,12 @@ class EPUBParser:
         else:
             # 没有TOC，按原有逻辑处理每个document item
             logger.info("EPUB has no TOC, processing by document items")
-            document_items = [item for item in book.get_items() if item.get_type() == ebooklib.ITEM_DOCUMENT]
-            
+            document_items = [
+                item
+                for item in book.get_items()
+                if item.get_type() == ebooklib.ITEM_DOCUMENT
+            ]
+
             for idx, item in enumerate(document_items):
                 content = item.get_content()
                 soup = BeautifulSoup(content, "html.parser")
@@ -451,7 +484,7 @@ class EPUBParser:
                 }
 
                 documents.append(Document(text=text, metadata=metadata))
-                
+
                 # 报告进度
                 if progress_callback:
                     progress_callback(idx + 1, len(document_items))
@@ -466,12 +499,12 @@ class PDFParserV2:
     2. VLM失败时使用OCR解析（当前使用VL作为OCR替代）
     3. OCR失败时使用传统文本提取
     """
-    
+
     def __init__(
-        self, 
-        fallback_order: List[str] = None, 
+        self,
+        fallback_order: List[str] = None,
         min_content_length: int = 100,
-        max_workers: int = None
+        max_workers: int = None,
     ):
         """
         初始化PDF解析器
@@ -482,13 +515,13 @@ class PDFParserV2:
         self.fallback_order = fallback_order or [ParserType.VLM, ParserType.TEXT]
         self.min_content_length = min_content_length
         self.max_workers = max_workers or settings.rag_vl_max_workers
-        
+
         # 解析器映射
         self.parsers = {
             ParserType.VLM: self._parse_with_vlm,
-            ParserType.TEXT: self._parse_with_text
+            ParserType.TEXT: self._parse_with_text,
         }
-    
+
     def _clean_content(self, content: str) -> str:
         """清理解析内容，去除多余空白和特殊字符"""
         if not content:
@@ -498,32 +531,36 @@ class PDFParserV2:
         # 去除不可见字符
         content = re.sub(r"[\x00-\x1F\x7F]", "", content)
         return content.strip()
-    
+
     def _is_content_valid(self, documents: List[Document]) -> bool:
         """校验解析内容是否有效"""
         if not documents:
             return False
-        
+
         total_length = sum(len(doc.text) for doc in documents)
         avg_length = total_length / len(documents) if documents else 0
-        
+
         # 平均内容长度过短
         if avg_length < self.min_content_length:
             return False
-        
+
         # 检查乱码比例（可配置）
         sample_text = " ".join([doc.text[:100] for doc in documents[:10]])
         if not sample_text:
             return False
-            
+
         non_ascii_ratio = sum(1 for c in sample_text if ord(c) > 127) / len(sample_text)
-        if non_ascii_ratio > 0.8 and not any("\u4e00" <= c <= "\u9fff" for c in sample_text):
+        if non_ascii_ratio > 0.8 and not any(
+            "\u4e00" <= c <= "\u9fff" for c in sample_text
+        ):
             # 非ASCII字符比例过高且没有中文字符，可能是乱码
             return False
-            
+
         return True
-    
-    def _parse_with_text(self, file_path: str, progress_callback=None) -> List[Document]:
+
+    def _parse_with_text(
+        self, file_path: str, progress_callback=None
+    ) -> List[Document]:
         """使用传统文本提取解析PDF"""
         try:
             return PDFParser.parse(file_path, progress_callback=progress_callback)
@@ -531,21 +568,25 @@ class PDFParserV2:
             if "corrupted" in str(e).lower() or "invalid pdf" in str(e).lower():
                 raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
             raise PDFParseError(f"Text extraction failed: {e}") from e
-    
+
     def _parse_with_vlm(self, file_path: str, progress_callback=None) -> List[Document]:
         """使用VLM解析PDF"""
         if not settings.dashscope_api_key:
             raise ParserServiceError("DashScope API Key is required for VLM parsing.")
-            
+
         try:
-            return PDFVLParser.parse(file_path, max_workers=self.max_workers, progress_callback=progress_callback)
+            return PDFVLParser.parse(
+                file_path,
+                max_workers=self.max_workers,
+                progress_callback=progress_callback,
+            )
         except (TimeoutError, ConnectionError) as e:
             raise ParserServiceError(f"VLM service unavailable: {e}") from e
         except Exception as e:
             if "corrupted" in str(e).lower() or "invalid pdf" in str(e).lower():
                 raise PDFCorruptedError(f"PDF file corrupted: {e}") from e
             raise PDFParseError(f"VLM parse failed: {e}") from e
-    
+
     def parse(self, file_path: str, progress_callback=None) -> List[Document]:
         """
         三级降级解析PDF
@@ -557,34 +598,38 @@ class PDFParserV2:
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found: {file_path}")
-        
+
         if not file_path.lower().endswith(".pdf"):
             raise ValueError(f"File is not a PDF: {file_path}")
-        
+
         last_error = None
         file_name = os.path.basename(file_path)
-        
+
         for parser_type in self.fallback_order:
             parser_func = self.parsers.get(parser_type)
             if not parser_func:
                 logger.warning(f"Unknown parser type: {parser_type}, skipping")
                 continue
-            
+
             try:
                 logger.info(f"Parsing PDF {file_name} with {parser_type} parser")
-                
+
                 documents = parser_func(file_path, progress_callback=progress_callback)
-                
+
                 # 校验解析结果质量
                 if self._is_content_valid(documents):
                     total_length = sum(len(doc.text) for doc in documents)
                     avg_length = total_length / len(documents) if documents else 0
-                    logger.info(f"PDF parsed successfully with {parser_type} parser, "
-                              f"{len(documents)} pages, avg content length: {avg_length:.0f}")
+                    logger.info(
+                        f"PDF parsed successfully with {parser_type} parser, "
+                        f"{len(documents)} pages, avg content length: {avg_length:.0f}"
+                    )
                     return documents
                 else:
-                    logger.warning(f"{parser_type} parser returned invalid content, falling back")
-            
+                    logger.warning(
+                        f"{parser_type} parser returned invalid content, falling back"
+                    )
+
             except PDFCorruptedError as e:
                 # PDF本身损坏，直接抛出，不需要继续降级
                 logger.error(f"PDF file {file_name} is corrupted: {e}")
@@ -596,21 +641,80 @@ class PDFParserV2:
             except Exception as e:
                 logger.warning(f"{parser_type} parse failed: {e}, falling back")
                 last_error = e
-        
+
         # 所有解析方式都失败
         error_msg = f"All PDF parsers failed for {file_name}"
         if last_error:
             error_msg += f": {last_error}"
-        
+
         logger.error(error_msg)
         raise PDFParseError(error_msg)
 
 
+class TXTParser:
+    """纯文本文件解析器，支持自动编码检测"""
+
+    def __init__(self):
+        self.default_encoding = "utf-8"
+
+    def _detect_encoding(self, file_path: str) -> str:
+        """自动检测文件编码
+
+        参数:
+            file_path: 文件路径
+
+        返回:
+            检测到的编码，检测失败时返回默认编码
+        """
+        try:
+            import chardet
+
+            with open(file_path, "rb") as f:
+                raw_data = f.read(10000)
+            result = chardet.detect(raw_data)
+            return result.get("encoding") or self.default_encoding
+        except ImportError:
+            return self.default_encoding
+        except Exception:
+            return self.default_encoding
+
+    def parse(self, file_path: str) -> str:
+        """读取 TXT 文件内容，自动检测编码
+
+        参数:
+            file_path: 文件路径
+
+        返回:
+            文本内容
+        """
+        encoding = self._detect_encoding(file_path)
+        with open(file_path, "r", encoding=encoding, errors="replace") as f:
+            return f.read()
+
+    def parse_to_documents(self, file_path: str) -> List[Document]:
+        """将 TXT 文件解析为 LlamaIndex Document 列表
+
+        参数:
+            file_path: 文件路径
+
+        返回:
+            Document 列表
+        """
+        text = self.parse(file_path)
+        return [Document(text=text, metadata={"source": file_path})]
+
+
 def get_parser(file_path: str):
-    ext = os.path.splitext(file_path)[1].lower()
+    # 支持直接传扩展名（如 '.txt'）或完整文件路径
+    if file_path.startswith("."):
+        ext = file_path.lower()
+    else:
+        ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
         return PDFParserV2()
     elif ext == ".epub":
-        return EPUBParser
+        return EPUBParser()
+    elif ext == ".txt":
+        return TXTParser()
     else:
-        raise ValueError(f"Unsupported file format: {ext}")
+        raise ValueError(f"不支持的文件格式: {ext}。支持的格式: PDF, EPUB, TXT")

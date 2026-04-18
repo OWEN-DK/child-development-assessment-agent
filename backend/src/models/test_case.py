@@ -17,6 +17,9 @@ from enum import Enum as PyEnum
 from typing import Any, List, Tuple, Optional
 from pydantic import BaseModel
 
+# Re-export SourceDocument from document module to avoid duplicate class registration
+from src.models.document import SourceDocument, DocumentStatus
+
 
 class TestDomain(PyEnum):
     GROSS_MOTOR = "gross_motor"
@@ -58,6 +61,12 @@ class TestSourceType(PyEnum):
     MIXED = "mixed"
 
 
+class ReportExportFormat(PyEnum):
+    MARKDOWN = "markdown"
+    PDF = "pdf"
+    JSON = "json"
+
+
 class GenerationParams(BaseModel):
     target_domains: List[str]
     age_range: Tuple[float, float]
@@ -84,29 +93,6 @@ class TestResultItem(BaseModel):
     expected_knowledge_ids: List[str]
     actual_knowledge_ids: List[str]
     error_message: Optional[str] = None
-
-
-class SourceDocument(Base):
-    __tablename__ = "source_documents"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    file_type: Mapped[str] = mapped_column(String(10), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    file_hash: Mapped[str] = mapped_column(String(64), index=True)
-    content_summary: Mapped[str | None] = mapped_column(Text)
-    page_count: Mapped[int | None] = mapped_column(Integer)
-    chapter_structure: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    quality_report: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus, values_callable=lambda obj: [e.value for e in obj]),
-        default=DocumentStatus.UPLOADED,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
 
 
 class KnowledgeSnapshot(Base):
@@ -166,7 +152,11 @@ class TestCaseDraft(Base):
     __tablename__ = "test_case_drafts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    source_document_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_document_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("source_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     query: Mapped[str] = mapped_column(Text, nullable=False)
     age: Mapped[float] = mapped_column(DECIMAL(4, 1), nullable=False)
     domain: Mapped[TestDomain] = mapped_column(
@@ -174,6 +164,8 @@ class TestCaseDraft(Base):
         nullable=False,
     )
     description: Mapped[str | None] = mapped_column(Text)
+
+    generation_batch_id: Mapped[str | None] = mapped_column(String(64), index=True)
 
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(JSON)
     expected_keywords: Mapped[list[str] | None] = mapped_column(JSON)
@@ -197,6 +189,7 @@ class TestCaseDraft(Base):
     __table_args__ = (
         Index("idx_source_doc", "source_document_id"),
         Index("idx_domain_status", "domain", "status"),
+        Index("idx_generation_batch", "generation_batch_id"),
     )
 
 
@@ -250,6 +243,19 @@ class TestRun(Base):
     total_test_cases: Mapped[int] = mapped_column(Integer, nullable=False)
     passed_test_cases: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    test_set_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    custom_case_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True, default=list
+    )
+
+    report_export_format: Mapped[ReportExportFormat | None] = mapped_column(
+        Enum(ReportExportFormat, values_callable=lambda obj: [e.value for e in obj]),
+        default=ReportExportFormat.MARKDOWN,
+    )
+    report_storage_path: Mapped[str | None] = mapped_column(String(512))
+
     status: Mapped[TestRunStatus] = mapped_column(
         Enum(TestRunStatus, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
@@ -258,7 +264,14 @@ class TestRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True
     )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_by: Mapped[int | None] = mapped_column(
+        Integer, comment="创建人用户ID，弱关联无需外键"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
     snapshot_id: Mapped[str | None] = mapped_column(String(64))
     config_version_id: Mapped[str | None] = mapped_column(String(64), index=True)
@@ -279,6 +292,21 @@ class TestRunResult(Base):
     precision: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
     recall: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
     f1: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
+    mrr: Mapped[float | None] = mapped_column(
+        DECIMAL(10, 4), nullable=False, default=0.0
+    )
+    ndcg: Mapped[float | None] = mapped_column(
+        DECIMAL(10, 4), nullable=True, default=None
+    )
+    hit_rate_1: Mapped[float | None] = mapped_column(
+        DECIMAL(10, 4), nullable=False, default=0.0
+    )
+    hit_rate_3: Mapped[float | None] = mapped_column(
+        DECIMAL(10, 4), nullable=False, default=0.0
+    )
+    hit_rate_5: Mapped[float | None] = mapped_column(
+        DECIMAL(10, 4), nullable=False, default=0.0
+    )
     passed: Mapped[bool | None] = mapped_column(index=True)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, index=True)
     expected_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -286,6 +314,12 @@ class TestRunResult(Base):
 
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(JSON)
     actual_knowledge_ids: Mapped[list[str] | None] = mapped_column(JSON)
+    retrieved_doc_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    relevant_doc_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=False, default=list
+    )
 
     error_message: Mapped[str | None] = mapped_column(Text)
     execution_time_ms: Mapped[int | None] = mapped_column(Integer, index=True)

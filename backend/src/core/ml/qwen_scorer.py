@@ -15,8 +15,17 @@ class QwenScoringOutput(BaseModel):
 
 class QwenScorer:
     def __init__(self):
+        # 使用新的配置结构
+        ml_scene_config = settings.llm_scene_configs.get("ml_scoring")
+        if ml_scene_config:
+            self.model = ml_scene_config.model
+            self.provider = ml_scene_config.provider
+        else:
+            # 向后兼容：使用旧字段
+            self.model = settings.ml_scoring_qwen_model
+            self.provider = "dashscope"
+
         self.api_key = settings.dashscope_api_key
-        self.model = settings.ml_scoring_qwen_model
         self.base_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 
     async def predict(

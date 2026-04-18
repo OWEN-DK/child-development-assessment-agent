@@ -61,6 +61,7 @@ export interface TestRun {
   id: string;
   name: string;
   description: string;
+  test_set_id?: string;
   test_results: TestResult[];
   overall_precision: number;
   overall_recall: number;

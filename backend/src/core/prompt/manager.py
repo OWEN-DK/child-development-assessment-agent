@@ -1,7 +1,8 @@
 import hashlib
 import random
+import re
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from sqlalchemy import desc
 
@@ -33,44 +34,86 @@ class PromptManager:
         prompt_key: str,
         version: Optional[str] = None,
         ab_test_id: Optional[str] = None,
+        variables: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """获取提示词"""
+        """获取提示词并渲染占位符"""
         cache_key = (
             f"prompt:{prompt_key}:{version or 'latest'}:{ab_test_id or 'default'}"
         )
 
-        cached = await self.cache.get(cache_key)
-        if cached:
-            logger.debug(f"提示词缓存命中：{cache_key}")
-            return cached
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                logger.debug(f"提示词缓存命中：{cache_key}")
+                return self._render_template(cached, variables) if variables else cached
 
-        version_repo, ab_test_repo = self._get_repos()
+            version_repo, ab_test_repo = self._get_repos()
 
-        if version:
-            versions = await version_repo.get_by_filter(
-                skip=0, limit=1, prompt_key=prompt_key, version=version
+            if version:
+                versions = await version_repo.get_by_filter(
+                    skip=0, limit=1, prompt_key=prompt_key, version=version
+                )
+                prompt_version = versions[0] if versions else None
+            else:
+                prompt_version = await version_repo.get_latest_version(prompt_key)
+
+            if not prompt_version:
+                logger.warning(f"提示词未找到：{prompt_key}")
+                fallback = self._get_fallback_prompt(prompt_key)
+                return (
+                    self._render_template(fallback, variables)
+                    if variables
+                    else fallback
+                )
+
+            if ab_test_id:
+                prompt_content = await self._apply_ab_test(prompt_version, ab_test_id)
+            else:
+                prompt_content = prompt_version.content
+
+            await self.cache.set_with_jitter(
+                cache_key,
+                prompt_content,
+                base_ttl=3600,
+                tags=["prompt", prompt_key],
             )
-            prompt_version = versions[0] if versions else None
-        else:
-            prompt_version = await version_repo.get_latest_version(prompt_key)
 
-        if not prompt_version:
-            logger.warning(f"提示词未找到：{prompt_key}")
-            return self._get_fallback_prompt(prompt_key)
+            return (
+                self._render_template(prompt_content, variables)
+                if variables
+                else prompt_content
+            )
+        except Exception as e:
+            # 数据库或缓存不可用时降级到 fallback
+            logger.error(f"获取提示词失败：{prompt_key}, 错误：{e}, 降级到 fallback")
+            fallback = self._get_fallback_prompt(prompt_key)
+            return self._render_template(fallback, variables) if variables else fallback
 
-        if ab_test_id:
-            prompt_content = await self._apply_ab_test(prompt_version, ab_test_id)
-        else:
-            prompt_content = prompt_version.content
+    def _render_template(
+        self, template: str, variables: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """渲染提示词模板中的占位符
 
-        await self.cache.set_with_jitter(
-            cache_key,
-            prompt_content,
-            base_ttl=3600,
-            tags=["prompt", prompt_key],
-        )
+        Args:
+            template: 提示词模板字符串
+            variables: 变量字典，如 {"child_age": 3, "issues": "..."}
 
-        return prompt_content
+        Returns:
+            渲染后的提示词字符串
+        """
+        if not variables:
+            return template
+
+        try:
+            # 使用 str.format() 渲染占位符
+            # 对于 JSON 模板中的 {{}}，需要先转义
+            return template.format(**variables)
+        except KeyError as e:
+            logger.warning(f"提示词渲染失败，缺少变量 {e}，返回原始模板")
+            return template
+        except Exception as e:
+            logger.error(f"提示词渲染异常：{e}，返回原始模板")
+            return template
 
     async def create_prompt_version(
         self,
@@ -83,6 +126,18 @@ class PromptManager:
         fallback: Optional[str] = None,
     ) -> str:
         """创建新版本"""
+        # 校验占位符一致性
+        if variables:
+            from src.core.prompt.validator import PromptValidator
+
+            result = PromptValidator.validate_variables(prompt_key, content, variables)
+            if not result.is_valid:
+                logger.warning(
+                    f"提示词 '{prompt_key}' 占位符不匹配: "
+                    f"missing={result.missing}, extra={result.extra}"
+                )
+                # 注意：这里不抛出异常，仅警告，允许保存（兼容旧数据）
+
         version_repo, _ = self._get_repos()
         content_hash = hashlib.sha256(content.encode()).hexdigest()
 
@@ -326,8 +381,8 @@ class PromptManager:
         return True
 
     def _get_fallback_prompt(self, prompt_key: str) -> str:
-        """获取兜底提示词"""
-        from src.core.prompts import (
+        """获取兜底提示词（从 prompts_fallback.py 读取）"""
+        from src.core.prompts_fallback import (
             QUERY_REWRITE_PROMPT,
             SYNONYM_EXPANSION_PROMPT,
             METADATA_EXTRACTION_PROMPT,
@@ -349,8 +404,11 @@ class PromptManager:
             "intensity_inference": INTENSITY_INFERENCE_PROMPT,
             "category_inference": CATEGORY_INFERENCE_PROMPT,
             "child_assessment": ASSESSMENT_SYSTEM_PROMPT,
+            "assessment_system": ASSESSMENT_SYSTEM_PROMPT,
             "scoring": SCORING_SYSTEM_PROMPT,
+            "scoring_system": SCORING_SYSTEM_PROMPT,
             "report_generation": REPORTING_SYSTEM_PROMPT,
+            "reporting_system": REPORTING_SYSTEM_PROMPT,
         }
         return fallbacks.get(prompt_key, "You are a helpful assistant.")
 

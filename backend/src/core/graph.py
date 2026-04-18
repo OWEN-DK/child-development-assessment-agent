@@ -9,10 +9,14 @@ from src.core.nodes import (
     ScoringNode,
     ReportingNode,
 )
+from src.core.tracing.langgraph_middleware import TracingMiddleware
 
 
 def create_agent_graph():
     """创建并编译 LangGraph 工作流"""
+
+    # 初始化 TracingMiddleware
+    tracing_middleware = TracingMiddleware()
 
     # 初始化 StateGraph
     workflow = StateGraph(AgentState)
@@ -26,13 +30,24 @@ def create_agent_graph():
     scoring_node = ScoringNode()
     reporting_node = ReportingNode()
 
-    # 添加节点
-    workflow.add_node("preprocessing", preprocessing_node)
-    workflow.add_node("validation", validation_node)
-    workflow.add_node("assessment", assessment_node)
-    workflow.add_node("retrieval", retrieval_node)
-    workflow.add_node("scoring", scoring_node)
-    workflow.add_node("reporting", reporting_node)
+    # 添加节点（包裹 tracing 中间件）
+    def wrap_with_tracing(node_func, node_name):
+        """为节点执行包裹 tracing"""
+
+        async def wrapper(state):
+            with tracing_middleware.trace_node(node_name):
+                return await node_func(state)
+
+        return wrapper
+
+    workflow.add_node(
+        "preprocessing", wrap_with_tracing(preprocessing_node, "preprocessing")
+    )
+    workflow.add_node("validation", wrap_with_tracing(validation_node, "validation"))
+    workflow.add_node("assessment", wrap_with_tracing(assessment_node, "assessment"))
+    workflow.add_node("retrieval", wrap_with_tracing(retrieval_node, "retrieval"))
+    workflow.add_node("scoring", wrap_with_tracing(scoring_node, "scoring"))
+    workflow.add_node("reporting", wrap_with_tracing(reporting_node, "reporting"))
 
     # 定义边 (Edges)
     # 流程: Preprocessing -> Validation -> Assessment -> Retrieval -> Scoring -> Reporting -> END

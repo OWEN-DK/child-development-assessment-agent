@@ -10,6 +10,11 @@ from .base import (
     MessageRole,
     Message,
 )
+from .provider_registry import ProviderRegistry
+from .factory import LLMServiceFactory, LLMServiceFactoryCompat, LLMFramework
+from .embedding_factory import EmbeddingFactory
+from .reranker_factory import RerankerFactory
+from .config_validator import LLMConfigValidator, llm_config_validator
 
 __all__ = [
     "LLMService",
@@ -22,4 +27,12 @@ __all__ = [
     "LLMUnavailableError",
     "MessageRole",
     "Message",
+    "ProviderRegistry",
+    "LLMServiceFactory",
+    "LLMServiceFactoryCompat",
+    "LLMFramework",
+    "EmbeddingFactory",
+    "RerankerFactory",
+    "LLMConfigValidator",
+    "llm_config_validator",
 ]

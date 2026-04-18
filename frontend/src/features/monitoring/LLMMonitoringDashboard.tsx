@@ -1,14 +1,21 @@
 import React from 'react';
-import { Card, Row, Col, Statistic, Select, Space } from 'antd';
+import { Card, Row, Col, Statistic, Select, Space, Tabs } from 'antd';
 import { Line, Pie } from '@ant-design/charts';
 import { useQuery } from '@tanstack/react-query';
 import { monitoringApi } from '@/api/monitoring';
+import {
+  TraceFilterBar,
+  TraceListView,
+  TraceDetailDrawer,
+} from '@/components/monitoring';
 
 const { Option } = Select;
 
 export const LLMMonitoringDashboard: React.FC = () => {
   const [days, setDays] = React.useState(7);
   const [modelFilter, setModelFilter] = React.useState<string | undefined>();
+  const [traceFilters, setTraceFilters] = React.useState<Record<string, any>>({});
+  const [selectedTraceId, setSelectedTraceId] = React.useState<string | null>(null);
 
   // 查询统计数据
   const { data: statistics, isLoading: statsLoading } = useQuery({
@@ -17,13 +24,13 @@ export const LLMMonitoringDashboard: React.FC = () => {
   });
 
   // 查询趋势
-  const { data: trend, isLoading: trendLoading } = useQuery({
+  const { data: trend } = useQuery({
     queryKey: ['monitoringTrend', days],
     queryFn: () => monitoringApi.getTrend(days, 'calls'),
   });
 
   // 查询模型分布
-  const { data: modelDistribution, isLoading: distributionLoading } = useQuery({
+  const { data: modelDistribution } = useQuery({
     queryKey: ['modelDistribution', days],
     queryFn: () => monitoringApi.getModelDistribution(days),
   });
@@ -49,7 +56,7 @@ export const LLMMonitoringDashboard: React.FC = () => {
     },
   };
 
-  return (
+  const dashboardContent = (
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>LLM 监控仪表板</h1>
@@ -133,4 +140,34 @@ export const LLMMonitoringDashboard: React.FC = () => {
       </Row>
     </div>
   );
+
+  const tracesContent = (
+    <div style={{ padding: 24 }}>
+      <h1 style={{ marginBottom: 16 }}>调用追踪</h1>
+      <TraceFilterBar onFilter={setTraceFilters} />
+      <TraceListView
+        filters={traceFilters}
+        onRowClick={setSelectedTraceId}
+      />
+      <TraceDetailDrawer
+        traceId={selectedTraceId}
+        onClose={() => setSelectedTraceId(null)}
+      />
+    </div>
+  );
+
+  const items = [
+    {
+      key: 'dashboard',
+      label: '监控仪表板',
+      children: dashboardContent,
+    },
+    {
+      key: 'traces',
+      label: '调用追踪 (Traces)',
+      children: tracesContent,
+    },
+  ];
+
+  return <Tabs items={items} />;
 };

@@ -1,8 +1,16 @@
 import React from 'react';
-import { Modal, Descriptions, Divider, Typography, Space, Tag, Button } from 'antd';
+import { Modal, Descriptions, Divider, Typography, Space, Tag, Button, Tooltip } from 'antd';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import type { SearchResultItem } from '../../api/knowledge/types';
 import { highlightKeywords } from '../../utils/highlight';
 import { formatPageLabel } from '../../utils/formatters';
+
+const getAgeFitScoreColor = (score: number): string => {
+  if (score >= 0.8) return '#52c41a';
+  if (score >= 0.6) return '#1890ff';
+  if (score >= 0.4) return '#fa8c16';
+  return '#f5222d';
+};
 
 interface ResultDetailModalProps {
   item: SearchResultItem | null;
@@ -45,9 +53,30 @@ export const ResultDetailModal: React.FC<ResultDetailModalProps> = ({
             {formatPageLabel(item.page_label, item.chapter_title)}
           </Descriptions.Item>
         )}
-        <Descriptions.Item label="相关度">
+        <Descriptions.Item label={
+          <span>
+            检索相关度
+            <Tooltip title="内容与查询关键词的相关程度，来自 Cross-Encoder 重排序">
+              <QuestionCircleOutlined style={{ marginLeft: 4, color: '#999' }} />
+            </Tooltip>
+          </span>
+        }>
           {(item.score * 100).toFixed(2)}%
         </Descriptions.Item>
+        {item.age_fit_score !== undefined && item.age_fit_score !== null && (
+          <Descriptions.Item label={
+            <span>
+              年龄适配度
+              <Tooltip title="内容适合用户当前年龄的程度，基于年龄范围、内容特征和领域匹配度计算">
+                <QuestionCircleOutlined style={{ marginLeft: 4, color: '#999' }} />
+              </Tooltip>
+            </span>
+          }>
+            <span style={{ color: getAgeFitScoreColor(item.age_fit_score) }}>
+              {(item.age_fit_score * 100).toFixed(2)}%
+            </span>
+          </Descriptions.Item>
+        )}
       </Descriptions>
 
       <Divider />

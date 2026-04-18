@@ -7,6 +7,7 @@ from src.utils.logger import logger
 import json
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
 import asyncio
+from src.core.tracing.context import trace_context
 
 router = APIRouter()
 
@@ -23,28 +24,39 @@ async def assess_development(user_input: UserInput):
     支持流式输出 (is_streaming=True)
     """
     try:
-        # 初始化 State
-        initial_state = AgentState(
-            child_profile=user_input.child_profile,
-            proposed_plan=user_input.proposed_plan,
-            messages=[],
-            is_streaming=user_input.is_streaming,
-        )
+        # 创建 Trace 上下文
+        async with trace_context(
+            name="assessment_run",
+            metadata={
+                "child_profile_id": user_input.child_profile.get("id", "unknown")
+                if isinstance(user_input.child_profile, dict)
+                else "unknown",
+            },
+        ) as tid:
+            logger.info(f"Trace created: {tid} for assessment run")
 
-        # 调用 LangGraph
-        result = await agent_app.ainvoke(initial_state)
-
-        # 检查是否为流式模式
-        if user_input.is_streaming and result.get("report_prompts"):
-            return StreamingResponse(
-                stream_report_generation(result), media_type="text/event-stream"
+            # 初始化 State
+            initial_state = AgentState(
+                child_profile=user_input.child_profile,
+                proposed_plan=user_input.proposed_plan,
+                messages=[],
+                is_streaming=user_input.is_streaming,
             )
 
-        # 非流式模式直接返回结果
-        if "final_report" in result:
-            return result["final_report"]
-        else:
-            raise HTTPException(status_code=500, detail="Failed to generate report")
+            # 调用 LangGraph
+            result = await agent_app.ainvoke(initial_state)
+
+            # 检查是否为流式模式
+            if user_input.is_streaming and result.get("report_prompts"):
+                return StreamingResponse(
+                    stream_report_generation(result), media_type="text/event-stream"
+                )
+
+            # 非流式模式直接返回结果
+            if "final_report" in result:
+                return result["final_report"]
+            else:
+                raise HTTPException(status_code=500, detail="Failed to generate report")
 
     except Exception as e:
         # TODO: 更好的错误处理

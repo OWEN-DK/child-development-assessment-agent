@@ -83,6 +83,30 @@ class RagChunkingSettings(BaseSettings):
         description="语义分块优先使用的分隔符列表，按优先级排序",
     )
 
+    # 英文分块优化配置
+    rag_chunking_english_buffer_size: int = Field(
+        default=8,
+        validation_alias="RAG_CHUNKING_ENGLISH_BUFFER_SIZE",
+        description="英文内容分块 buffer 大小",
+    )
+    rag_chunking_english_breakpoint_threshold: int = Field(
+        default=92,
+        validation_alias="RAG_CHUNKING_ENGLISH_BREAKPOINT_THRESHOLD",
+        description="英文内容分块 breakpoint 阈值",
+    )
+    rag_chunking_english_size_multiplier: float = Field(
+        default=1.3,
+        validation_alias="RAG_CHUNKING_ENGLISH_SIZE_MULTIPLIER",
+        description="英文内容分块大小倍率",
+    )
+
+    # 语言检测配置
+    rag_chunking_language_detection_threshold: float = Field(
+        default=0.7,
+        validation_alias="RAG_CHUNKING_LANGUAGE_DETECTION_THRESHOLD",
+        description="语言检测英文占比阈值",
+    )
+
     class Config:
         env_file = str(BASE_DIR / ".env.dev")
         env_file_encoding = "utf-8"

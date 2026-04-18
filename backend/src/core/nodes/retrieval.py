@@ -3,7 +3,7 @@ from src.model.schemas import AgentState
 from src.core.nodes.base import BaseNode
 from src.utils.logger import logger
 
-from src.core.prompts import RAG_QUERY_TEMPLATE
+from src.core.prompts_fallback import RAG_QUERY_TEMPLATE
 
 
 class RetrievalNode(BaseNode):

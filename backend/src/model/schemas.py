@@ -137,7 +137,16 @@ class KnowledgeItem(BaseModel):
     target_age_min: int = 0
     target_age_max: int = 18
     activity_type: Optional[str] = None
-    relevance_score: float = 0.0
+    relevance_score: float = Field(
+        default=0.0,
+        description="检索相关性分数（来自 Cross-Encoder 重排序，不混合年龄适配度）",
+    )
+    age_fit_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="年龄适配度分数（0-1 连续值，独立于检索相关性）",
+    )
 
 
 class DimensionAnalysis(BaseModel):

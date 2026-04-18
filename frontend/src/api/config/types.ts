@@ -27,9 +27,33 @@ export interface ConfigResponse {
 }
 
 export interface ConfigUpdateRequest {
-  config: Record<string, any>;
+  config_snapshot: Record<string, any>;
   description: string;
   created_by: string;
+}
+
+export interface ConfigResetRequest {
+  confirm: boolean;
+  reason?: string;
+}
+
+export interface HealthDiagnosticRequest {
+  config: Record<string, any>;
+}
+
+export interface DiagnosticSuggestion {
+  priority: 'high' | 'medium' | 'low';
+  issue: string;
+  suggestion: string;
+  config_path: string;
+  current_value: string;
+  recommended_value: string;
+}
+
+export interface HealthDiagnosticResponse {
+  score: number;
+  score_basis: string;
+  suggestions: DiagnosticSuggestion[];
 }
 
 export interface ConfigUpdateResponse {
@@ -37,12 +61,4 @@ export interface ConfigUpdateResponse {
   version_id: string;
   previous_version: string | null;
   changed_keys: string[];
-}
-
-export interface ConfigPlaygroundState {
-  baseVersion: ConfigVersion | null;
-  draftChanges: Record<string, any>;
-  isRunning: boolean;
-  lastResult: any | null;
-  comparisonBaseline: string | null;
 }

@@ -8,7 +8,9 @@ from src.config import database_settings
 import src.models  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", database_settings.sync_url)
+# 修复URL中%符号导致的插值问题
+sync_url = database_settings.sync_url.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

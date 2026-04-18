@@ -22,6 +22,24 @@ from src.utils.logger import logger
 
 router = APIRouter(prefix="/rag/test", tags=["RAG Test"])
 
+# Phase 2: SSE 工作流
+api_router = APIRouter(prefix="/api", tags=["rag-eval-sse"])
+
+@api_router.get("/runs/{run_id}/sse")
+async def get_test_run_sse(run_id: str) -> StreamingResponse:
+    """获取测试运行的SSE实时推送流
+    前端通过EventSource连接此端点，接收测试进度、用例结果、校验状态等事件
+    """
+    return sse_response(f"test_run:{run_id}")
+
+@api_router.get("/sse/exports")
+async def get_export_sse(user_id: str = Query(..., description="用户标识")) -> StreamingResponse:
+    """获取导出任务的SSE实时推送流
+    独立于测试运行的SSE通道，用于推送PDF/CSV导出完成事件
+    """
+    return sse_response(f"exports:{user_id}")
+
+
 
 class CreateTestCaseRequest(BaseModel):
     query: str
@@ -247,10 +265,7 @@ async def run_tests(request: RunTestsRequest):
     return {"run_id": run_id, "status": "started"}
 
 
-@router.get("/run/{run_id}/stream")
-async def test_run_stream(run_id: str) -> StreamingResponse:
-    """SSE 进度推送"""
-    return sse_response(f"test_run:{run_id}")
+
 
 
 @router.post("/run/{case_id}")
@@ -610,7 +625,7 @@ class CreateTestSetRequest(BaseModel):
 async def create_test_set(request: CreateTestSetRequest):
     """创建测试集"""
     try:
-        test_set = rag_test_manager.create_test_set(
+        test_set = await rag_test_manager.create_test_set(
             request.name, request.description, request.source_type
         )
         return {"status": "success", "test_set": test_set.model_dump()}
@@ -621,13 +636,13 @@ async def create_test_set(request: CreateTestSetRequest):
 @router.get("/sets")
 async def list_test_sets():
     """列出所有测试集"""
-    return rag_test_manager.list_test_sets()
+    return await rag_test_manager.list_test_sets()
 
 
 @router.get("/sets/{set_id}")
 async def get_test_set(set_id: str):
     """获取单个测试集"""
-    test_set = rag_test_manager.get_test_set(set_id)
+    test_set = await rag_test_manager.get_test_set(set_id)
     if not test_set:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return test_set
@@ -642,7 +657,7 @@ class UpdateTestSetRequest(BaseModel):
 async def update_test_set(set_id: str, request: UpdateTestSetRequest):
     """更新测试集"""
     updates = request.model_dump(exclude_unset=True)
-    test_set = rag_test_manager.update_test_set(set_id, updates)
+    test_set = await rag_test_manager.update_test_set(set_id, updates)
     if not test_set:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return test_set
@@ -651,7 +666,7 @@ async def update_test_set(set_id: str, request: UpdateTestSetRequest):
 @router.delete("/sets/{set_id}")
 async def delete_test_set(set_id: str):
     """删除测试集"""
-    success = rag_test_manager.delete_test_set(set_id)
+    success = await rag_test_manager.delete_test_set(set_id)
     if not success:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return {"status": "success", "message": "测试集已删除"}
@@ -664,7 +679,7 @@ class AddCasesToSetRequest(BaseModel):
 @router.post("/sets/{set_id}/cases")
 async def add_cases_to_set(set_id: str, request: AddCasesToSetRequest):
     """添加测试用例到测试集"""
-    test_set = rag_test_manager.add_test_cases_to_set(set_id, request.case_ids)
+    test_set = await rag_test_manager.add_test_cases_to_set(set_id, request.case_ids)
     if not test_set:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return test_set
@@ -673,7 +688,7 @@ async def add_cases_to_set(set_id: str, request: AddCasesToSetRequest):
 @router.delete("/sets/{set_id}/cases")
 async def remove_cases_from_set(set_id: str, case_ids: List[str] = Query(...)):
     """从测试集移除测试用例"""
-    test_set = rag_test_manager.remove_test_cases_from_set(set_id, case_ids)
+    test_set = await rag_test_manager.remove_test_cases_from_set(set_id, case_ids)
     if not test_set:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return test_set
@@ -682,7 +697,7 @@ async def remove_cases_from_set(set_id: str, case_ids: List[str] = Query(...)):
 @router.get("/sets/{set_id}/export")
 async def export_test_set(set_id: str):
     """导出测试集为JSON"""
-    cases = rag_test_manager.export_test_set(set_id)
+    cases = await rag_test_manager.export_test_set(set_id)
     if cases is None:
         raise HTTPException(status_code=404, detail="测试集不存在")
     return cases

@@ -288,6 +288,9 @@ class CacheService(ICacheService):
                     ),
                 )
                 logger.debug(f"缓存已写入: {key}, TTL: {expire}s")
+            except (ConnectionError, TimeoutError, ConnectionResetError) as e:
+                logger.warning(f"Redis连接异常，重置客户端: {e}")
+                self.redis_client = None
             except Exception as e:
                 logger.warning(f"Redis写入失败: {e}")
 

@@ -2,6 +2,7 @@ export interface SearchResultItem {
   id: string;
   content: string;
   score: number;
+  age_fit_score?: number;
   source_book: string;
   chapter_title?: string;
   page_label?: string;

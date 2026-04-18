@@ -36,7 +36,7 @@ from src.config import settings, config_manager
 from src.service.document_manager import document_manager
 from src.utils.logger import logger
 from src.constants.test_case import TEST_CASE_DOMAINS, TEST_CASE_REQUIRED_FIELDS
-from src.core.prompts import TEST_CASE_DRAFT_GENERATION_PROMPT
+from src.core.prompts_fallback import TEST_CASE_DRAFT_GENERATION_PROMPT
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
 from src.core.llm.base import LLMRequest, LLMMessage
 from src.core.database import db_session_factory
@@ -1707,251 +1707,168 @@ class RagTestManager:
             "errors": failed_ids,
         }
 
-    def create_test_set(
+    async def create_test_set(
         self, name: str, description: str = "", source_type: str = "manual"
     ) -> TestSet:
         """创建测试集"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            test_set = TestSet(
+                id=str(uuid.uuid4()),
+                name=name,
+                description=description,
+                source_type=TestSourceType(source_type),
+            )
+            session.add(test_set)
+            await session.commit()
+            await session.refresh(test_set)
+            logger.info(f"Test set created: {test_set.id} - {name}")
+            return test_set
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _create():
-            async with self.db_session_factory() as session:
-                test_set = TestSet(
-                    id=str(uuid.uuid4()),
-                    name=name,
-                    description=description,
-                    source_type=TestSourceType(source_type),
-                )
-                session.add(test_set)
-                await session.commit()
-                await session.refresh(test_set)
-                return test_set
-
-        test_set = loop.run_until_complete(_create())
-        loop.close()
-
-        logger.info(f"Test set created: {test_set.id} - {name}")
-        return test_set
-
-    def list_test_sets(self) -> List[TestSet]:
+    async def list_test_sets(self) -> List[TestSet]:
         """列出所有测试集"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            stmt = select(TestSet).order_by(TestSet.created_at.desc())
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _get_all():
-            async with self.db_session_factory() as session:
-                stmt = select(TestSet).order_by(TestSet.created_at.desc())
-                result = await session.execute(stmt)
-                return list(result.scalars().all())
-
-        sets = loop.run_until_complete(_get_all())
-        loop.close()
-        return sets
-
-    def get_test_set(self, test_set_id: str) -> Optional[TestSet]:
+    async def get_test_set(self, test_set_id: str) -> Optional[TestSet]:
         """获取单个测试集"""
-        import asyncio
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _get_one():
-            async with self.db_session_factory() as session:
-                test_set = await session.get(TestSet, test_set_id)
-                if test_set:
-                    # Get associated test case IDs
-                    stmt = select(TestSetCase.test_case_id).where(
-                        TestSetCase.test_set_id == test_set_id
-                    )
-                    result = await session.execute(stmt)
-                    test_set.test_case_ids = [row[0] for row in result.all()]
-                return test_set
-
-        test_set = loop.run_until_complete(_get_one())
-        loop.close()
-        return test_set
-
-    def update_test_set(self, test_set_id: str, updates: Dict) -> Optional[TestSet]:
-        """更新测试集"""
-        import asyncio
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _update():
-            async with self.db_session_factory() as session:
-                test_set = await session.get(TestSet, test_set_id)
-                if not test_set:
-                    return None
-
-                for key, value in updates.items():
-                    if hasattr(test_set, key):
-                        setattr(test_set, key, value)
-                test_set.updated_at = datetime.now()
-
-                await session.commit()
-                await session.refresh(test_set)
-
+        async with self.db_session_factory() as session:
+            test_set = await session.get(TestSet, test_set_id)
+            if test_set:
                 # Get associated test case IDs
                 stmt = select(TestSetCase.test_case_id).where(
                     TestSetCase.test_set_id == test_set_id
                 )
                 result = await session.execute(stmt)
                 test_set.test_case_ids = [row[0] for row in result.all()]
+            return test_set
 
-                return test_set
+    async def update_test_set(self, test_set_id: str, updates: Dict) -> Optional[TestSet]:
+        """更新测试集"""
+        async with self.db_session_factory() as session:
+            test_set = await session.get(TestSet, test_set_id)
+            if not test_set:
+                return None
 
-        test_set = loop.run_until_complete(_update())
-        loop.close()
-        return test_set
+            for key, value in updates.items():
+                if hasattr(test_set, key):
+                    setattr(test_set, key, value)
+            test_set.updated_at = datetime.now()
 
-    def delete_test_set(self, test_set_id: str) -> bool:
+            await session.commit()
+            await session.refresh(test_set)
+
+            # Get associated test case IDs
+            stmt = select(TestSetCase.test_case_id).where(
+                TestSetCase.test_set_id == test_set_id
+            )
+            result = await session.execute(stmt)
+            test_set.test_case_ids = [row[0] for row in result.all()]
+
+            return test_set
+
+    async def delete_test_set(self, test_set_id: str) -> bool:
         """删除测试集"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            test_set = await session.get(TestSet, test_set_id)
+            if not test_set:
+                return False
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _delete():
-            async with self.db_session_factory() as session:
-                test_set = await session.get(TestSet, test_set_id)
-                if not test_set:
-                    return False
-
-                await session.delete(test_set)
-                await session.commit()
-                return True
-
-        success = loop.run_until_complete(_delete())
-        loop.close()
-
-        if success:
+            await session.delete(test_set)
+            await session.commit()
             logger.info(f"Test set deleted: {test_set_id}")
-        return success
+            return True
 
-    def add_test_cases_to_set(
+    async def add_test_cases_to_set(
         self, test_set_id: str, case_ids: List[str]
     ) -> Optional[TestSet]:
         """添加测试用例到测试集"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            test_set = await session.get(TestSet, test_set_id)
+            if not test_set:
+                return None
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+            # Get existing case IDs
+            stmt = select(TestSetCase.test_case_id).where(
+                TestSetCase.test_set_id == test_set_id
+            )
+            result = await session.execute(stmt)
+            existing_ids = [row[0] for row in result.all()]
 
-        async def _add():
-            async with self.db_session_factory() as session:
-                test_set = await session.get(TestSet, test_set_id)
-                if not test_set:
-                    return None
+            # Add new cases
+            for case_id in case_ids:
+                if case_id not in existing_ids:
+                    ts_case = TestSetCase(
+                        test_set_id=test_set_id, test_case_id=case_id
+                    )
+                    session.add(ts_case)
 
-                # Get existing case IDs
-                stmt = select(TestSetCase.test_case_id).where(
-                    TestSetCase.test_set_id == test_set_id
-                )
-                result = await session.execute(stmt)
-                existing_ids = [row[0] for row in result.all()]
+            await session.commit()
+            await session.refresh(test_set)
 
-                # Add new cases
-                for case_id in case_ids:
-                    if case_id not in existing_ids:
-                        ts_case = TestSetCase(
-                            test_set_id=test_set_id, test_case_id=case_id
-                        )
-                        session.add(ts_case)
+            # Get updated case IDs
+            stmt = select(TestSetCase.test_case_id).where(
+                TestSetCase.test_set_id == test_set_id
+            )
+            result = await session.execute(stmt)
+            test_set.test_case_ids = [row[0] for row in result.all()]
 
-                await session.commit()
-                await session.refresh(test_set)
+            return test_set
 
-                # Get updated case IDs
-                stmt = select(TestSetCase.test_case_id).where(
-                    TestSetCase.test_set_id == test_set_id
-                )
-                result = await session.execute(stmt)
-                test_set.test_case_ids = [row[0] for row in result.all()]
-
-                return test_set
-
-        test_set = loop.run_until_complete(_add())
-        loop.close()
-        return test_set
-
-    def remove_test_cases_from_set(
+    async def remove_test_cases_from_set(
         self, test_set_id: str, case_ids: List[str]
     ) -> Optional[TestSet]:
         """从测试集移除测试用例"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            test_set = await session.get(TestSet, test_set_id)
+            if not test_set:
+                return None
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+            # Delete specified cases
+            stmt = select(TestSetCase).where(
+                TestSetCase.test_set_id == test_set_id,
+                TestSetCase.test_case_id.in_(case_ids),
+            )
+            result = await session.execute(stmt)
+            for ts_case in result.scalars().all():
+                await session.delete(ts_case)
 
-        async def _remove():
-            async with self.db_session_factory() as session:
-                test_set = await session.get(TestSet, test_set_id)
-                if not test_set:
-                    return None
+            await session.commit()
+            await session.refresh(test_set)
 
-                # Delete specified cases
-                stmt = select(TestSetCase).where(
-                    TestSetCase.test_set_id == test_set_id,
-                    TestSetCase.test_case_id.in_(case_ids),
-                )
-                result = await session.execute(stmt)
-                for ts_case in result.scalars().all():
-                    await session.delete(ts_case)
+            # Get updated case IDs
+            stmt = select(TestSetCase.test_case_id).where(
+                TestSetCase.test_set_id == test_set_id
+            )
+            result = await session.execute(stmt)
+            test_set.test_case_ids = [row[0] for row in result.all()]
 
-                await session.commit()
-                await session.refresh(test_set)
+            return test_set
 
-                # Get updated case IDs
-                stmt = select(TestSetCase.test_case_id).where(
-                    TestSetCase.test_set_id == test_set_id
-                )
-                result = await session.execute(stmt)
-                test_set.test_case_ids = [row[0] for row in result.all()]
-
-                return test_set
-
-        test_set = loop.run_until_complete(_remove())
-        loop.close()
-        return test_set
-
-    def export_test_set(self, test_set_id: str) -> Optional[List[Dict]]:
+    async def export_test_set(self, test_set_id: str) -> Optional[List[Dict]]:
         """导出测试集为JSON"""
-        import asyncio
+        async with self.db_session_factory() as session:
+            # Get test set
+            test_set = await session.get(TestSet, test_set_id)
+            if not test_set:
+                return None
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+            # Get test case IDs
+            stmt = select(TestSetCase.test_case_id).where(
+                TestSetCase.test_set_id == test_set_id
+            )
+            result = await session.execute(stmt)
+            case_ids = [row[0] for row in result.all()]
 
-        async def _export():
-            async with self.db_session_factory() as session:
-                # Get test set
-                test_set = await session.get(TestSet, test_set_id)
-                if not test_set:
-                    return None
+            # Get test cases
+            cases = []
+            for case_id in case_ids:
+                case = await session.get(TestCase, case_id)
+                if case:
+                    cases.append(case.model_dump())
 
-                # Get test case IDs
-                stmt = select(TestSetCase.test_case_id).where(
-                    TestSetCase.test_set_id == test_set_id
-                )
-                result = await session.execute(stmt)
-                case_ids = [row[0] for row in result.all()]
-
-                # Get test cases
-                cases = []
-                for case_id in case_ids:
-                    case = await session.get(TestCase, case_id)
-                    if case:
-                        cases.append(case.model_dump())
-
-                return cases
-
-        cases = loop.run_until_complete(_export())
-        loop.close()
-        return cases
+            return cases
 
 
 # 单例实例

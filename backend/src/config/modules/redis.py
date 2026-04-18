@@ -14,13 +14,15 @@ class RedisSettings(BaseSettings):
     redis_password: str = Field(default="", validation_alias="REDIS_PASSWORD")
 
     redis_max_connections: int = Field(
-        default=20, validation_alias="REDIS_MAX_CONNECTIONS"
+        default=1000, validation_alias="REDIS_MAX_CONNECTIONS"
     )
+    redis_max_idle: int = Field(default=10, validation_alias="REDIS_MAX_IDLE")
+    redis_min_idle: int = Field(default=5, validation_alias="REDIS_MIN_IDLE")
     redis_socket_timeout: int = Field(
-        default=5, validation_alias="REDIS_SOCKET_TIMEOUT"
+        default=6, validation_alias="REDIS_SOCKET_TIMEOUT"
     )
     redis_socket_connect_timeout: int = Field(
-        default=3, validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT"
+        default=6, validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT"
     )
 
     cache_enabled: bool = Field(default=True, validation_alias="REDIS_CACHE_ENABLED")

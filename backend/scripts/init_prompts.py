@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.prompt.manager import prompt_manager
-from src.core.prompts import (
+from src.core.prompts_fallback import (
     QUERY_REWRITE_PROMPT,
     SYNONYM_EXPANSION_PROMPT,
     METADATA_EXTRACTION_PROMPT,

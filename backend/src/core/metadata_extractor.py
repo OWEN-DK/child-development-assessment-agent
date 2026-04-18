@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 from src.config import settings
 from src.utils.logger import logger
-from src.core.prompts import METADATA_EXTRACTION_PROMPT
+from src.core.prompt.manager import prompt_manager
 from src.core.llm.factory import LLMServiceFactory, LLMFramework
 from src.core.llm.base import LLMRequest, LLMMessage
 
@@ -169,10 +169,16 @@ class MetadataExtractor:
                     logger.warning("DASHSCOPE_API_KEY 未配置，降级到规则提取")
                     break
 
-                # 格式化提示词
-                prompt = METADATA_EXTRACTION_PROMPT.format(text=truncated_text)
+                # 通过 PromptManager 获取提示词并渲染
+                prompt = await prompt_manager.get_prompt(
+                    "metadata_extraction", variables={"text": truncated_text}
+                )
+
+                # 通过 PromptManager 获取系统提示词
+                system_prompt = await prompt_manager.get_prompt("metadata_extraction")
 
                 # 使用工厂创建 LLM 实例
+                # 注意：temperature/max_tokens 当前由兼容层处理，未来将迁移到 LLMSceneConfig 统一管理
                 llm = LLMServiceFactory.create(
                     framework=LLMFramework.LLAMAINDEX,
                     model_name=settings.llm_models["metadata_extraction"],
@@ -182,10 +188,7 @@ class MetadataExtractor:
 
                 # 构建提示词
                 messages = [
-                    LLMMessage(
-                        role="system",
-                        content="你是一个元数据提取专家，擅长从文本中提取结构化信息。",
-                    ),
+                    LLMMessage(role="system", content=system_prompt),
                     LLMMessage(role="user", content=prompt),
                 ]
 

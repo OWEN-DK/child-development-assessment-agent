@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-from pydantic import Field
+from pydantic import Field, BaseModel
 from pydantic_settings import SettingsConfigDict
 from threading import RLock
 import asyncio
@@ -23,7 +23,7 @@ except ImportError:
 from .modules.app import AppSettings
 from .modules.logging import LogSettings
 from .modules.paths import PathSettings
-from .modules.models.llm import ModelSettings
+from .modules.models.llm import LLMSettings
 from .modules.models.embedding import EmbeddingSettings
 from .modules.models.ml_scoring import MLScoringSettings
 from .modules.rag.core import RagCoreSettings
@@ -34,6 +34,7 @@ from .modules.rag.pageindex import PageIndexSettings
 from .modules.rag.pipeline import RagPipelineSettings
 from .modules.database import database_settings
 from .modules.redis import redis_settings
+from .modules.tracing import TracingConfig
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent.parent.resolve()
@@ -49,13 +50,14 @@ class ConfigFieldMetadata:
     affected_components: list[str]
     field_type: str
     default_value: Any
+    current_value: Any = None  # 新增：当前值（用于嵌套配置）
 
 
 class Settings(
     AppSettings,
     LogSettings,
     PathSettings,
-    ModelSettings,
+    LLMSettings,
     EmbeddingSettings,
     MLScoringSettings,
     RagCoreSettings,
@@ -64,6 +66,7 @@ class Settings(
     VectorStoreSettings,
     PageIndexSettings,
     RagPipelineSettings,
+    TracingConfig,
 ):
     """统一的配置类，聚合所有拆分后的配置"""
 
@@ -112,7 +115,7 @@ class Settings(
             )
         ):
             return "rag.retrieval"
-        elif field_name.startswith("model_"):
+        elif field_name.startswith("model_") or field_name.startswith("llm_"):
             return "models.llm"
         elif field_name.startswith(
             (
@@ -190,6 +193,7 @@ class Settings(
         )
         cold_reload_prefixes = (
             "model_",
+            "llm_",
             "dashscope_api_key",
             "pageindex_",
             "rag_storage_dir",
@@ -232,6 +236,76 @@ class Settings(
             components.append("通用配置")
         return components
 
+    def _expand_nested_model(
+        self,
+        model_class: type,
+        prefix: str,
+        category: str,
+        parent_value: Optional[BaseModel] = None,
+    ) -> Dict[str, ConfigFieldMetadata]:
+        """递归展开嵌套的 Pydantic 模型为扁平化的配置元数据"""
+        metadata = {}
+        if not hasattr(model_class, "model_fields"):
+            return metadata
+
+        for field_name, field_info in model_class.model_fields.items():
+            full_key = f"{prefix}__{field_name}" if prefix else field_name
+            annotation = field_info.annotation
+
+            # 检查是否是嵌套的 Pydantic BaseModel
+            if hasattr(annotation, "model_fields"):
+                # 递归展开嵌套模型
+                nested_value = None
+                if parent_value and hasattr(parent_value, field_name):
+                    nested_value = getattr(parent_value, field_name)
+                nested_meta = self._expand_nested_model(
+                    annotation, full_key, category, nested_value
+                )
+                metadata.update(nested_meta)
+            else:
+                # 基础类型字段
+                type_name = (
+                    annotation.__name__
+                    if hasattr(annotation, "__name__")
+                    else str(annotation)
+                )
+
+                # 获取默认值和当前值
+                # 优先使用 parent_value 中的实际值，如果没有则使用字段默认值
+                current_value = None
+                default_value = field_info.default
+
+                if parent_value and hasattr(parent_value, field_name):
+                    current_value = getattr(parent_value, field_name)
+                    # 如果当前值是 PydanticUndefined，则使用默认值
+                    if (
+                        current_value is None
+                        or str(current_value) == "PydanticUndefined"
+                    ):
+                        current_value = (
+                            default_value if default_value is not None else ""
+                        )
+                else:
+                    current_value = default_value if default_value is not None else ""
+
+                # 如果默认值是 PydanticUndefined，尝试从当前值推断
+                if default_value is None or str(default_value) == "PydanticUndefined":
+                    default_value = current_value
+
+                metadata[full_key] = ConfigFieldMetadata(
+                    key=full_key,
+                    category=category,
+                    description=field_info.description or "",
+                    hot_reloadable=self._is_hot_reloadable(full_key),
+                    requires_restart=not self._is_hot_reloadable(full_key),
+                    affected_components=self._get_affected_components(full_key),
+                    field_type=type_name,
+                    default_value=default_value,
+                    current_value=current_value,
+                )
+
+        return metadata
+
     def get_all_config_metadata(self) -> Dict[str, ConfigFieldMetadata]:
         metadata = {}
         for field_name, field_info in self.model_fields.items():
@@ -243,29 +317,88 @@ class Settings(
                 if hasattr(annotation, "__name__")
                 else str(annotation)
             )
-            metadata[field_name] = ConfigFieldMetadata(
-                key=field_name,
-                category=category,
-                description=field_info.description or "",
-                hot_reloadable=hot_reloadable,
-                requires_restart=not hot_reloadable,
-                affected_components=self._get_affected_components(field_name),
-                field_type=type_name,
-                default_value=field_info.default,
-            )
+
+            # 检查是否是嵌套的 Pydantic BaseModel（非 Dict/List 类型）
+            if (
+                hasattr(annotation, "model_fields")
+                and not str(annotation).startswith("Dict")
+                and not str(annotation).startswith("List")
+            ):
+                # 递归展开嵌套模型
+                current_value = getattr(self, field_name, None)
+                nested_meta = self._expand_nested_model(
+                    annotation, field_name, category, current_value
+                )
+                metadata.update(nested_meta)
+            else:
+                # 基础类型或 Dict/List 类型，保持原有逻辑
+                # 对于有 default_factory 的字段，调用 factory 获取默认值
+                from pydantic_core import PydanticUndefined
+
+                default_value = field_info.default
+                if (
+                    default_value is PydanticUndefined
+                    and hasattr(field_info, "default_factory")
+                    and field_info.default_factory is not None
+                ):
+                    try:
+                        default_value = field_info.default_factory()
+                    except Exception:
+                        default_value = {}
+
+                metadata[field_name] = ConfigFieldMetadata(
+                    key=field_name,
+                    category=category,
+                    description=field_info.description or "",
+                    hot_reloadable=hot_reloadable,
+                    requires_restart=not hot_reloadable,
+                    affected_components=self._get_affected_components(field_name),
+                    field_type=type_name,
+                    default_value=default_value,
+                )
+
+        # 特殊处理：将 llm_scene_configs property 展开为可编辑的配置项
+        if hasattr(self, "llm_scene_configs"):
+            scene_configs = self.llm_scene_configs
+            for scene_name, scene_config in scene_configs.items():
+                scene_meta = self._expand_nested_model(
+                    type(scene_config),
+                    f"llm_scene_configs__{scene_name}",
+                    "models.llm",
+                    scene_config,
+                )
+                metadata.update(scene_meta)
+
         return metadata
 
     @property
     def llm_models(self) -> Dict[str, str]:
+        """获取各场景的模型名称（向后兼容）"""
         return {
-            "report_generation": self.model_report_generation,
-            "assessment": self.model_assessment,
-            "validation": self.model_validation,
-            "query_rewrite": self.model_query_rewrite,
-            "metadata_extraction": self.model_metadata_extraction,
-            "vl_parsing": self.model_vl_parsing,
-            "query_classification": self.model_query_classification,
-            "test_case_generation": self.model_report_generation,
+            "report_generation": self.model_report_generation.model
+            if hasattr(self.model_report_generation, "model")
+            else self.model_report_generation,
+            "assessment": self.model_assessment.model
+            if hasattr(self.model_assessment, "model")
+            else self.model_assessment,
+            "validation": self.model_validation.model
+            if hasattr(self.model_validation, "model")
+            else self.model_validation,
+            "query_rewrite": self.model_query_rewrite.model
+            if hasattr(self.model_query_rewrite, "model")
+            else self.model_query_rewrite,
+            "metadata_extraction": self.model_metadata_extraction.model
+            if hasattr(self.model_metadata_extraction, "model")
+            else self.model_metadata_extraction,
+            "vl_parsing": self.model_vl_parsing.model
+            if hasattr(self.model_vl_parsing, "model")
+            else self.model_vl_parsing,
+            "query_classification": self.model_query_classification.model
+            if hasattr(self.model_query_classification, "model")
+            else self.model_query_classification,
+            "test_case_generation": self.model_report_generation.model
+            if hasattr(self.model_report_generation, "model")
+            else self.model_report_generation,
         }
 
     @property
@@ -404,6 +537,30 @@ def start_config_watcher() -> Optional[Observer]:
 
 # 对外导出统一的settings实例
 settings = get_settings()
+
+
+def validate_required_env_vars() -> list[str]:
+    """校验必需的环境变量是否已配置
+
+    注意：
+    1. 此函数在 settings 创建之后调用
+    2. LLM API Key 优先从数据库 system_configs 表读取（符合 CLAUDE.md 配置管理规范）
+    3. 环境变量作为兜底方案（数据库不可用时）
+
+    返回:
+        缺失的环境变量名称列表
+    """
+    import os
+
+    missing = []
+
+    # LLM 相关：优先检查 settings（来自数据库），兜底检查环境变量
+    settings_key = getattr(settings, "dashscope_api_key", None)
+    env_key = os.environ.get("DASHSCOPE_API_KEY")
+    if not settings_key and not env_key:
+        missing.append("DASHSCOPE_API_KEY")
+
+    return missing
 
 
 # 初始化嵌入模型（保持与原逻辑一致）

@@ -30,8 +30,11 @@ export default defineConfig(({ mode }) => {
     },
   },
   server: {
-    host: env.VITE_DEV_SERVER_HOST || '127.0.0.1',
+    host: env.VITE_DEV_SERVER_HOST || '0.0.0.0',
     port: Number(env.VITE_DEV_SERVER_PORT) || 5173,
+    hmr: {
+      clientPort: Number(env.VITE_DEV_SERVER_PORT) || 5173,
+    },
     proxy: {
       '/assess': {
         target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',

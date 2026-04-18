@@ -33,8 +33,9 @@ import RecommendationPanel from '@/features/rag-eval/components/RecommendationPa
 import TrendChart from '@/features/rag-eval/components/TrendChart';
 import RollbackConfirmDialog from '@/features/rag-eval/components/RollbackConfirmDialog';
 import { exportCasesToCSV, exportReportToJSON } from '@/features/rag-eval/utils/export';
-import { createExportTask, getExportStatus, downloadExport } from '@/api/rag-eval/export';
+import { createExportTask, downloadExport } from '@/api/rag-eval/export';
 import { rollbackToVersion } from '@/api/rag-eval/config';
+import { useExportSse } from '@/hooks/useSseClient';
 
 const { Title } = Typography;
 
@@ -53,6 +54,34 @@ export default function ReportPage() {
 
   // 导出相关状态
   const [exporting, setExporting] = useState(false);
+
+  // 导出 SSE
+  const exportSse = useExportSse('anonymous');
+
+  useEffect(() => {
+    if (!exportSse.on) return;
+
+    const unbindReady = exportSse.on('export_ready', async (event: any) => {
+      try {
+        await downloadExport(event.export_id);
+        message.success('PDF 下载已开始');
+      } catch (err) {
+        message.error('下载导出文件失败');
+      } finally {
+        setExporting(false);
+      }
+    });
+
+    const unbindFailed = exportSse.on('export_failed', (event: any) => {
+      message.error(`PDF 导出失败: ${event.error || '未知错误'}`);
+      setExporting(false);
+    });
+
+    return () => {
+      unbindReady?.();
+      unbindFailed?.();
+    };
+  }, [exportSse.on]);
 
   // 回滚相关状态
   const [rollbackVisible, setRollbackVisible] = useState(false);
@@ -89,51 +118,12 @@ export default function ReportPage() {
     if (!id) return;
     setExporting(true);
     try {
-      const response = await createExportTask(id);
+      await createExportTask(id);
       message.success('PDF 导出任务已提交，请稍后查看下载状态');
-
-      // 轮询任务状态
-      pollExportStatus(response.task_id);
     } catch {
       message.error('创建 PDF 导出任务失败');
-    } finally {
       setExporting(false);
     }
-  };
-
-  // 轮询导出状态
-  const pollExportStatus = async (taskId: string) => {
-    const maxAttempts = 60; // 最多轮询 60 次（约 5 分钟）
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const statusResponse = await getExportStatus(taskId);
-        const status = statusResponse.data.status;
-
-        if (status === 'completed') {
-          await downloadExport(taskId);
-          message.success('PDF 下载已开始');
-          return;
-        }
-
-        if (status === 'failed') {
-          message.error(`PDF 导出失败: ${statusResponse.data.error || '未知错误'}`);
-          return;
-        }
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 5000); // 每 5 秒轮询一次
-        } else {
-          message.warning('PDF 导出超时，请稍后重试');
-        }
-      } catch {
-        message.error('查询导出状态失败');
-      }
-    };
-
-    poll();
   };
 
   // 导出 CSV

@@ -1,6 +1,8 @@
 import apiClient from '../client';
 import type { TestCase, TestRun, KnowledgeSnapshot, TestResult, ImportPreviewResult, BatchImportRequest, BatchImportResult, SourceDocument, TestCaseDraft, TestSet, GenerationParams } from './types';
 
+export type { TestCase, TestRun, KnowledgeSnapshot, TestResult, ImportPreviewResult, BatchImportRequest, BatchImportResult, SourceDocument, TestCaseDraft, TestSet, GenerationParams } from './types';
+
 export const createTestCase = async (data: Omit<TestCase, 'id' | 'created_at' | 'updated_at'>): Promise<TestCase> => {
   const response = await apiClient.post<TestCase>('/rag/test/cases', data);
   return response.data;
@@ -46,13 +48,17 @@ export const batchDeleteDrafts = async (ids: string[]): Promise<{ status: string
   return response.data;
 };
 
-export const runAllTests = async (data?: { name?: string; description?: string; limit?: number }): Promise<{ status: string; test_run: TestRun }> => {
-  const response = await apiClient.post('/rag/test/run', data || {});
+export const runAllTests = async (data?: { name?: string; description?: string; limit?: number; test_set_ids?: string[] }): Promise<{ run_id: string; status: string; message: string }> => {
+  const response = await apiClient.post('/rag/test/run', data || {}, {
+    timeout: 10000,
+  });
   return response.data;
 };
 
 export const runSingleTest = async (caseId: string, limit: number = 10): Promise<{ status: string; result: TestResult }> => {
-  const response = await apiClient.post(`/rag/test/run/${caseId}?limit=${limit}`);
+  const response = await apiClient.post(`/rag/test/run/${caseId}?limit=${limit}`, undefined, {
+    timeout: 120000,
+  });
   return response.data;
 };
 

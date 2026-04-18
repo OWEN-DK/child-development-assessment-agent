@@ -1,9 +1,16 @@
 import React from 'react';
-import { List, Button, Space, Tag, Typography, Pagination, Empty } from 'antd';
+import { List, Button, Space, Tag, Typography, Pagination, Empty, Tooltip } from 'antd';
 import { EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { SearchResultItem } from '../../api/knowledge/types';
 import { highlightKeywords } from '../../utils/highlight';
 import styles from './SearchResultList.module.scss';
+
+const getAgeFitScoreColor = (score: number): string => {
+  if (score >= 0.8) return 'green';
+  if (score >= 0.6) return 'blue';
+  if (score >= 0.4) return 'orange';
+  return 'red';
+};
 
 interface SearchResultListProps {
   results: SearchResultItem[];
@@ -68,7 +75,16 @@ export const SearchResultList: React.FC<SearchResultListProps> = React.memo(({
                     )}
                   </div>
                   <Space size="small" wrap>
-                    <Tag color="blue">相关度: {(item.score * 100).toFixed(1)}%</Tag>
+                    <Tooltip title="检索相关度：内容与查询关键词的相关程度，来自 Cross-Encoder 重排序">
+                      <Tag color="blue">检索相关度: {(item.score * 100).toFixed(1)}%</Tag>
+                    </Tooltip>
+                    {item.age_fit_score !== undefined && item.age_fit_score !== null && (
+                      <Tooltip title="年龄适配度：内容适合用户当前年龄的程度，基于年龄范围、内容特征和领域匹配度计算">
+                        <Tag color={getAgeFitScoreColor(item.age_fit_score)}>
+                          年龄适配度: {(item.age_fit_score * 100).toFixed(1)}%
+                        </Tag>
+                      </Tooltip>
+                    )}
                     <Tag color="green">来源: {item.source_book}</Tag>
                     {item.page_label && (
                       <Tag color="orange">

@@ -50,6 +50,16 @@ dependencies = [
     "cachetools>=5.3.0",
     "pybloom-live>=4.0.0",
     "prometheus-client>=0.20.0",
+    "apscheduler>=3.10.0",
+    "weasyprint>=68.1",
+    "markdown>=3.10.2",
+    "datasketch>=1.9.0",
+    "langchain-openai>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "langchain-ollama>=0.1.0",
+    "llama-index-llms-openai>=0.2.0",
+    "llama-index-llms-anthropic>=0.2.0",
+    "llama-index-llms-ollama>=0.2.0",
 ]
 
 [project.scripts]
