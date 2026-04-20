@@ -75,6 +75,7 @@
 # 当前（错误）：
 test_run = TestRun(id=run_id, ...)
 # ... 执行测试 ...
+test_run.test_results = test_results  # TestRun 模型没有这个字段！
 self._save_test_run(test_run)  # 写入文件
 
 # 改为：
@@ -111,13 +112,46 @@ async def run_all_tests(self, run_test_case_fn, name: str = "", description: str
     
     test_run.status = TestRunStatus.RUNNING
     
-    # 6. 执行测试用例（结果由 TestExecutor 保存到数据库）
-    for i, test_case in enumerate(test_cases):
-        result = await run_test_case_fn(test_case, limit)
-        # result 已在 execute_test_case 中保存到数据库
-        # ... 更新进度和统计 ...
+    # 6. 执行测试用例（改为调用 execute_test_case 以保存到数据库）
+    # 注意：run_test_case_fn 应该是 execute_test_case 而非 run_test_case
+    # execute_test_case 返回 TestRunResult（ORM）并保存到数据库
+    # run_test_case 返回 TestResult（Pydantic）不保存到数据库
+    passed_count = 0
+    total_precision = 0.0
+    total_recall = 0.0
+    total_f1 = 0.0
+    total_mrr = 0.0
+    total_ndcg = 0.0
     
-    # 7. 更新聚合指标
+    for i, test_case in enumerate(test_cases):
+        try:
+            # 调用 execute_test_case 而非 run_test_case
+            result = await run_test_case_fn(run_id, test_case)
+            
+            # 累加指标
+            total_precision += result.precision or 0.0
+            total_recall += result.recall or 0.0
+            total_f1 += result.f1 or 0.0
+            total_mrr += result.mrr or 0.0
+            total_ndcg += result.ndcg or 0.0
+            
+            if result.passed:
+                passed_count += 1
+            
+            # 更新进度
+            progress = ((i + 1) / len(test_cases)) * 100
+            await test_run_task_adapter.update(
+                run_id,
+                {
+                    "progress": progress,
+                    "message": f"已执行 {i + 1}/{len(test_cases)} 个用例",
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to run test case {test_case.id}: {e}")
+            continue
+    
+    # 7. 更新聚合指标（通过 complete_test_run）
     await self.complete_test_run(run_id)
     
     return test_run
@@ -129,6 +163,11 @@ async def _get_last_test_run_from_db(self) -> Optional[TestRun]:
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 ```
+
+**关键修改点：**
+1. **删除 `test_run.test_results = test_results`** - TestRun ORM 模型没有这个字段
+2. **改为调用 `execute_test_case()` 而非 `run_test_case()`** - 前者保存结果到数据库，后者不保存
+3. **删除 `self._save_test_run(test_run)`** - 改为在步骤4立即保存，步骤7更新聚合指标
 
 **修改 `execute_batch()` 方法：**
 
@@ -203,10 +242,11 @@ class TestRunService:
         self.repo = TestRunRepository(db_session_factory)  # 替代 storage
     
     async def list_test_runs(self) -> List[TestRun]:
+        """获取测试运行列表（返回 ORM 对象）"""
         return await self.repo.get_latest_runs(limit=50)
     
     async def get_test_run(self, run_id: str) -> Optional[dict]:
-        """获取测试运行详情（包含 test_results 关联查询）"""
+        """获取测试运行详情（包含 test_results 关联查询，返回字典）"""
         async with self.db_session_factory() as session:
             # 获取 TestRun
             stmt = select(TestRun).where(TestRun.id == run_id)
@@ -266,7 +306,9 @@ class TestRunService:
         return runs[0] if runs else None
 ```
 
-**注意：** `get_test_run()` 返回字典而非 ORM 对象，因为前端需要 `test_results` 字段。
+**返回类型说明：**
+- `list_test_runs()` 返回 `List[TestRun]`（ORM 对象列表）- Controller 层使用序列化器转换
+- `get_test_run()` 返回 `Optional[dict]`（字典）- 已包含关联查询的 `test_results`，无需额外序列化
 
 ---
 
@@ -362,7 +404,6 @@ serialize_test_run = create_serializer(
         "config_version_id": None,
         "previous_config_version_id": None,
         "config_snapshot": None,
-        "test_results": None,  # 已在 test_run_service 中转换
     }
 )
 ```
@@ -373,8 +414,8 @@ serialize_test_run = create_serializer(
 @router.get("/runs")
 async def list_test_runs():
     """列出所有测试运行"""
-    runs = await rag_test_manager.list_test_runs()  # 添加 await
-    result = [serialize_test_run(run) for run in runs]  # 添加序列化
+    runs = await rag_test_manager.list_test_runs()  # 添加 await，返回 ORM 对象列表
+    result = [serialize_test_run(run) for run in runs]  # 序列化 ORM 对象
     return APIResponse.success(data=result)
 ```
 
@@ -384,7 +425,7 @@ async def list_test_runs():
 @router.get("/runs/{run_id}")
 async def get_test_run(run_id: str):
     """获取单个测试运行结果"""
-    run = await rag_test_manager.get_test_run(run_id)  # 添加 await
+    run = await rag_test_manager.get_test_run(run_id)  # 添加 await，返回字典（已包含 test_results）
     if not run:
         raise TestRunNotFoundException(run_id=run_id)
     return APIResponse.success(data=run)  # 已是字典，无需序列化
@@ -402,6 +443,10 @@ async def compare_test_runs(run_id1: str, run_id2: str):
     except ValueError as e:
         raise InvalidParamsException(message=str(e))
 ```
+
+**返回类型说明：**
+- `list_test_runs()` - 返回 ORM 对象列表，Controller 使用 `serialize_test_run` 序列化
+- `get_test_run()` - 返回字典（已包含 `test_results`），Controller 直接返回
 
 ---
 
@@ -490,7 +535,9 @@ async def compare_test_runs(run_id1: str, run_id2: str):
 6. ✅ `test_run/__init__.py` 不再导出 TestRunStorage
 7. ✅ `facade.py` 只有一个异步版本的 `compare_test_runs()`
 8. ✅ `get_test_run()` 返回包含 `test_results` 的字典
-9. ✅ Controller 使用序列化器转换 ORM 对象
+9. ✅ `list_test_runs()` 返回 ORM 对象列表，Controller 使用序列化器转换
+10. ✅ `run_all_tests()` 删除 `test_run.test_results = test_results` 行
+11. ✅ `run_all_tests()` 调用 `execute_test_case()` 而非 `run_test_case()`
 
 ### 数据验收
 
@@ -518,6 +565,8 @@ async def compare_test_runs(run_id1: str, run_id2: str):
 ### 高风险
 
 - **序列化错误**：直接返回 ORM 对象会导致 JSON 序列化失败，必须使用序列化器
+- **执行路径混淆**：`run_all_tests()` 调用 `run_test_case()` 不会保存结果到数据库，必须改为调用 `execute_test_case()`
+- **字段不存在**：`TestRun` ORM 模型没有 `test_results` 字段，设置该属性不会保存到数据库
 
 ### 缓解措施
 
