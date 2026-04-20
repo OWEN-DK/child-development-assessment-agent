@@ -135,7 +135,7 @@ class TestResultAnalyzer:
             await session.commit()
             logger.info(f"聚合评分已重算：{len(runs)} 个运行")
 
-    def compare_config_versions(self, version_id1: str, version_id2: str) -> Dict:
+    async def compare_config_versions(self, version_id1: str, version_id2: str) -> Dict:
         """
         比较两个配置版本的测试表现
         
@@ -149,69 +149,56 @@ class TestResultAnalyzer:
         Raises:
             ValueError: 如果找不到对应版本的测试运行
         """
-        runs = self._list_test_runs_from_files()
-        runs_for_v1 = [r for r in runs if r.config_version_id == version_id1]
-        runs_for_v2 = [r for r in runs if r.config_version_id == version_id2]
+        async with self.db_session_factory() as session:
+            stmt = select(TestRun).where(
+                TestRun.config_version_id.in_([version_id1, version_id2])
+            )
+            result = await session.execute(stmt)
+            runs = result.scalars().all()
+            
+            runs_for_v1 = [r for r in runs if r.config_version_id == version_id1]
+            runs_for_v2 = [r for r in runs if r.config_version_id == version_id2]
 
-        if not runs_for_v1:
-            raise ValueError(f"No test runs found for config version {version_id1}")
-        if not runs_for_v2:
-            raise ValueError(f"No test runs found for config version {version_id2}")
+            if not runs_for_v1:
+                raise ValueError(f"No test runs found for config version {version_id1}")
+            if not runs_for_v2:
+                raise ValueError(f"No test runs found for config version {version_id2}")
 
-        avg_v1_precision = sum(r.overall_precision for r in runs_for_v1) / len(
-            runs_for_v1
-        )
-        avg_v1_recall = sum(r.overall_recall for r in runs_for_v1) / len(runs_for_v1)
-        avg_v1_f1 = sum(r.overall_f1 for r in runs_for_v1) / len(runs_for_v1)
-        avg_v1_mrr = sum(r.overall_mrr for r in runs_for_v1) / len(runs_for_v1)
+            avg_v1_precision = sum(r.overall_precision for r in runs_for_v1) / len(
+                runs_for_v1
+            )
+            avg_v1_recall = sum(r.overall_recall for r in runs_for_v1) / len(runs_for_v1)
+            avg_v1_f1 = sum(r.overall_f1 for r in runs_for_v1) / len(runs_for_v1)
+            avg_v1_mrr = sum(r.overall_mrr for r in runs_for_v1) / len(runs_for_v1)
 
-        avg_v2_precision = sum(r.overall_precision for r in runs_for_v2) / len(
-            runs_for_v2
-        )
-        avg_v2_recall = sum(r.overall_recall for r in runs_for_v2) / len(runs_for_v2)
-        avg_v2_f1 = sum(r.overall_f1 for r in runs_for_v2) / len(runs_for_v2)
-        avg_v2_mrr = sum(r.overall_mrr for r in runs_for_v2) / len(runs_for_v2)
+            avg_v2_precision = sum(r.overall_precision for r in runs_for_v2) / len(
+                runs_for_v2
+            )
+            avg_v2_recall = sum(r.overall_recall for r in runs_for_v2) / len(runs_for_v2)
+            avg_v2_f1 = sum(r.overall_f1 for r in runs_for_v2) / len(runs_for_v2)
+            avg_v2_mrr = sum(r.overall_mrr for r in runs_for_v2) / len(runs_for_v2)
 
-        return {
-            "version1": {
-                "version_id": version_id1,
-                "run_count": len(runs_for_v1),
-                "avg_precision": avg_v1_precision,
-                "avg_recall": avg_v1_recall,
-                "avg_f1": avg_v1_f1,
-                "avg_mrr": avg_v1_mrr,
-            },
-            "version2": {
-                "version_id": version_id2,
-                "run_count": len(runs_for_v2),
-                "avg_precision": avg_v2_precision,
-                "avg_recall": avg_v2_recall,
-                "avg_f1": avg_v2_f1,
-                "avg_mrr": avg_v2_mrr,
-            },
-            "differences": {
-                "precision_change": avg_v2_precision - avg_v1_precision,
-                "recall_change": avg_v2_recall - avg_v1_recall,
-                "f1_change": avg_v2_f1 - avg_v1_f1,
-                "mrr_change": avg_v2_mrr - avg_v1_mrr,
-            },
-        }
-
-    def _list_test_runs_from_files(self) -> List[TestRun]:
-        """从文件列表获取测试运行"""
-        import json
-        import os
-
-        test_runs = []
-        try:
-            test_runs_dir = f"{__import__('src.config', fromlist=['settings']).settings.rag_storage_dir}/test_runs"
-            for filename in os.listdir(test_runs_dir):
-                if filename.endswith(".json"):
-                    file_path = os.path.join(test_runs_dir, filename)
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        test_runs.append(TestRun(**data))
-            test_runs.sort(key=lambda x: x.created_at, reverse=True)
-        except Exception as e:
-            logger.error(f"Failed to list test runs: {e}")
-        return test_runs
+            return {
+                "version1": {
+                    "version_id": version_id1,
+                    "run_count": len(runs_for_v1),
+                    "avg_precision": avg_v1_precision,
+                    "avg_recall": avg_v1_recall,
+                    "avg_f1": avg_v1_f1,
+                    "avg_mrr": avg_v1_mrr,
+                },
+                "version2": {
+                    "version_id": version_id2,
+                    "run_count": len(runs_for_v2),
+                    "avg_precision": avg_v2_precision,
+                    "avg_recall": avg_v2_recall,
+                    "avg_f1": avg_v2_f1,
+                    "avg_mrr": avg_v2_mrr,
+                },
+                "differences": {
+                    "precision_change": avg_v2_precision - avg_v1_precision,
+                    "recall_change": avg_v2_recall - avg_v1_recall,
+                    "f1_change": avg_v2_f1 - avg_v1_f1,
+                    "mrr_change": avg_v2_mrr - avg_v1_mrr,
+                },
+            }

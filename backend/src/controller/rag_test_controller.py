@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.sse import SSEPublisher, sse_response
 from src.schemas import (AddCasesToSetRequest, BatchDeleteRequest,
-                         BatchImportRequest, CreateSnapshotRequest,
+                         BatchImportRequest, CreateDraftRequest, CreateSnapshotRequest,
                          CreateTestCaseRequest, CreateTestSetRequest,
                          GenerateDraftsRequest, ImportDraftsRequest,
                          RunTestsRequest, UpdateDraftRequest,
@@ -17,6 +17,8 @@ from src.schemas import (AddCasesToSetRequest, BatchDeleteRequest,
 from src.schemas.common import APIResponse
 from src.schemas.test_case import GenerationParams, TestCase, TestRunStatus
 from src.service.rag_test_manager import rag_test_manager
+from src.service.rag_test.draft_service import draft_service
+from src.service.task_sse_publisher import TaskSsePublisher
 from src.utils.exceptions import (DocumentNotFoundException, DraftNotFoundException,
                                    InvalidParamsException, InternalServerErrorException,
                                    ResourceNotFoundException, TestCaseNotFoundException,
@@ -76,6 +78,7 @@ serialize_draft = create_serializer(
     {
         "id": None,
         "source_document_id": None,
+        "source_document_name": None,
         "query": None,
         "age": float,
         "domain": safe_enum_value,
@@ -89,6 +92,29 @@ serialize_draft = create_serializer(
         "status": safe_enum_value,
         "created_at": safe_isoformat,
         "updated_at": safe_isoformat,
+    }
+)
+
+serialize_test_run = create_serializer(
+    object,
+    {
+        "id": None,
+        "name": None,
+        "description": None,
+        "overall_precision": safe_float,
+        "overall_recall": safe_float,
+        "overall_f1": safe_float,
+        "overall_mrr": safe_float,
+        "overall_ndcg": safe_float,
+        "total_test_cases": None,
+        "passed_test_cases": None,
+        "status": safe_enum_value,
+        "created_at": safe_isoformat,
+        "completed_at": safe_isoformat,
+        "snapshot_id": None,
+        "config_version_id": None,
+        "previous_config_version_id": None,
+        "config_snapshot": None,
     }
 )
 
@@ -216,39 +242,41 @@ async def run_tests(request: RunTestsRequest):
 
             # 执行
             async def progress_callback(test_result):
-                # 推送进度
-                await SSEPublisher.publish_progress(
-                    run_id,
-                    {
+                # 推送进度（使用统一 SSE 发布器）
+                await TaskSsePublisher.publish_progress(
+                    task_type="test_run",
+                    task_id=run_id,
+                    progress=0,
+                    message=f"用例 {test_result.test_case_id} 执行完成",
+                    metadata={
                         "test_case_id": test_result.test_case_id,
                         "passed": test_result.passed,
                         "execution_time_ms": test_result.execution_time_ms,
-                    },
+                    }
                 )
 
             await rag_test_manager.execute_batch(
                 run_id, request.concurrency, progress_callback
             )
 
-            # 推送完成
-            await SSEPublisher.publish_complete(
-                run_id,
-                {
+            # 推送完成（使用统一 SSE 发布器）
+            await TaskSsePublisher.publish_complete(
+                task_type="test_run",
+                task_id=run_id,
+                result={
                     "status": "completed",
                     "total": total,
                     "passed": test_run.passed_test_cases,
-                },
+                }
             )
 
         except Exception as e:
             logger.error(f"测试执行失败：{e}")
-            await SSEPublisher.publish(
-                f"test_run:{run_id}",
-                {
-                    "type": "error",
-                    "run_id": run_id,
-                    "error": str(e),
-                },
+            # 推送错误（使用统一 SSE 发布器）
+            await TaskSsePublisher.publish_error(
+                task_type="test_run",
+                task_id=run_id,
+                error=str(e)
             )
 
     import asyncio
@@ -279,14 +307,15 @@ async def run_single_test(case_id: str, limit: int = Query(10, ge=1, le=50)):
 @router.get("/runs")
 async def list_test_runs():
     """列出所有测试运行"""
-    result = rag_test_manager.list_test_runs()
+    runs = await rag_test_manager.list_test_runs()
+    result = [serialize_test_run(run) for run in runs]
     return APIResponse.success(data=result)
 
 
 @router.get("/runs/{run_id}")
 async def get_test_run(run_id: str):
     """获取单个测试运行结果"""
-    run = rag_test_manager.get_test_run(run_id)
+    run = await rag_test_manager.get_test_run(run_id)
     if not run:
         raise TestRunNotFoundException(run_id=run_id)
     return APIResponse.success(data=run)
@@ -303,10 +332,113 @@ async def batch_delete_test_runs(request: BatchDeleteRequest):
 async def compare_test_runs(run_id1: str, run_id2: str):
     """比较两个测试运行的结果"""
     try:
-        comparison = rag_test_manager.compare_test_runs(run_id1, run_id2)
+        comparison = await rag_test_manager.compare_test_runs(run_id1, run_id2)
         return APIResponse.success(data={"comparison": comparison})
     except ValueError as e:
         raise InvalidParamsException(message=str(e))
+
+
+# ========== 6 层校验引擎 API ==========
+
+from src.core.database import db_session_factory
+from src.service.validation_service import get_validation_service
+from src.utils.exceptions import InternalServerErrorException
+
+
+@router.post("/runs/{run_id}/validate")
+async def trigger_validation(run_id: str, background_tasks: BackgroundTasks):
+    """手动触发完整校验（Layer 1-6）
+
+    默认只执行 Layer 1-5，Layer 6 需额外指定。
+    校验在后台异步执行，不阻塞响应。
+    """
+    try:
+        session_factory = db_session_factory
+        validation_service = get_validation_service(session_factory)
+
+        # 获取测试运行（优先 RagEvalTestRun，回退到 legacy TestRun）
+        test_run = await _get_rag_eval_test_run(run_id, session_factory)
+        if not test_run:
+            raise ResourceNotFoundException(run_id=run_id)
+
+        async def _execute_validation():
+            try:
+                await validation_service.execute_layer1_to_5(test_run)
+                logger.info(f"校验完成: run_id={run_id}")
+            except Exception as e:
+                logger.error(f"校验失败: run_id={run_id}, error={e}")
+
+        background_tasks.add_task(_execute_validation)
+
+        return APIResponse.success(
+            data={"run_id": run_id, "status": "started"},
+            message="校验已启动，Layer 1-5 在后台执行"
+        )
+    except ResourceNotFoundException:
+        raise
+    except Exception as e:
+        raise InternalServerErrorException(message=f"触发校验失败: {str(e)}")
+
+
+@router.post("/runs/{run_id}/validate/layer6")
+async def trigger_layer6_validation(run_id: str):
+    """手动触发 Layer 6 校验（回归检测、交叉验证、成本分析、A/B 测试）
+
+    Layer 6 需要 Layer 1-5 已完成，否则返回警告。
+    """
+    try:
+        session_factory = db_session_factory
+        validation_service = get_validation_service(session_factory)
+
+        test_run = await _get_rag_eval_test_run(run_id, session_factory)
+        if not test_run:
+            raise ResourceNotFoundException(run_id=run_id)
+
+        result = await validation_service.execute_layer6(test_run)
+
+        return APIResponse.success(
+            data={"run_id": run_id, "layer6_result": result},
+            message="Layer 6 校验完成"
+        )
+    except ResourceNotFoundException:
+        raise
+    except Exception as e:
+        raise InternalServerErrorException(message=f"Layer 6 校验失败: {str(e)}")
+
+
+@router.get("/runs/{run_id}/validation")
+async def get_validation_results(run_id: str):
+    """获取测试运行的校验结果"""
+    try:
+        session_factory = db_session_factory
+        validation_service = get_validation_service(session_factory)
+
+        report = await validation_service.get_validation_results(run_id)
+
+        return APIResponse.success(data={
+            "report_id": report.id,
+            "run_id": report.run_id,
+            "status": report.status.value if hasattr(report.status, 'value') else report.status,
+            "overall_score": report.overall_score,
+            "validation_results": report.validation_results,
+            "tuning_suggestion_summary": report.tuning_suggestion_summary,
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+        })
+    except ResourceNotFoundException:
+        raise
+    except Exception as e:
+        raise InternalServerErrorException(message=f"获取校验结果失败: {str(e)}")
+
+
+async def _get_rag_eval_test_run(run_id: str, session_factory):
+    """获取 RagEvalTestRun 对象（用于校验引擎）"""
+    from sqlalchemy import select
+    from src.models.rag_eval.test_run import RagEvalTestRun
+
+    async with session_factory() as session:
+        stmt = select(RagEvalTestRun).where(RagEvalTestRun.id == run_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
 
 
 # 快照管理
@@ -396,27 +528,53 @@ async def upload_document(
         }
 
         if auto_gen:
+            # Step 1: 提取书籍元数据
+            from src.service.rag_test.book_metadata_service import BookMetadataService
+            metadata_service = BookMetadataService()
+            full_text = ""
+            try:
+                if os.path.exists(doc.file_path):
+                    with open(doc.file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        full_text = f.read()[:4000]
+            except Exception:
+                full_text = doc.content_summary or ""
+
+            metadata = await metadata_service.extract_metadata(full_text)
+
+            # Step 2: 从配置读取默认参数
+            from src.config.modules.rag.testing import TestCaseGenerationConfig
+            config = TestCaseGenerationConfig()
+            default_domains = [metadata.primary_domain] if metadata.primary_domain else config.default_domains
+            default_age_stages = metadata.applicable_age_stages if metadata.applicable_age_stages else config.default_age_stages
+
+            # Step 3: 构建默认组合参数
             params = GenerationParams(
-                target_domains=["感觉统合"],
-                age_range=(0, 6),
-                count=10,
-                difficulty="medium",
-                llm_model="qwen-turbo",
-                temperature=0.7,
+                target_domains=default_domains,
+                age_stages=default_age_stages,
+                drafts_per_combination=3,
+                query_types=["事实性查询", "比较性查询", "方案性查询"],
+                difficulty_levels=["入门级", "中级", "高级"],
+                llm_model="qwen-plus",
+                temperature=0.8,
+                mode="append",
             )
 
-            # 一行代码启动异步任务
+            # Step 4: 触发异步生成（使用新方法名）
             task_id = await async_task_manager.start_task(
                 task_type="draft_generation",
-                task_func=rag_test_manager.generate_test_case_drafts,
+                task_func=draft_service.generate_drafts_matrix,
                 source_document_id=doc.id,
-                params=params
+                params=params,
             )
 
-            # 更新返回信息
+            # Step 5: 返回结果
             response_data["auto_generate_started"] = True
             response_data["task_id"] = task_id
-            response_data["message"] = "文档上传成功，已开始自动生成测试用例草稿，请通过SSE接口监听进度"
+            combinations = len(params.target_domains) * len(params.age_stages)
+            response_data["message"] = (
+                f"文档上传成功，已开始自动生成 {combinations} 个组合的测试用例草稿，"
+                f"请通过 SSE 接口监听进度"
+            )
 
         return APIResponse.success(data=response_data)
     except ValueError as e:
@@ -458,33 +616,163 @@ from src.core.async_task import async_task_manager
 async def generate_drafts(doc_id: str, request: GenerateDraftsRequest):
     """根据源文档生成测试用例草稿（异步后台任务，返回task_id用于SSE监听进度）"""
     try:
-        # 一行代码启动异步任务，自动处理SSE进度推送、异常处理、消息通知
+        # 参数校验
+        params = request.params
+        if not params.target_domains:
+            raise InvalidParamsException(message="请至少选择一个领域")
+        if not params.age_stages:
+            raise InvalidParamsException(message="请至少选择一个年龄段")
+        if params.drafts_per_combination < 1 or params.drafts_per_combination > 10:
+            raise InvalidParamsException(message="每个组合草稿数必须在 1-10 之间")
+
+        # 触发异步生成（使用新方法）
         task_id = await async_task_manager.start_task(
             task_type="draft_generation",
-            task_func=rag_test_manager.generate_test_case_drafts,
+            task_func=draft_service.generate_drafts_matrix,
             source_document_id=doc_id,
-            params=request.params
+            params=params,
         )
 
-        # 立即返回任务ID
-        return APIResponse.success(data={"task_id": task_id}, message="已开始生成测试用例草稿，请通过SSE接口监听进度")
+        # 返回预估信息
+        combinations = len(params.target_domains) * len(params.age_stages)
+        total_drafts = combinations * params.drafts_per_combination
+
+        return APIResponse.success(data={
+            "task_id": task_id,
+            "combinations": combinations,
+            "estimated_drafts": total_drafts,
+        }, message="已开始生成测试用例草稿，请通过 SSE 接口监听进度")
+
     except ValueError as e:
         raise ResourceNotFoundException(message=str(e))
     except Exception as e:
         raise InternalServerErrorException(message=f"启动生成任务失败: {str(e)}")
 
 
+@router.post("/documents/{doc_id}/generate-drafts/estimate")
+async def estimate_draft_generation(doc_id: str, request: GenerateDraftsRequest):
+    """预估草稿生成的草稿数"""
+    params = request.params
+    combinations = len(params.target_domains) * len(params.age_stages)
+    total_drafts = combinations * params.drafts_per_combination
+
+    return APIResponse.success(data={
+        "combinations": combinations,
+        "total_drafts": total_drafts,
+        "domains": params.target_domains,
+        "age_stages": params.age_stages,
+        "drafts_per_combination": params.drafts_per_combination,
+    })
+
+
 @router.get("/drafts/generate/{task_id}/stream")
 async def draft_generation_stream(task_id: str) -> StreamingResponse:
-    """SSE 实时推送草稿生成进度"""
+    """SSE 实时推送草稿生成进度（task_id 为纯 UUID）"""
     return sse_response(f"draft_generation:{task_id}")
+
+
+@router.post("/drafts/generate/{task_id}/cancel")
+async def cancel_draft_generation(task_id: str):
+    """取消草稿生成任务"""
+    from src.core.async_task import async_task_manager
+    
+    success = await async_task_manager.cancel_task(task_id, "draft_generation")
+    
+    if success:
+        await SSEPublisher.publish(
+            f"draft_generation:{task_id}",
+            {
+                "type": "cancelled",
+                "message": "任务已取消",
+                "task_id": task_id
+            }
+        )
+        return APIResponse.success(
+            data={"task_id": task_id, "status": "cancelled"},
+            message="取消请求已发送"
+        )
+    else:
+        raise ResourceNotFoundException(message=f"任务 {task_id} 不存在或已完成")
+
+
+@router.get("/drafts/generate/tasks")
+async def list_draft_generation_tasks():
+    """获取草稿生成任务列表"""
+    from src.utils.di import get_task_state_service
+    
+    task_state_service = get_task_state_service()
+    states = await task_state_service.list_recent(task_type="draft_generation", limit=20)
+    
+    tasks = []
+    for state in states:
+        tasks.append({
+            "task_id": state.task_id,
+            "status": state.status.value,
+            "progress": state.progress,
+            "message": state.message or "草稿生成中",
+            "created_at": state.created_at,
+            "domain": state.metadata.get("domain", "未知领域"),
+            "age_stage": state.metadata.get("age_stage", "未知年龄段"),
+            "generated": state.metadata.get("generated", 0),
+            "deduplicated": state.metadata.get("deduplicated", 0),
+            "total_combinations": state.metadata.get("total_combinations", 0),
+            "current_combination": state.metadata.get("current_combination", 0),
+        })
+    
+    return APIResponse.success(data={"tasks": tasks})
 
 
 @router.get("/drafts")
 async def list_drafts(source_document_id: Optional[str] = None):
     """列出草稿"""
+    from src.models.document import SourceDocument
+    from src.core.database import async_session_factory
+    from sqlalchemy import select
+    
     result = await rag_test_manager.list_drafts(source_document_id)
-    return APIResponse.success(data=result)
+    
+    # 批量获取来源文档名称
+    doc_ids = list(set(d.source_document_id for d in result if d.source_document_id))
+    doc_names = {}
+    if doc_ids:
+        async with async_session_factory() as session:
+            docs_result = await session.execute(
+                select(SourceDocument.id, SourceDocument.title).where(SourceDocument.id.in_(doc_ids))
+            )
+            doc_names = {str(doc.id): doc.title for doc in docs_result.all()}
+    
+    # 转换为字典并填充来源文档名称
+    draft_dicts = []
+    for draft in result:
+        draft_dict = serialize_draft(draft)
+        draft_dict["source_document_name"] = doc_names.get(draft.source_document_id, "")
+        draft_dicts.append(draft_dict)
+    
+    return APIResponse.success(data=draft_dicts)
+
+
+@router.post("/drafts")
+async def create_draft(request: CreateDraftRequest):
+    """手动创建草稿"""
+    try:
+        draft = await rag_test_manager.create_draft(
+            source_document_id=request.source_document_id,
+            query=request.query,
+            age=request.age,
+            domain=request.domain,
+            expected_knowledge_ids=request.expected_knowledge_ids,
+            expected_keywords=request.expected_keywords,
+            description=request.description,
+            answer_points=request.answer_points,
+            professional_terms=request.professional_terms,
+            age_requirement=request.age_requirement,
+        )
+        return APIResponse.success(data=serialize_draft(draft))
+    except ValueError as e:
+        raise InvalidParamsException(message=str(e))
+    except Exception as e:
+        logger.error(f"创建草稿失败: {e}")
+        raise InternalServerErrorException(message="创建草稿失败")
 
 
 @router.get("/drafts/{draft_id}")
@@ -493,7 +781,23 @@ async def get_draft(draft_id: str):
     draft = await rag_test_manager.get_draft(draft_id)
     if not draft:
         raise DraftNotFoundException(draft_id=draft_id)
-    return APIResponse.success(data=draft)
+    
+    # 填充来源文档名称
+    from src.models.document import SourceDocument
+    from src.core.database import async_session_factory
+    from sqlalchemy import select
+    
+    draft_dict = serialize_draft(draft)
+    
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(SourceDocument).where(SourceDocument.id == draft.source_document_id)
+        )
+        doc = result.scalar_one_or_none()
+        if doc:
+            draft_dict["source_document_name"] = doc.title
+    
+    return APIResponse.success(data=draft_dict)
 
 
 @router.put("/drafts/{draft_id}")
@@ -503,7 +807,7 @@ async def update_draft(draft_id: str, request: UpdateDraftRequest):
     draft = await rag_test_manager.update_draft(draft_id, updates)
     if not draft:
         raise DraftNotFoundException(draft_id=draft_id)
-    return APIResponse.success(data=draft)
+    return APIResponse.success(data=serialize_draft(draft))
 
 
 @router.post("/drafts/{draft_id}/review")
@@ -561,7 +865,7 @@ async def create_test_set(request: CreateTestSetRequest):
     """创建测试集"""
     try:
         test_set = await rag_test_manager.create_test_set(
-            request.name, request.description, request.source_type
+            request.name, request.description
         )
         return APIResponse.success(data={"test_set": test_set.model_dump()})
     except Exception as e:
@@ -601,6 +905,13 @@ async def delete_test_set(set_id: str):
     if not success:
         raise TestSetNotFoundException(test_set_id=set_id)
     return APIResponse.success(message="测试集已删除")
+
+
+@router.post("/sets/batch/delete")
+async def batch_delete_test_sets(request: BatchDeleteRequest):
+    """批量删除测试集"""
+    deleted_count = await rag_test_manager.batch_delete_test_sets(request.ids)
+    return APIResponse.success(data={"deleted_count": deleted_count}, message=f"成功删除 {deleted_count} 个测试集")
 
 
 @router.post("/sets/{set_id}/cases")

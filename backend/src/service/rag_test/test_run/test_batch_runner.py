@@ -1,17 +1,18 @@
 import asyncio
-import json
-import os
 import uuid
 from datetime import datetime
 from typing import Callable, List, Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, desc, select
 
 from src.config import config_manager
 from src.core.database import db_session_factory
 from src.core.distributed_lock import DistributedLock
 from src.models.test_case import TestCase, TestRun, TestRunResult
 from src.schemas import TestRunStatus
+from src.schemas.task import TaskState, TaskStatus
+from src.service.task_sse_publisher import TaskSsePublisher
+from src.service.test_run_task_adapter import test_run_task_adapter
 from src.utils.logger import logger
 
 
@@ -20,8 +21,6 @@ class TestBatchRunner:
 
     def __init__(self):
         self.db_session_factory = db_session_factory
-        self.test_runs_dir = f"{__import__('src.config', fromlist=['settings']).settings.rag_storage_dir}/test_runs"
-        os.makedirs(self.test_runs_dir, exist_ok=True)
 
     async def run_all_tests(
         self,
@@ -34,7 +33,7 @@ class TestBatchRunner:
         运行所有测试用例
         
         Args:
-            run_test_case_fn: 运行单个测试用例的函数
+            run_test_case_fn: 运行单个测试用例的函数（应为 execute_test_case）
             name: 测试运行名称
             description: 描述
             limit: 检索数量限制
@@ -51,49 +50,87 @@ class TestBatchRunner:
         current_version = config_manager.get_active_version()
         config_snapshot = config_manager.get_full_config()
 
-        previous_run = await self._get_last_test_run()
+        previous_run = await self._get_last_test_run_from_db()
         previous_config_version = (
             previous_run.config_version_id if previous_run else None
         )
 
+        run_id = str(uuid.uuid4())
         test_run = TestRun(
-            id=str(uuid.uuid4()),
+            id=run_id,
             name=name or f"Test Run {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             description=description,
             total_test_cases=len(test_cases),
-            status=TestRunStatus.RUNNING,
+            status=TestRunStatus.PENDING,
             config_version_id=current_version,
             config_snapshot=config_snapshot,
             previous_config_version_id=previous_config_version,
         )
 
-        test_results = []
+        # 立即保存到数据库
+        async with self.db_session_factory() as session:
+            session.add(test_run)
+            await session.commit()
+
+        # 创建统一任务状态（Redis）
+        initial_state = TaskState.create(
+            task_id=run_id,
+            task_type="test_run",
+            metadata={
+                "name": test_run.name,
+                "total_test_cases": len(test_cases),
+            },
+        )
+        initial_state.message = "等待执行"
+        await test_run_task_adapter.create(initial_state)
+
+        # 更新状态为 running
+        await test_run_task_adapter.update(
+            run_id, {"status": TaskStatus.RUNNING, "message": "测试执行中"}
+        )
+        test_run.status = TestRunStatus.RUNNING
+
         passed_count = 0
         total_precision = 0.0
         total_recall = 0.0
         total_f1 = 0.0
         total_mrr = 0.0
         total_ndcg = 0.0
+        test_count = 0
 
-        for test_case in test_cases:
+        for i, test_case in enumerate(test_cases):
             try:
-                result = await run_test_case_fn(test_case, limit)
-                test_results.append(result)
+                # 调用 execute_test_case 而非 run_test_case
+                # execute_test_case 返回 TestRunResult（ORM）并保存到数据库
+                result = await run_test_case_fn(run_id, test_case)
 
-                total_precision += result.precision
-                total_recall += result.recall
-                total_f1 += result.f1_score
-                total_mrr += result.mrr
-                total_ndcg += result.ndcg_at_k
+                # 累加指标
+                total_precision += result.precision or 0.0
+                total_recall += result.recall or 0.0
+                total_f1 += result.f1 or 0.0
+                total_mrr += result.mrr or 0.0
+                total_ndcg += result.ndcg or 0.0
 
-                if result.f1_score >= 0.7:
+                if result.passed:
                     passed_count += 1
+
+                test_count += 1
+
+                # 更新进度
+                progress = ((i + 1) / len(test_cases)) * 100
+                await test_run_task_adapter.update(
+                    run_id,
+                    {
+                        "progress": progress,
+                        "message": f"已执行 {i + 1}/{len(test_cases)} 个用例",
+                    }
+                )
 
             except Exception as e:
                 logger.error(f"Failed to run test case {test_case.id}: {e}")
                 continue
 
-        test_count = len(test_results)
+        # 更新聚合指标
         if test_count > 0:
             test_run.overall_precision = total_precision / test_count
             test_run.overall_recall = total_recall / test_count
@@ -101,12 +138,31 @@ class TestBatchRunner:
             test_run.overall_mrr = total_mrr / test_count
             test_run.overall_ndcg = total_ndcg / test_count
 
-        test_run.test_results = test_results
         test_run.passed_test_cases = passed_count
         test_run.status = TestRunStatus.COMPLETED
         test_run.completed_at = datetime.now()
 
-        self._save_test_run(test_run)
+        # 更新终态
+        await test_run_task_adapter.update(
+            run_id,
+            {
+                "status": TaskStatus.COMPLETED,
+                "progress": 100.0,
+                "message": "测试完成",
+                "result": {
+                    "total_test_cases": len(test_cases),
+                    "passed_test_cases": passed_count,
+                    "precision": test_run.overall_precision,
+                    "recall": test_run.overall_recall,
+                    "f1": test_run.overall_f1,
+                }
+            }
+        )
+
+        # 更新数据库中的聚合指标
+        async with self.db_session_factory() as session:
+            session.add(test_run)
+            await session.commit()
 
         return test_run
 
@@ -155,6 +211,26 @@ class TestBatchRunner:
 
             await session.commit()
 
+            # 更新统一任务状态
+            await test_run_task_adapter.update(
+                run_id,
+                {
+                    "status": TaskStatus.COMPLETED,
+                    "progress": 100.0,
+                    "message": "测试完成",
+                    "result": {
+                        "total": total,
+                        "passed": passed,
+                        "precision": avg_precision,
+                        "recall": avg_recall,
+                        "f1": avg_f1,
+                    }
+                }
+            )
+
+            # 清理同步记录
+            test_run_task_adapter.cleanup_sync_records(run_id)
+
             logger.info(
                 f"测试运行已完成：{run_id}, 通过率={passed}/{total}={passed / total:.2%}"
             )
@@ -200,13 +276,32 @@ class TestBatchRunner:
                 result = await session.execute(stmt)
                 test_cases = result.scalars().all()
 
+            # 更新状态为 running
+            await test_run_task_adapter.update(
+                run_id, {"status": TaskStatus.RUNNING, "message": "批量测试执行中"}
+            )
+
             semaphore = asyncio.Semaphore(concurrency)
+            completed = 0
+            total = len(test_cases)
 
             async def execute_single(test_case):
+                nonlocal completed
                 async with semaphore:
-                    return await execute_test_case_fn(
+                    result = await execute_test_case_fn(
                         run_id, test_case, progress_callback
                     )
+                    completed += 1
+                    # 更新进度
+                    progress = (completed / total) * 100 if total > 0 else 0
+                    await test_run_task_adapter.update(
+                        run_id,
+                        {
+                            "progress": progress,
+                            "message": f"已执行 {completed}/{total} 个用例",
+                        }
+                    )
+                    return result
 
             tasks = [execute_single(tc) for tc in test_cases]
             results = await asyncio.gather(*tasks)
@@ -223,34 +318,9 @@ class TestBatchRunner:
 
         return results
 
-    def _save_test_run(self, test_run: TestRun):
-        """保存测试运行到文件"""
-        try:
-            file_path = os.path.join(self.test_runs_dir, f"{test_run.id}.json")
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(test_run.model_dump_json(indent=2))
-            logger.info(f"Test run saved to {file_path}")
-        except Exception as e:
-            logger.error(f"Failed to save test run: {e}")
-
-    async def _get_last_test_run(self) -> Optional[TestRun]:
-        """获取最后一个测试运行"""
-        runs = self._list_test_runs_from_files()
-        if runs:
-            return runs[0]
-        return None
-
-    def _list_test_runs_from_files(self) -> List[TestRun]:
-        """从文件列表获取测试运行"""
-        test_runs = []
-        try:
-            for filename in os.listdir(self.test_runs_dir):
-                if filename.endswith(".json"):
-                    file_path = os.path.join(self.test_runs_dir, filename)
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        test_runs.append(TestRun(**data))
-            test_runs.sort(key=lambda x: x.created_at, reverse=True)
-        except Exception as e:
-            logger.error(f"Failed to list test runs: {e}")
-        return test_runs
+    async def _get_last_test_run_from_db(self) -> Optional[TestRun]:
+        """从数据库获取最后一个测试运行"""
+        async with self.db_session_factory() as session:
+            stmt = select(TestRun).order_by(desc(TestRun.created_at)).limit(1)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()

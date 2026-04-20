@@ -70,10 +70,6 @@ class RagTestFacade:
         self.source_doc_service = source_doc_service
         self.db_session_factory = db_session_factory
 
-        STORAGE_DIR = settings.rag_storage_dir
-        self.test_runs_dir = f"{STORAGE_DIR}/test_runs"
-        os.makedirs(self.test_runs_dir, exist_ok=True)
-
         self._initialized = True
 
     async def create_test_run(
@@ -132,10 +128,6 @@ class RagTestFacade:
         for run_id in run_ids:
             if await repo.delete(run_id):
                 deleted_count += 1
-                run_dir = f"{self.test_runs_dir}/{run_id}"
-                if os.path.exists(run_dir):
-                    import shutil
-                    shutil.rmtree(run_dir)
                 logger.info(f"Test run deleted: {run_id}")
         return deleted_count
 
@@ -340,9 +332,6 @@ class RagTestFacade:
     def compare_config_versions(self, version_id1: str, version_id2: str) -> Dict:
         return self.test_run_service.compare_config_versions(version_id1, version_id2)
 
-    def compare_test_runs(self, run_id1: str, run_id2: str) -> Dict:
-        return self.test_run_service.compare_test_runs(run_id1, run_id2)
-
     async def upload_source_document(
         self, file_path: str, title: str, file_type: str
     ) -> SourceDocument:
@@ -359,20 +348,29 @@ class RagTestFacade:
     async def delete_source_document(self, doc_id: str) -> bool:
         return await self.source_doc_service.delete_source_document(doc_id)
 
-    async def generate_test_case_drafts(
-        self,
-        source_document_id: str,
-        params: GenerationParams,
-        progress_callback: Optional[Callable[[int, int, str], Awaitable[None]]] = None,
-    ) -> List[TestCaseDraft]:
-        return await self.draft_service.generate_test_case_drafts(
-            source_document_id, params, progress_callback
-        )
-
     async def list_drafts(
         self, source_document_id: Optional[str] = None
     ) -> List[TestCaseDraft]:
         return await self.draft_service.list_drafts(source_document_id)
+
+    async def create_draft(
+        self,
+        source_document_id: str,
+        query: str,
+        age: int,
+        domain: str,
+        expected_knowledge_ids: Optional[List[str]] = None,
+        expected_keywords: Optional[List[str]] = None,
+        description: str = "",
+        answer_points: Optional[List[str]] = None,
+        professional_terms: Optional[List[str]] = None,
+        age_requirement: str = "",
+    ) -> TestCaseDraft:
+        return await self.draft_service.create_draft(
+            source_document_id, query, age, domain,
+            expected_knowledge_ids, expected_keywords, description,
+            answer_points, professional_terms, age_requirement
+        )
 
     async def get_draft(self, draft_id: str) -> Optional[TestCaseDraft]:
         return await self.draft_service.get_draft(draft_id)
@@ -389,9 +387,9 @@ class RagTestFacade:
         return await self.draft_service.import_reviewed_drafts(draft_ids)
 
     async def create_test_set(
-        self, name: str, description: str = "", source_type: str = "manual"
+        self, name: str, description: str = ""
     ) -> TestSet:
-        orm_set = await self.test_set_service.create_test_set(name, description, source_type)
+        orm_set = await self.test_set_service.create_test_set(name, description)
         return TestSet(
             id=orm_set.id,
             name=orm_set.name,
@@ -447,6 +445,9 @@ class RagTestFacade:
 
     async def delete_test_set(self, test_set_id: str) -> bool:
         return await self.test_set_service.delete_test_set(test_set_id)
+
+    async def batch_delete_test_sets(self, test_set_ids: List[str]) -> int:
+        return await self.test_set_service.batch_delete_test_sets(test_set_ids)
 
     async def add_test_cases_to_set(
         self, test_set_id: str, case_ids: List[str]
