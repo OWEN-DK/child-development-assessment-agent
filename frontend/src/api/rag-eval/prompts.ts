@@ -80,7 +80,7 @@ export const getPromptList = async (
   if (category) params.category = category;
   if (isActive !== undefined) params.is_active = isActive;
 
-  const response = await apiClient.get('/rag/prompts', { params });
+  const response = await apiClient.get('/api/v1/rag/prompts', { params });
   return response.data;
 };
 
@@ -88,7 +88,7 @@ export const getPromptList = async (
  * 获取提示词详情
  */
 export const getPromptDetail = async (promptKey: string): Promise<PromptDetail> => {
-  const response = await apiClient.get(`/rag/prompts/${promptKey}`);
+  const response = await apiClient.get(`/api/v1/rag/prompts/${promptKey}`);
   return response.data;
 };
 
@@ -103,7 +103,7 @@ export const updatePrompt = async (
     created_by?: string;
   }
 ): Promise<{ message: string; version: string; impact: ImpactAnalysis }> => {
-  const response = await apiClient.post(`/rag/prompts/${promptKey}/update`, data);
+  const response = await apiClient.post(`/api/v1/rag/prompts/${promptKey}/update`, data);
   return response.data;
 };
 
@@ -114,7 +114,7 @@ export const analyzePromptImpact = async (
   promptKey: string,
   content: string
 ): Promise<ImpactAnalysis> => {
-  const response = await apiClient.post(`/rag/prompts/${promptKey}/analyze`, {
+  const response = await apiClient.post(`/api/v1/rag/prompts/${promptKey}/analyze`, {
     content,
   });
   return response.data;
@@ -128,7 +128,7 @@ export const testPrompt = async (
   variables: Record<string, any>,
   version?: string
 ): Promise<PromptTestResult> => {
-  const response = await apiClient.post('/rag/prompts/test', {
+  const response = await apiClient.post('/api/v1/rag/prompts/test', {
     prompt_key: promptKey,
     version,
     variables,
@@ -144,7 +144,7 @@ export const comparePromptVersions = async (
   version1: string,
   version2: string
 ): Promise<PromptComparison> => {
-  const response = await apiClient.get(`/rag/prompts/${promptKey}/compare`, {
+  const response = await apiClient.get(`/api/v1/rag/prompts/${promptKey}/compare`, {
     params: { version_1: version1, version_2: version2 },
   });
   return response.data;

@@ -51,7 +51,7 @@ export const LLMMonitoringDashboard: React.FC = () => {
     colorField: 'model_name',
     radius: 0.8,
     label: {
-      type: 'outer',
+      position: 'outside',
       content: (datum: any) => `${datum.model_name} ${datum.percentage}`,
     },
   };

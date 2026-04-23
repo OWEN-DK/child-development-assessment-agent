@@ -1,10 +1,13 @@
 import asyncio
 import uuid
+from decimal import Decimal
 from typing import Any, Awaitable, Callable, Optional
 
 from fastapi.encoders import jsonable_encoder
 
-from src.api.sse import SSEPublisher
+from src.schemas.task import TaskState, TaskStatus
+from src.service.task_sse_publisher import TaskSsePublisher
+from src.utils.di import get_task_state_service
 from src.utils.logger import logger
 
 
@@ -38,17 +41,48 @@ class AsyncTaskManager:
         # 生成唯一任务ID
         task_id = str(uuid.uuid4())
         channel = f"{task_type}:{task_id}"
+        
+        # 获取任务状态服务实例
+        task_state_service = get_task_state_service()
+        
+        # 创建初始任务状态（pending）
+        initial_state = TaskState.create(
+            task_id=task_id,
+            task_type=task_type,
+            metadata={}
+        )
+        initial_state.progress = 0.0
+        initial_state.message = "等待执行"
+        await task_state_service.create(initial_state)
+        
+        # 获取取消信号
+        cancellation_event = task_state_service.get_cancellation_signal(task_id, task_type)
 
         # 如果没传自定义回调，使用默认的SSE进度推送回调
         if not progress_callback:
 
-            async def default_progress_callback(current: int, total: int, message: str):
-                await cls.publish_progress(
+            async def default_progress_callback(current: int, total: int, message: str, stage: Optional[str] = None):
+                progress = round(current / total * 100, 2) if total > 0 else 0
+                
+                # 更新Redis状态
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=task_type,
+                    updates={
+                        "status": TaskStatus.RUNNING,
+                        "progress": progress,
+                        "message": message,
+                        "stage": stage
+                    }
+                )
+                
+                # 推送SSE消息
+                await TaskSsePublisher.publish_progress(
                     task_type=task_type,
                     task_id=task_id,
-                    current=current,
-                    total=total,
+                    progress=progress,
                     message=message,
+                    stage=stage
                 )
 
             progress_callback = default_progress_callback
@@ -57,37 +91,95 @@ class AsyncTaskManager:
         async def wrapped_task():
             try:
                 logger.info(f"异步任务[{task_type}:{task_id}] 开始执行")
-                # 执行实际业务函数，注入progress_callback参数
+                
+                # 更新状态为running
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=task_type,
+                    updates={"status": TaskStatus.RUNNING, "message": "执行中"}
+                )
+                
+                # 执行实际业务函数，注入progress_callback、cancellation_event、task_id和task_type参数
                 result = await task_func(
-                    *args, progress_callback=progress_callback, **kwargs
+                    *args, 
+                    progress_callback=progress_callback,
+                    cancellation_event=cancellation_event,
+                    task_id=task_id,
+                    task_type=task_type,
+                    **kwargs
                 )
                 logger.info(f"异步任务[{task_type}:{task_id}] 执行完成")
 
                 # 安全地序列化结果，避免 SQLAlchemy ORM 或 Pydantic 模型引发 json 序列化错误
                 try:
-                    safe_result = jsonable_encoder(result) if result is not None else {}
+                    safe_result = jsonable_encoder(
+                        result,
+                        custom_encoder={Decimal: lambda v: float(v)}
+                    ) if result is not None else {}
                 except Exception as enc_err:
                     logger.warning(f"结果序列化失败，将返回空字典: {enc_err}")
                     safe_result = {}
+                
+                # 更新状态为completed
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=task_type,
+                    updates={
+                        "status": TaskStatus.COMPLETED,
+                        "progress": 100.0,
+                        "message": "执行完成",
+                        "result": safe_result
+                    }
+                )
 
                 # 推送完成消息
-                await cls.publish_complete(
-                    task_type=task_type, task_id=task_id, result=safe_result
+                await TaskSsePublisher.publish_complete(
+                    task_type=task_type, 
+                    task_id=task_id, 
+                    result=safe_result
                 )
                 return result
+            except asyncio.CancelledError:
+                logger.info(f"异步任务[{task_type}:{task_id}] 已取消")
+                
+                # 更新状态为cancelled
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=task_type,
+                    updates={"status": TaskStatus.CANCELLED, "message": "已取消"}
+                )
+                
+                # 推送取消事件
+                await TaskSsePublisher.publish_cancelled(
+                    task_type=task_type,
+                    task_id=task_id
+                )
+                return None
             except Exception as e:
                 logger.error(
                     f"异步任务[{task_type}:{task_id}] 执行失败: {e}", exc_info=True
                 )
+                
+                # 更新状态为failed
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=task_type,
+                    updates={"status": TaskStatus.FAILED, "error": str(e), "message": "执行失败"}
+                )
+                
                 # 推送错误消息
                 try:
-                    await cls.publish_error(
-                        task_type=task_type, task_id=task_id, error=str(e)
+                    await TaskSsePublisher.publish_error(
+                        task_type=task_type, 
+                        task_id=task_id, 
+                        error=str(e)
                     )
                 except Exception as pub_err:
                     logger.error(f"推送任务错误消息失败: {pub_err}", exc_info=True)
                 return None
             finally:
+                # 清理取消信号
+                task_state_service.cleanup_cancellation_signal(task_id, task_type)
                 # 任务完成后自动清理引用
                 cls._active_tasks.pop(task_id, None)
 
@@ -127,8 +219,18 @@ class AsyncTaskManager:
         return result
 
     @classmethod
-    async def cancel_task(cls, task_id: str) -> bool:
-        """取消指定任务"""
+    async def cancel_task(cls, task_id: str, task_type: str) -> bool:
+        """取消指定任务
+        
+        Returns:
+            bool: Redis 状态更新成功即返回 True（任务可能已完成，但状态已成功标记为取消）
+        """
+        task_state_service = get_task_state_service()
+        
+        # 调用任务状态服务的cancel方法设置取消信号并更新 Redis 状态
+        redis_success = await task_state_service.cancel(task_id, task_type)
+        
+        # 尝试取消 asyncio 任务（如果仍在运行）
         task = cls._active_tasks.get(task_id)
         if task and not task.done():
             task.cancel()
@@ -136,54 +238,9 @@ class AsyncTaskManager:
                 await task
             except asyncio.CancelledError:
                 logger.info(f"任务 {task_id} 已取消")
-                return True
-        return False
-
-    @staticmethod
-    async def publish_progress(
-        task_type: str,
-        task_id: str,
-        current: int,
-        total: int,
-        message: str,
-        extra: Optional[dict] = None,
-    ):
-        """推送进度消息（通用格式）"""
-        data = {
-            "type": "progress",
-            "task_id": task_id,
-            "current": current,
-            "total": total,
-            "message": message,
-            "progress": round(current / total * 100, 2) if total > 0 else 0,
-        }
-        if extra:
-            data.update(extra)
-        await SSEPublisher.publish(f"{task_type}:{task_id}", data)
-
-    @staticmethod
-    async def publish_complete(
-        task_type: str,
-        task_id: str,
-        result: Optional[dict] = None,
-        message: str = "任务执行完成",
-    ):
-        """推送完成消息（通用格式）"""
-        data = {
-            "type": "complete",
-            "task_id": task_id,
-            "message": message,
-            "result": result or {},
-        }
-        await SSEPublisher.publish(f"{task_type}:{task_id}", data)
-
-    @staticmethod
-    async def publish_error(
-        task_type: str, task_id: str, error: str, message: str = "任务执行失败"
-    ):
-        """推送错误消息（通用格式）"""
-        data = {"type": "error", "task_id": task_id, "message": message, "error": error}
-        await SSEPublisher.publish(f"{task_type}:{task_id}", data)
+        
+        # 以 Redis 状态更新结果为准
+        return redis_success
 
     @staticmethod
     def get_sse_channel(task_type: str, task_id: str) -> str:

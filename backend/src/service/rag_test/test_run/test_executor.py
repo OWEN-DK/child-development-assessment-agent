@@ -38,14 +38,14 @@ class TestExecutor:
         Returns:
             测试运行结果
         """
-        from src.service.retrieval_service import RetrievalService
+        from src.service.retrieval_service import get_retrieval_service
 
-        retrieval_service = RetrievalService()
+        retrieval_service = get_retrieval_service()
 
         async with self.db_session_factory() as session:
             start_time = datetime.now()
             try:
-                results = await retrieval_service.search(
+                results = await retrieval_service.retrieve_knowledge(
                     query=test_case.query,
                     age=test_case.age,
                     limit=5,

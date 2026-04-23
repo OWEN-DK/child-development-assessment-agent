@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Button, List, Typography, Spin, Empty } from 'antd';
+import { Button, Flex, Typography, Spin, Empty, Card } from 'antd';
 import { notification } from '@shared/lib/notification';
 import { UndoOutlined } from '@ant-design/icons';
 import IgnoredSuggestionItem from './IgnoredSuggestionItem';
@@ -87,7 +87,7 @@ export default function IgnoredSuggestionsList({
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 16 }}>
         <Title level={5} style={{ margin: 0 }}>
           已忽略建议 ({suggestions.length})
         </Title>
@@ -99,20 +99,19 @@ export default function IgnoredSuggestionsList({
         >
           全部恢复
         </Button>
-      </div>
+      </Flex>
 
-      <List
-        dataSource={suggestions}
-        renderItem={(suggestion) => (
-          <List.Item>
+      <Flex vertical gap="small">
+        {suggestions.map((suggestion) => (
+          <Card key={suggestion.id} size="small">
             <IgnoredSuggestionItem
               suggestion={suggestion}
               onRestore={handleRestore}
               onDelete={handleDelete}
             />
-          </List.Item>
-        )}
-      />
+          </Card>
+        ))}
+      </Flex>
     </div>
   );
 }

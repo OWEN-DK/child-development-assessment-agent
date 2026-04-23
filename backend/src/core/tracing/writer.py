@@ -8,7 +8,8 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -57,13 +58,16 @@ class TraceWriter:
 
     async def start(self):
         """启动后台消费者"""
-        if self._running:
+        if getattr(self, '_ever_started', False):
+            logger.debug("TraceWriter 已初始化过，跳过重复启动")
             return
+        self._ever_started = True
         self._running = True
         self._task = asyncio.create_task(self._consumer())
+        logger.info("TraceWriter 后台消费者已启动")
 
     async def stop(self):
-        """停止后台消费者，等待队列排空"""
+        """停止后台消费者"""
         self._running = False
         if self._task:
             # 等待队列排空 (最多 5 秒)
@@ -82,6 +86,7 @@ class TraceWriter:
             except asyncio.CancelledError:
                 pass
             self._task = None
+        logger.info("TraceWriter 后台消费者已关闭")
 
     def _should_sample(self, is_error: bool = False) -> bool:
         """采样决策"""
@@ -109,7 +114,7 @@ class TraceWriter:
             "name": name,
             "metadata": metadata,
             "start_time": start_time,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -125,7 +130,7 @@ class TraceWriter:
             "type": "trace_end",
             "trace_id": trace_id,
             "end_time": end_time,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -153,7 +158,7 @@ class TraceWriter:
             "parent_span_id": parent_span_id,
             "name": name,
             "duration_ms": duration_ms,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -168,6 +173,7 @@ class TraceWriter:
         parent_span_id: str | None,
         prompt_messages: list,
         call_parameters: dict,
+        request_id: str | None = None,
     ):
         """记录 LLM 调用开始"""
         if not self._should_sample(is_error=False):
@@ -180,7 +186,8 @@ class TraceWriter:
             "parent_span_id": parent_span_id,
             "prompt_messages": prompt_messages,
             "call_parameters": call_parameters,
-            "timestamp": datetime.utcnow(),
+            "request_id": request_id,
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -196,6 +203,7 @@ class TraceWriter:
         completion_message: str,
         tokens: dict,
         ttft: int,
+        request_id: str | None = None,
     ):
         """记录 LLM 调用完成"""
         if not self._should_sample(is_error=False):
@@ -209,7 +217,8 @@ class TraceWriter:
             "completion_message": completion_message,
             "tokens": tokens,
             "ttft": ttft,
-            "timestamp": datetime.utcnow(),
+            "request_id": request_id,
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -229,7 +238,7 @@ class TraceWriter:
             "trace_id": trace_id,
             "span_id": span_id,
             "error": error,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -251,7 +260,7 @@ class TraceWriter:
             "status": status,
             "total_tokens": total_tokens,
             "total_cost": total_cost,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         }
         try:
             await asyncio.wait_for(self.queue.put(item), timeout=0.5)
@@ -342,8 +351,11 @@ class TraceWriter:
         if trace:
             trace.end_time = item["end_time"]
             if trace.start_time:
+                start = trace.start_time
+                if start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
                 trace.total_duration_ms = int(
-                    (item["end_time"] - trace.start_time).total_seconds() * 1000
+                    (item["end_time"] - start).total_seconds() * 1000
                 )
 
     async def _write_span(self, session, item: dict):
@@ -380,12 +392,17 @@ class TraceWriter:
         log = result.scalar_one_or_none()
 
         if not log:
+            from src.models.monitor import LLMCallStatus
+
             log = LLMCallLog(
+                request_id=item.get("request_id") or str(uuid.uuid4()),
                 trace_id=item.get("trace_id"),
                 span_id=span_id,
                 parent_span_id=item.get("parent_span_id"),
                 prompt_messages=item.get("prompt_messages"),
                 level=CallLevel.INFO,
+                model_name=item.get("model_name", "unknown"),
+                status=LLMCallStatus.SUCCESS,
             )
             session.add(log)
         elif not log.parent_span_id and item.get("parent_span_id"):

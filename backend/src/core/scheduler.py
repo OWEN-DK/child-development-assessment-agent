@@ -17,6 +17,7 @@ from src.service.rag_report_service import rag_report_service
 from src.utils.logger import logger
 
 scheduler = AsyncIOScheduler()
+_scheduler_ever_started = False
 
 
 async def cleanup_expired_reports():
@@ -78,6 +79,12 @@ async def cleanup_expired_traces():
 
 def start_scheduler():
     """启动定时任务调度器"""
+    global _scheduler_ever_started
+    if _scheduler_ever_started:
+        logger.debug("APScheduler 已初始化过，跳过重复启动")
+        return
+    _scheduler_ever_started = True
+
     # 每天凌晨 2 点清理过期报告
     scheduler.add_job(
         cleanup_expired_reports,

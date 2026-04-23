@@ -21,7 +21,13 @@ class DeduplicationStep(PipelineStep):
         seen_contents = set()
 
         for result in context.results:
-            content = result.content.strip()
+            # 兼容 NodeWithScore 和 KnowledgeItem 两种类型
+            if hasattr(result, 'node'):
+                # NodeWithScore 类型
+                content = result.node.get_content().strip()
+            else:
+                # KnowledgeItem 或其他类型
+                content = result.content.strip()
 
             # 精确匹配去重
             if use_exact_match:
@@ -34,7 +40,10 @@ class DeduplicationStep(PipelineStep):
             if use_containment:
                 is_duplicate = False
                 for unique in unique_results:
-                    unique_content = unique.content.strip()
+                    if hasattr(unique, 'node'):
+                        unique_content = unique.node.get_content().strip()
+                    else:
+                        unique_content = unique.content.strip()
                     if content in unique_content or unique_content in content:
                         logger.debug(
                             f"过滤包含结果：'{content[:50]}...' 已存在于已有结果中"
@@ -47,7 +56,10 @@ class DeduplicationStep(PipelineStep):
             # 相似度去重
             is_similar = False
             for unique in unique_results:
-                unique_content = unique.content.strip()
+                if hasattr(unique, 'node'):
+                    unique_content = unique.node.get_content().strip()
+                else:
+                    unique_content = unique.content.strip()
                 similarity = difflib.SequenceMatcher(
                     None, content, unique_content
                 ).ratio()

@@ -5,7 +5,16 @@ import uuid
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Type
 
-from src.utils.logger import logger
+from src.core.events import BaseEvent
+
+if TYPE_CHECKING:
+    from redis.asyncio.client import PubSub
+
+
+def _get_logger():
+    """延迟导入 logger，避免循环导入"""
+    from src.utils.logger import logger
+    return logger
 
 if TYPE_CHECKING:
     from redis.asyncio.client import PubSub
@@ -19,28 +28,12 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 
-class BaseEvent:
-    """事件基类"""
-
-    def __init__(self):
-        self.timestamp = time.time()
-
-
 class IndexUpdateEvent(BaseEvent):
     """索引更新事件"""
 
     def __init__(self, index_id: str = None):
         super().__init__()
         self.index_id = index_id
-
-
-class ConfigChangedEvent(BaseEvent):
-    """配置变更事件"""
-
-    def __init__(self, version_id: str = None, changed_keys: list[str] = None):
-        super().__init__()
-        self.version_id = version_id
-        self.changed_keys = changed_keys or []
 
 
 class ConfigVersionCreatedEvent(BaseEvent):
@@ -51,32 +44,24 @@ class ConfigVersionCreatedEvent(BaseEvent):
         self.version_id = version_id
 
 
-class ConfigRollbackEvent(BaseEvent):
-    """配置回滚事件"""
+# 统一使用 config/core/events.py 中的完整版本
+# 注意：不在此处直接导入，避免循环导入。订阅者应直接从 src.config.core.events 导入。
 
-    def __init__(
-        self, from_version: str = None, to_version: str = None, user: str = None
-    ):
-        super().__init__()
-        self.from_version = from_version
-        self.to_version = to_version
-        self.user = user
-
-
-class ConfigFactoryResetEvent(BaseEvent):
-    """配置工厂重置事件"""
-
-    def __init__(self, version_id: str = None):
-        super().__init__()
-        self.version_id = version_id
-
-
-EVENT_CLASSES = {
-    "ConfigChangedEvent": ConfigChangedEvent,
-    "ConfigVersionCreatedEvent": ConfigVersionCreatedEvent,
-    "ConfigRollbackEvent": ConfigRollbackEvent,
-    "ConfigFactoryResetEvent": ConfigFactoryResetEvent,
-}
+def _get_event_classes():
+    """延迟获取事件类，避免循环导入"""
+    from src.config.core.events import (
+        ConfigChangedEvent,
+        ConfigFactoryResetEvent,
+        ConfigResetEvent,
+        ConfigRollbackEvent,
+    )
+    return {
+        "ConfigChangedEvent": ConfigChangedEvent,
+        "ConfigVersionCreatedEvent": ConfigVersionCreatedEvent,
+        "ConfigRollbackEvent": ConfigRollbackEvent,
+        "ConfigFactoryResetEvent": ConfigFactoryResetEvent,
+        "ConfigResetEvent": ConfigResetEvent,
+    }
 
 
 class EventBus:
@@ -92,7 +77,7 @@ class EventBus:
     ) -> None:
         """订阅事件（内存，建议使用weakref或显式unsubscribe防止内存泄漏）"""
         cls._subscribers[event_type].append(callback)
-        logger.debug(f"Subscribed to event: {event_type.__name__}")
+        _get_logger().debug(f"Subscribed to event: {event_type.__name__}")
 
     @classmethod
     def unsubscribe(
@@ -110,7 +95,7 @@ class EventBus:
             try:
                 callback(event)
             except Exception as e:
-                logger.error(f"Event callback failed for {event_type.__name__}: {e}")
+                _get_logger().error(f"Event callback failed for {event_type.__name__}: {e}")
 
         if REDIS_AVAILABLE:
             try:
@@ -131,20 +116,23 @@ class EventBus:
                     "event_type": event_type.__name__,
                     "event_data": event_data,
                 }
-                asyncio.create_task(
-                    RedisClient.get_client().publish(
-                        f"child-dev:events:{event_type.__name__}",
-                        json.dumps(payload, ensure_ascii=False),
-                    )
+                coro = RedisClient.get_client().publish(
+                    f"child-dev:events:{event_type.__name__}",
+                    json.dumps(payload, ensure_ascii=False),
                 )
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(coro)
+                except RuntimeError:
+                    asyncio.run(coro)
             except Exception as e:
-                logger.warning(f"Redis Pub/Sub 消息发布失败: {e}")
+                _get_logger().warning(f"Redis Pub/Sub 消息发布失败: {e}")
 
     @classmethod
     async def start_redis_subscriber(cls):
         """启动Redis Pub/Sub订阅器（接收其他实例的事件）"""
         if not REDIS_AVAILABLE:
-            logger.info("Redis Pub/Sub 已禁用，跳过订阅器启动")
+            _get_logger().info("Redis Pub/Sub 已禁用，跳过订阅器启动")
             return
 
         try:
@@ -152,12 +140,12 @@ class EventBus:
             from src.core.redis_client import RedisClient
 
             if not redis_settings.pubsub_enabled:
-                logger.info("Redis Pub/Sub 已禁用，跳过订阅器启动")
+                _get_logger().info("Redis Pub/Sub 已禁用，跳过订阅器启动")
                 return
 
             cls._redis_subscriber = RedisClient.get_client().pubsub()
             await cls._redis_subscriber.psubscribe("child-dev:events:*")
-            logger.info("Redis Pub/Sub 订阅器已启动")
+            _get_logger().info("Redis Pub/Sub 订阅器已启动")
 
             async for message in cls._redis_subscriber.listen():
                 if message["type"] == "pmessage":
@@ -169,9 +157,9 @@ class EventBus:
                         event_type_name = payload.get("event_type")
                         event_data = payload.get("event_data", {})
 
-                        event_type = EVENT_CLASSES.get(event_type_name)
+                        event_type = _get_event_classes().get(event_type_name)
                         if not event_type:
-                            logger.warning(f"未知事件类型: {event_type_name}")
+                            _get_logger().warning(f"未知事件类型: {event_type_name}")
                             continue
 
                         event = event_type(**event_data)
@@ -179,13 +167,13 @@ class EventBus:
                             try:
                                 callback(event)
                             except Exception as e:
-                                logger.error(f"跨实例事件回调执行失败: {e}")
+                                _get_logger().error(f"跨实例事件回调执行失败: {e}")
 
                     except Exception as e:
-                        logger.error(f"Redis Pub/Sub 消息处理失败: {e}")
+                        _get_logger().error(f"Redis Pub/Sub 消息处理失败: {e}")
 
         except Exception as e:
-            logger.error(f"Redis Pub/Sub 订阅器启动失败: {e}")
+            _get_logger().error(f"Redis Pub/Sub 订阅器启动失败: {e}")
 
     @classmethod
     async def stop_redis_subscriber(cls):
@@ -193,7 +181,7 @@ class EventBus:
         if cls._redis_subscriber:
             await cls._redis_subscriber.close()
             cls._redis_subscriber = None
-            logger.info("Redis Pub/Sub 订阅器已停止")
+            _get_logger().info("Redis Pub/Sub 订阅器已停止")
 
 
 event_bus = EventBus()

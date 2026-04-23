@@ -9,10 +9,10 @@ from prometheus_client import make_asgi_app
 
 from src.config import settings, validate_required_env_vars
 from src.controller import (config_controller, export_controller,
-                            monitoring_controller, prompt_controller,
-                            rag_controller, rag_test_controller,
-                            rollback_controller, task_controller,
-                            trend_controller, tuning_controller)
+                            monitoring_controller, rag_controller,
+                            rag_test_controller, rollback_controller,
+                            task_controller, trend_controller,
+                            tuning_controller)
 from src.core.config.cache import ConfigCache
 from src.core.llm.log_collector import LLMLogCollector
 from src.core.redis_client import RedisClient
@@ -30,48 +30,97 @@ from src.utils.logger import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("=" * 60)
+    logger.info("Application startup begins")
+    logger.info("=" * 60)
+
     # 启动 LLM 日志收集器
     LLMLogCollector.start()
+    logger.info("[1/5] LLMLogCollector started")
 
     # 启动 TraceWriter 异步队列
     trace_writer = get_trace_writer()
     await trace_writer.start()
-    logger.info("TraceWriter started")
+    logger.info("[2/5] TraceWriter started")
+
+    # 初始化默认提示词（幂等操作，已存在则跳过）
+    from src.core.prompt_impl.initializer import init_default_prompts
+
+    await init_default_prompts()
+    logger.info("[3/5] Default prompts initialized")
 
     # 启动定时任务调度器
     start_scheduler()
+    logger.info("[4/5] APScheduler started")
 
     # 初始化配置热重载缓存
     try:
         redis_client = RedisClient.get_client()
         config_cache = ConfigCache.get_instance()
         await config_cache.initialize(redis_client)
-        logger.info("ConfigCache 热重载已启用")
+        logger.info("[5/5] ConfigCache initialized with hot-reload")
     except Exception as e:
         logger.warning(f"ConfigCache 初始化失败，热重载未启用: {e}")
 
+    logger.info("=" * 60)
     logger.info("Application startup complete")
+    logger.info("=" * 60)
     yield
+
+    logger.info("=" * 60)
+    logger.info("Application shutdown begins")
+    logger.info("=" * 60)
 
     # 关闭配置热重载缓存
     try:
         config_cache = ConfigCache.get_instance()
-        await config_cache.shutdown()
-        logger.info("ConfigCache 热重载已关闭")
+        if config_cache._ever_initialized:
+            await config_cache.shutdown()
+            logger.info("[1/4] ConfigCache shut down")
+        else:
+            logger.info("[1/4] ConfigCache was never initialized, skipping")
     except Exception as e:
         logger.warning(f"ConfigCache 关闭异常: {e}")
 
     # 关闭 TraceWriter 异步队列（等待队列排空）
-    await trace_writer.stop()
-    logger.info("TraceWriter stopped")
+    if getattr(trace_writer, '_ever_started', False):
+        await trace_writer.stop()
+        logger.info("[2/4] TraceWriter shut down")
+    else:
+        logger.info("[2/4] TraceWriter was never started, skipping")
 
     # 关闭定时任务调度器
     stop_scheduler()
+    logger.info("[3/4] APScheduler shut down")
 
     # 关闭 LLM 日志收集器
-    await LLMLogCollector.stop()
+    if LLMLogCollector._ever_started:
+        await LLMLogCollector.stop()
+        logger.info("[4/6] LLMLogCollector shut down")
+    else:
+        logger.info("[4/6] LLMLogCollector was never started, skipping")
 
+    # 关闭索引管理器（释放持久化线程）
+    try:
+        from src.service.index_manager_service import index_manager_service
+        if hasattr(index_manager_service, 'shutdown'):
+            index_manager_service.shutdown()
+            logger.info("[5/6] IndexManagerService shut down")
+    except Exception as e:
+        logger.warning(f"IndexManagerService 关闭异常: {e}")
+
+    # 关闭磁盘缓存（释放持久化线程）
+    try:
+        from src.service.cache.facade import cache_facade
+        if hasattr(cache_facade, 'shutdown'):
+            cache_facade.shutdown()
+            logger.info("[6/6] DiskCache shut down")
+    except Exception as e:
+        logger.warning(f"DiskCache 关闭异常: {e}")
+
+    logger.info("=" * 60)
     logger.info("Application shutdown complete")
+    logger.info("=" * 60)
 
 
 def create_app() -> FastAPI:
@@ -121,6 +170,10 @@ def create_app() -> FastAPI:
     else:
         app.state.env_vars_missing = []
 
+    # 注册TRACE_ID中间件（优先级最高，第一个执行）
+    from src.middleware.trace_middleware import TraceMiddleware
+    app.add_middleware(TraceMiddleware)
+    
     # 注册响应包装中间件
     app.add_middleware(ResponseWrapperMiddleware)
 
@@ -149,12 +202,36 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
 
     app.include_router(monitoring_controller.router)
-    app.include_router(prompt_controller.router)
+
+    # Phase 7: 提示词管理（三层编辑模式）
+    from src.controller.prompt_management_controller import PromptController
+
+    PromptController().register_routes(app)
 
     # Phase 6: 趋势、导出、回滚
     app.include_router(trend_controller.router)
     app.include_router(export_controller.router)
     app.include_router(rollback_controller.router)
+
+    # Phase 10: 调优建议 API
+    from src.controller import tuning_suggestion_controller
+
+    app.include_router(tuning_suggestion_controller.router)
+
+    # Phase 10: 报告查询 API
+    from src.controller import report_controller
+
+    app.include_router(report_controller.router)
+
+    # Phase 8: 审计日志 API
+    from src.controller import audit_log_controller
+
+    app.include_router(audit_log_controller.router)
+
+    # Phase 8: 意图标注 API
+    from src.controller import intent_annotation_controller
+
+    app.include_router(intent_annotation_controller.router)
 
     from src.core.tuning import (ConflictDetector, HistoryAnalyzer,
                                  LLMDiagnoser, RuleEngine,
@@ -203,11 +280,15 @@ def create_app() -> FastAPI:
 def main():
     import uvicorn
 
+    # reload 模式下只能使用单 worker
+    workers = 1 if settings.app_reload else settings.app_workers
+
     uvicorn.run(
         "src.server:create_app",
         host=settings.app_host,
         port=int(settings.app_port),
         reload=settings.app_reload,
+        workers=workers,
         factory=True,
     )
 

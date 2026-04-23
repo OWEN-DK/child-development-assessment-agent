@@ -4,7 +4,6 @@ from redis.backoff import ExponentialBackoff
 from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError
 from redis.retry import Retry
 
-from src.config import redis_settings
 from src.utils.logger import logger
 
 
@@ -13,11 +12,23 @@ class RedisClient:
 
     _instance: redis.Redis | None = None
     _pool: ConnectionPool | None = None
+    _loop_id: int | None = None
 
     @classmethod
     def get_client(cls) -> redis.Redis:
         """获取 Redis 客户端实例（懒加载）"""
-        if cls._instance is None:
+        import asyncio
+        from src.config import redis_settings
+        
+        current_loop = asyncio.get_event_loop()
+        current_loop_id = id(current_loop)
+        
+        # 如果实例不存在，或者当前循环与创建时的循环不同，重新初始化
+        if cls._instance is None or cls._loop_id != current_loop_id:
+            # 如果已有旧连接池，先关闭
+            if cls._pool:
+                asyncio.create_task(cls._pool.disconnect())
+            
             # 配置重试策略：指数退避，最多重试3次
             retry = Retry(
                 backoff=ExponentialBackoff(cap=2, base=0.5),
@@ -41,7 +52,8 @@ class RedisClient:
                 health_check_interval=30,  # 每30秒做一次连接健康检查
             )
             cls._instance = redis.Redis(connection_pool=cls._pool)
-            logger.info("Redis 客户端已初始化，已配置自动重试和健康检查")
+            cls._loop_id = current_loop_id
+            logger.info(f"Redis 客户端已初始化，已配置自动重试和健康检查，Loop ID: {current_loop_id}")
         return cls._instance
 
     @classmethod

@@ -170,6 +170,7 @@ class KnowledgeRetriever:
 
             metadata = node.metadata or {}
             source = metadata.get("file_name", "Unknown Source")
+            node_id = metadata.get("node_id") or getattr(node, 'node_id', None)
 
             # 提取元数据字段
             brain_regions = metadata.get("brain_regions", "[]")
@@ -219,6 +220,7 @@ class KnowledgeRetriever:
                 continue
 
             item = KnowledgeItem(
+                id=node_id,
                 content=content.strip(),
                 source_book=source,
                 chapter_title=chapter_title,

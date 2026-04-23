@@ -173,23 +173,23 @@ class ResultProcessor:
                 )
                 continue
 
-            # 原始关键词匹配加成
+            # 关键词频次加成（对数压缩，防止同义词过多导致加成爆炸）
+            import math
+
             keyword_bonus = 0.0
             if original_keywords:
                 content_lower = content.lower()
-                matched_original = sum(
-                    1 for kw in original_keywords if kw in content_lower
+                total_occurrences = sum(
+                    content_lower.count(kw) for kw in original_keywords
                 )
-                original_match_ratio = (
-                    matched_original / len(original_keywords)
-                    if original_keywords
-                    else 0
-                )
-                keyword_bonus = (
-                    original_match_ratio * settings.rag_scoring_keyword_bonus_multiplier
+                log_occurrences = math.log(1 + total_occurrences)
+                normalized_density = log_occurrences / max(len(content_lower) / 500, 1)
+                keyword_bonus = min(
+                    normalized_density * settings.rag_scoring_keyword_bonus_log_weight,
+                    settings.rag_scoring_keyword_bonus_max,
                 )
                 logger.debug(
-                    f"Processing result {i}: 关键词匹配={matched_original}/{len(original_keywords)}, 加成={keyword_bonus:.4f}"
+                    f"Processing result {i}: 关键词总出现={total_occurrences}次, 对数值={log_occurrences:.2f}, 密度={normalized_density:.2f}, 加成={keyword_bonus:.4f}"
                 )
 
             final_score = min(raw_score + keyword_bonus, 1.0)

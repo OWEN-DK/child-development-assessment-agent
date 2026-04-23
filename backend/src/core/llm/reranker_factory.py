@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 from injector import singleton
 
 from src.config.core.manager import ConfigManager
-from src.core.event_bus import ConfigChangedEvent, event_bus
+from src.config.core.events import ConfigChangedEvent
+from src.core.event_bus import event_bus
 from src.utils.logger import logger
 
 

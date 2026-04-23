@@ -27,8 +27,9 @@
 | 模块 | 业务逻辑 | 代码入口 |
 |---|---|---|
 | **门面调度** | RAG 聚合入口 | 暴露统一的搜索和状态查询接口给 Controller。 | `backend/src/service/rag_service.py` |
-| **文档导入流水线** | 多模态解析与分块 | 负责 PDF/EPUB 的解析（支持视觉大模型兜底），使用语义分块，提取主题/脑区等元数据，存入 Chroma 向量库。支持断点续传。 | `backend/src/service/document_ingestion_service.py` |
-| **知识检索流水线** | 混合检索与重排序 | 基于 `rag_pipeline.yaml` 驱动。执行查询重写 -> 同义词扩展 -> 年龄过滤 -> BM25+向量混合检索 -> CrossEncoder重排序。 | `backend/src/service/retrieval_service.py` |
+| **文档导入流水线** | 多模态解析与分块 | 负责 PDF/EPUB 的解析（支持视觉大模型兜底），使用语义分块，提取主题/脑区等元数据，存入 Chroma 向量库。支持断点续传。 | `backend/src/service/document_ingestion/facade.py`<br>`backend/src/service/document_ingestion_service.py` |
+| **知识检索流水线** | 混合检索与重排序 | 基于 `rag_pipeline.yaml` 驱动。执行查询重写 -> 同义词扩展 -> 年龄过滤 -> BM25+向量混合检索 -> CrossEncoder重排序。 | `backend/src/service/retrieval/facade.py`<br>`backend/src/service/retrieval_service.py` |
+| **索引管理服务** | 向量索引生命周期 | 管理向量库的创建、加载、持久化、重建，支持快照备份和恢复。 | `backend/src/service/index_manager/facade.py`<br>`backend/src/service/index_manager_service.py` |
 
 ---
 
@@ -59,13 +60,28 @@
 ---
 
 ## 5. 自动化测试与评估 (SDD/TDD)
-**逻辑概述**：保证 RAG 检索质量和 Agent 生成质量的自动化评估体系。
+**逻辑概述**：保证 RAG 检索质量和 Agent 生成质量的自动化评估体系，支持全链路回测、6层诊断和回归验证。
 
 | 模块 | 业务逻辑 | 代码入口 |
 |---|---|---|
-| **测试与报告服务** | 自动化测试集运行 | 执行并发批量测试，生成 Markdown/PDF 评估报告。 | `backend/src/service/rag_test_manager.py`<br>`backend/src/service/rag_report_service.py` |
-| **6层校验引擎** | 智能调参建议生成 | `ValidationEngine` 包含规则引擎、历史对比、LLM诊断等6层逻辑，自动生成调优建议。 | `backend/src/core/tuning/rule_engine.py`<br>`backend/src/core/tuning/llm_diagnoser.py` |
+| **测试门面服务** | 回测全流程入口 | 对外提供统一的测试执行、结果查询、报告生成接口，内部协调各子模块。 | `backend/src/service/rag_test/facade.py` |
+| **测试运行执行器** | 并发批量测试 | 支持多并发执行测试用例，自动关联知识库快照、配置版本、模型版本，保证测试可复现。 | `backend/src/service/rag_test/test_run/test_batch_runner.py`<br>`backend/src/service/rag_test/test_run/test_executor.py` |
+| **测试草稿服务** | 测试用例生成与审核 | LLM自动从文档提取测试草稿，支持人工审核、批量导入，生成标准化测试用例和测试集。 | `backend/src/service/rag_test/draft_service.py`<br>`backend/src/service/rag_test/draft_generator_facade.py` |
+| **快照管理服务** | 知识库版本管理 | 生成和管理知识库快照，支持快照恢复和对比，保证测试环境一致性和可复现。 | `backend/src/service/rag_test/snapshot_service.py` |
+| **6层校验编排器** | 全链路诊断编排 | 协调6层校验引擎的执行顺序，收集各层诊断结果，生成结构化的校验报告。 | `backend/src/core/validation/orchestrator.py` |
+| **6层校验引擎** | 智能调参建议生成 | 包含规则引擎、历史对比、LLM诊断、质量校验、效果校验、回归校验6层逻辑，自动生成调优建议。 | `backend/src/core/validation/layers/`<br>`backend/src/core/tuning/engine.py` |
+| **报告生成服务** | 可视化评估报告 | 生成多维度指标统计报告，支持趋势分析、版本对比、调优建议展示，可导出为PDF/CSV/JSON。 | `backend/src/service/report/report_generator.py`<br>`backend/src/service/rag_report_service.py` |
+| **回归测试服务** | 版本迭代验证 | 优化后自动执行回归测试，与历史基线对比，验证优化效果，更新效果基线。 | `backend/src/service/rag_test/test_run/test_run_service.py` |
 | **规范驱动** | SDD 业务契约 | 所有的复杂逻辑修改必须先在 `specs/` 下写明机器可读的契约与验收标准。 | `.trae/specs/` 或 `docs/specs/` |
+
+## 6. 前端测试与类型安全
+**逻辑概述**：前端代码质量保障体系，包含单元测试、集成测试与类型检查。
+
+| 模块 | 业务逻辑 | 代码入口 |
+|---|---|---|
+| **单元测试** | Vitest + RTL | 组件渲染、交互逻辑、Hook 测试。 | `frontend/src/**/*.test.tsx` |
+| **类型检查** | TypeScript 严格模式 | `npm run typecheck`，禁止 `any` 类型。 | `frontend/tsconfig.json` |
+| **代码规范** | ESLint + Prettier | `npm run lint` 自动修复格式问题。 | `frontend/.eslintrc` |
 
 ---
 

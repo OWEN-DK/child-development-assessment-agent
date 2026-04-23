@@ -59,14 +59,14 @@ from src.schemas.monitoring import (HealthCheckResponse, MetricData,
 # 提示词模块新增
 # 提示词模块
 from src.schemas.prompt import (CodeReference, ConfigDependency,
-                                CreateABTestRequest, CreateVersionRequest,
-                                ImpactAnalysisResponse, ImpactAnalysisResult,
-                                PromptComparisonResponse, PromptDetailResponse,
-                                PromptItem, PromptListResponse,
-                                PromptMetadataResponse, PromptTestRequest,
-                                PromptTestResponse, PromptVersionResponse,
-                                ToggleABTestRequest, UpdatePromptRequest,
-                                VariableChanges)
+                                 CreateVersionRequest,
+                                 ImpactAnalysisResponse, ImpactAnalysisResult,
+                                 PromptComparisonResponse, PromptDetailResponse,
+                                 PromptItem, PromptListResponse,
+                                 PromptMetadataResponse, PromptTestRequest,
+                                 PromptTestResponse, PromptVersionResponse,
+                                 UpdatePromptRequest,
+                                 VariableChanges)
 # 查询路由模块
 from src.schemas.query import QueryClassification, QueryType
 # RAG 模块
@@ -85,7 +85,8 @@ from src.schemas.test_case import (BatchDeleteRequest, BatchImportRequest,
                                    SourceDocument, TestCase, TestCaseDraft,
                                    TestDomain, TestResult, TestResultItem,
                                    TestRun, TestRunStatus, TestSet,
-                                   TestSourceType, UpdateDraftRequest,
+                                   TestSourceType, CreateDraftRequest,
+                                   UpdateDraftRequest,
                                    UpdateTestCaseRequest, UpdateTestSetRequest)
 # 调参模块
 from src.schemas.tuning import (HistoryReference, LLMDiagnosis, LLMFinding,
@@ -147,6 +148,7 @@ __all__ = [
     "BatchDeleteRequest",
     "RunTestsRequest",
     "GenerateDraftsRequest",
+    "CreateDraftRequest",
     "UpdateDraftRequest",
     "ImportDraftsRequest",
     "CreateTestSetRequest",
@@ -188,8 +190,6 @@ __all__ = [
     "ConfigChangeSetResponse",
     # 提示词
     "CreateVersionRequest",
-    "CreateABTestRequest",
-    "ToggleABTestRequest",
     "PromptMetadataResponse",
     "PromptVersionResponse",
     "PromptListResponse",

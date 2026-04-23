@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from src.core.event_bus import BaseEvent
+from src.core.events import BaseEvent
 
 
 class ConfigChangedEvent(BaseEvent):
@@ -40,3 +40,11 @@ class ConfigResetEvent(BaseEvent):
         super().__init__()
         self.from_version = from_version
         self.reset_at = reset_at
+
+
+class ConfigFactoryResetEvent(BaseEvent):
+    """配置工厂重置事件"""
+
+    def __init__(self, version_id: str = None):
+        super().__init__()
+        self.version_id = version_id

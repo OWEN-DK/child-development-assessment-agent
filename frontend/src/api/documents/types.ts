@@ -13,7 +13,7 @@ export interface RagStatus {
 
 export interface UploadTaskStatus {
   task_id: string;
-  status: 'pending' | 'processing' | 'success' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   filename: string;
   created_at: number;
   message: string;

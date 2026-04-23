@@ -9,7 +9,9 @@
 【文件位置锁定】
 - `CLAUDE.md` 必须始终位于项目根目录下，禁止移动。
 - 这是 AI 助手介入项目的**唯一全局规则与入口**。
+- 系统架构、业务逻辑、配置细节等所有底层文档统一存放在 `.ai/` 目录下。
 - 任何系统级架构改动，必须同步更新 `.ai/` 目录下的相应子文件。
+- 除 `CLAUDE.md` 和 `.ai/` 目录外，其他文档（如 `docs/`）可能随时过期，不作为权威参考。
 
 ---
 
@@ -32,7 +34,7 @@
 | **RAG 完整技术文档**| `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` | RAG 系统完整的技术细节与 API 规范 |
 | **RAG+LLM 重构计划**| `docs/superpowers/plans/rag-llm-refactoring/` | RAG 与 LLM 架构重构的详细实施方案、进度追踪与验收标准 |
 | **RAG页面重构计划**| `docs/superpowers/plans/rag-evaluation-page-refactoring/` | RAG 评估页面的6层校验诊断、工作流及 SSE 推送的详细重构计划 |
-| **统一响应与异常规范**| `docs/specs/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
+| **统一响应与异常规范**| `.ai/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
 | **统一响应与异常重构计划**| `docs/superpowers/plans/unified-api-response-error-handling/` | 统一接口返回与异常处理的详细实施方案、进度追踪与验收标准 |
 
 ---
@@ -45,13 +47,16 @@
 - **语言**: Python 3.13, TypeScript 5.3
 - **核心编排**: LangGraph 1.1.0, LangChain 1.2.11, LlamaIndex 0.14.16
 - **大模型支持**: DashScope, OpenAI, Anthropic, DeepSeek, Ollama
-- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送
-- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, Zustand 5, React Router 7
+- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送, Prometheus 指标收集
+- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, Zustand 5, React Router 7, TanStack Query 5
 - **包管理**: uv (后端), npm (前端)
 
 ## 常用开发命令
 - **后端**: `cd backend && uv sync && uv run start` 或 `uv run python src/server.py`
 - **前端**: `cd frontend && npm install && npm run dev`
+- **前端测试**: `cd frontend && npm run test`
+- **前端类型检查**: `cd frontend && npm run typecheck`
+- **前端代码规范**: `cd frontend && npm run lint`
 
 ---
 
@@ -60,27 +65,38 @@
 1. **前后端解耦**: 项目架构要求前后端完全解耦，后端仅提供 API 服务（及 SPA 回退路由），不包含任何前端业务路由逻辑。
 2. **配置管理规范**: 
    - **绝对禁止代码硬编码**。所有可配置参数定义在数据库或集中式配置中心。
+   - **配置优先级（严格）**：MySQL 数据库（主） > `.env` 文件（仅兜底）。业务配置必须优先从 MySQL 读取，`.env` 仅在数据库未配置或启动初始化时使用。
+   - **`.env` 兜底规则**：
+     - `.env` 保留所有业务配置的默认值，确保系统无数据库时仍可启动
+     - 凭证类配置（API Key 等）必须在 `.env` 中定义兜底值
+     - 基础设施配置（DATABASE_URL、REDIS_URL 等）仅存在于 `.env`
+     - 前端配置页面修改配置后，写入 MySQL，不修改 `.env`
    - 在多实例部署架构中，动态编辑（如提示词、配置）必须使用 MySQL 共享存储，**禁止直接写入本地 JSON 文件**。
    - 系统全局配置页面通过独立路由 `/system-config` 访问。
 3. **依赖管理**: 后端依赖只允许在 `pyproject.toml` 中声明，使用 `uv add`。前端使用 `package.json`。
-4. **代码风格**: Python 遵循 PEP 8，使用强类型注解；前端使用 TS 严格模式。**代码注释必须全中文**。
+4. **代码风格**: Python 遵循 PEP 8，使用强类型注解；前端使用 TS 严格模式。**所有代码注释必须全中文**（包括函数说明、行内注释、TODO标记等）。
 5. **实体类集中管理（强制）**: 
    - **绝对禁止**在 `service/`、`controller/`、`core/` 中定义 `class xxx(BaseModel)`。
    - 所有 Pydantic 实体类必须统一放置在 `backend/src/schemas/` 目录下，按业务模块组织（如 `schemas/assessment.py`、`schemas/rag.py`）。
-   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 2 章。
 6. **类职责拆分（强制）**: 
    - 单类不超过 **500 行**（含空行和注释），违反则必须拆分。
    - 使用门面模式（Facade）对外提供统一 API，内部协调子服务。
-   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 3 章。
 7. **冗余代码消除（强制）**: 
    - 禁止重复定义相同功能的函数，必须提取至 `utils/` 目录下的对应工具模块。
    - 高频重复模式：Session 管理、错误处理、模型序列化、文件操作、时间处理。
-   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 4 章。
 8. **统一响应与异常（强制）**: 
    - 所有接口返回统一格式：`{code: 0, message: "success", data: {...}}`（成功）或 `{code, message, error_code, details}`（错误）。
    - 保持 HTTP 语义（200/4xx/5xx），业务错误码采用双字段：`code`（数字）+ `error_code`（字符串）。
    - 所有业务异常必须继承 `AppException`，禁止直接使用 `HTTPException`。
-   - 详见 `docs/specs/unified-api-response-and-error-handling.md` 第 5-7 章。
+
+> 以上规范的完整细则参见：[统一响应与异常处理规范](.ai/unified-api-response-and-error-handling.md)
+9. **零迁移原则（强制）**: 
+   - **项目未上线，不存在历史兼容问题**。
+   - 修改代码时**直接删除旧代码**，禁止保留向后兼容层、废弃标记、迁移脚本。
+   - 数据库变更**直接修改 DDL**，禁止编写 Alembic 迁移脚本（up/down）。
+   - 前端路由/组件变更**直接替换**，禁止保留旧路由重定向或兼容逻辑。
+   - 配置/提示词变更**直接覆盖**，禁止保留旧字段或降级逻辑。
+   - 唯一例外：第三方 API 契约变更需确认外部依赖方已同步更新。
 
 ---
 
@@ -116,8 +132,23 @@
 - **禁止 HTTPException**: 所有业务异常必须使用 `AppException` 或其子类，通过全局异常处理器统一格式化。
 - **响应格式**: 成功响应必须使用 `APIResponse.success(data)` 包装，禁止直接返回字典。
 - **实体类位置**: 发现 `class xxx(BaseModel)` 在 controller/service 中定义，必须迁移至 `schemas/` 目录。
-- **类长度限制**: 单类超过 200 行必须拆分，使用门面模式协调子服务。
+- **类长度限制**: 单类超过 500 行必须拆分，使用门面模式协调子服务。
 - **工具函数优先**: 遇到重复代码（Session 管理、文件操作、时间处理等），必须先检查 `utils/` 是否已有对应函数，禁止重复定义。
+
+### 7. 配置与监控系统
+- **配置热重载**: 通过 `ConfigCache` 单例 + Redis Pub/Sub 实现，修改配置后自动生效，无需重启。
+- **Prometheus 指标**: 系统暴露 `/metrics` 端点，收集 HTTP 请求耗时、LLM 调用延迟、缓存命中率等。
+- **Tracing 系统**: `core/tracing/` 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析。
+
+### 8. Repository 数据访问层
+- **泛型基类**: `BaseRepository` 提供 CRUD 通用实现，专属 Repository 继承并扩展。
+- **Session 管理**: Repository 接收 `async_session_factory`，每个方法内部通过 `async with` 创建独立 session。
+- **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器。
+
+### 9. 前端测试与类型安全
+- **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`。
+- **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型。
+- **路由懒加载**: RAG 评估与提示词管理页面使用 `lazy()` + `Suspense` 按需加载。
 
 ---
 

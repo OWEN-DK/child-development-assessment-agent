@@ -1,14 +1,7 @@
-import { Table, Button, Tag, Space, Popconfirm, Empty } from 'antd';
+import { Table, Button, Space, Popconfirm, Empty } from 'antd';
 import { PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import type { SourceType } from '../hooks/useTestSetStore';
-
-const SOURCE_TYPE_MAP: Record<SourceType, { label: string; color: string }> = {
-  BOOK_GENERATED: { label: '书籍生成', color: 'blue' },
-  JSON_IMPORTED: { label: 'JSON导入', color: 'green' },
-  MANUAL: { label: '手动创建', color: 'orange' },
-};
 
 interface TestSetListTableProps {
   testSets: any[];
@@ -18,6 +11,8 @@ interface TestSetListTableProps {
   pageSize: number;
   setPagination: (page: number, pageSize: number) => void;
   onDelete: (id: string) => void;
+  selectedRowKeys: React.Key[];
+  onSelectChange: (keys: React.Key[]) => void;
 }
 
 export function TestSetListTable({
@@ -28,6 +23,8 @@ export function TestSetListTable({
   pageSize,
   setPagination,
   onDelete,
+  selectedRowKeys,
+  onSelectChange,
 }: TestSetListTableProps) {
   const navigate = useNavigate();
 
@@ -38,15 +35,6 @@ export function TestSetListTable({
       key: 'name',
       render: (text: string, record: any) => (
         <Link to={`/rag-eval/test-sets/${record.id}`}>{text}</Link>
-      ),
-    },
-    {
-      title: '来源类型',
-      dataIndex: 'source_type',
-      key: 'source_type',
-      width: 120,
-      render: (type: SourceType) => (
-        <Tag color={SOURCE_TYPE_MAP[type]?.color}>{SOURCE_TYPE_MAP[type]?.label || type}</Tag>
       ),
     },
     {
@@ -119,6 +107,10 @@ export function TestSetListTable({
       dataSource={testSets}
       rowKey="id"
       loading={loading}
+      rowSelection={{
+        selectedRowKeys,
+        onChange: onSelectChange,
+      }}
       pagination={{
         current: page,
         pageSize,

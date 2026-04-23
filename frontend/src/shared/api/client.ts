@@ -1,4 +1,5 @@
 import axios from 'axios';
+import qs from 'qs';
 import { API_BASE_URL, API_TIMEOUT } from '@shared/lib/constants';
 
 export const apiClient = axios.create({
@@ -6,6 +7,9 @@ export const apiClient = axios.create({
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
+  },
+  paramsSerializer: (params) => {
+    return qs.stringify(params, { arrayFormat: 'repeat' });
   },
 });
 

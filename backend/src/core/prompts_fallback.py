@@ -97,26 +97,54 @@ METADATA_EXTRACTION_PROMPT = """
 只返回JSON对象，不要其他任何内容。
 """
 
-TEST_CASE_DRAFT_GENERATION_PROMPT = """
+TEST_CASE_DRAFT_GENERATION_PROMPT = """\
 你是儿童发展、感觉统合、教育心理学领域的专业测试用例设计师。
-请根据提供的文档内容，生成 {count} 个 RAG（检索增强生成）测试用例草稿。
+请根据提供的文档内容，生成 RAG（检索增强生成）测试用例草稿。
 
-文档内容:
+## 文档内容
 {text}
 
-生成要求：
-1. 生成的测试用例应围绕目标领域（{domains}）和适用年龄段（{age_range_min}-{age_range_max}岁）。
-2. 每个测试用例应包含：
-   - query: 模拟家长或专业人士会提出的具体问题。
-   - description: 这个查询的意图和测试目标。
-   - expected_keywords: 回答中必须包含的预期专业关键词列表。
-   - answer_points: 预期回答的核心要点列表。
-   - professional_terms: 涉及的专业术语列表。
-3. 返回结果必须是包含 `drafts` 数组的 JSON 对象，每个元素对应一个测试用例。
-4. 绝对不要返回除了 JSON 之外的任何内容（例如Markdown标记、前言、解释）。
+## 生成约束
+- 目标领域：{domain}（必须围绕此领域生成）
+- 适用年龄段：{age_stage_label}（月龄范围 {age_min_months}-{age_max_months} 月，查询和答案必须符合此年龄段特征）
 
-返回 JSON 结构示例：
-{{"drafts": [{{"query": "3岁孩子怕荡秋千是怎么回事？","description": "测试系统是否能正确检索前庭觉敏感相关知识","expected_keywords": ["前庭觉", "重力不安全感", "敏感"],"answer_points": ["分析前庭觉敏感的原因", "给出渐进式脱敏建议", "提供居家小游戏"],"professional_terms": ["前庭防御", "重力不安全感"]}}]}}
+## 批次配置
+请生成 {batch_count} 个草稿，每个草稿对应以下配置：
+{batch_configs}
+
+每个草稿必须严格匹配对应的 query_type 和 difficulty。
+
+## 查询类型说明
+- 事实性查询：是什么/有什么/定义类问题
+- 比较性查询：区别/对比/优劣类问题
+- 方案性查询：怎么做/如何改善/训练方法类问题
+- 原因分析性查询：为什么/成因/机制类问题
+
+## 难度说明
+- 入门级：基础概念认知，适合家长日常提问
+- 中级：场景应用和对比分析，适合有一定知识的家长
+- 高级：专业深度和机制分析，适合专业人士
+
+## 返回格式
+必须返回严格的 JSON 对象，格式如下：
+{{
+  "drafts": [
+    {{
+      "age": 48,
+      "query": "什么是前庭觉？",
+      "description": "测试系统对基础概念的理解能力",
+      "expected_keywords": ["前庭觉", "平衡", "内耳"],
+      "answer_points": ["前庭觉定义", "主要功能", "发育阶段"],
+      "professional_terms": ["前庭器官", "半规管"]
+    }}
+  ]
+}}
+
+## 约束
+- age 必须为整数，范围在 {age_min_months}-{age_max_months} 月之间
+- query 必须是完整的问句
+- 每个草稿的 query 不能重复
+- 仅返回 JSON，不要包含任何解释性文字
 """
 
 # --------------------------

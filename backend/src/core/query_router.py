@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Tuple
 
 from src.config import settings
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.schemas import LLMMessage, LLMRequest, QueryClassification, QueryType
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ class QueryRouter:
         for attempt in range(settings.query_router_llm_max_retries):
             try:
                 # 使用工厂创建 LLM 实例
-                llm = LLMServiceFactory.create(
+                llm = LLMServiceFactoryCompat.create(
                     framework=LLMFramework.LLAMAINDEX,
                     model_name=settings.model_query_classification,
                     scenario="query_classification",

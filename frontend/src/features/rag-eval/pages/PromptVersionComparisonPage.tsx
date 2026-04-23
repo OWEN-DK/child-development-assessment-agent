@@ -1,6 +1,6 @@
 /**
  * 提示词版本对比页
- * 路由: /rag-eval/prompts/:id/versions
+ * 路由: /prompt-management/:key/versions
  */
 
 import React, { useEffect, useState } from 'react';
@@ -33,7 +33,7 @@ const { Title } = Typography;
 const { TextArea } = Input;
 
 const PromptVersionComparisonPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { key } = useParams<{ key: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<PromptDetail | null>(null);
@@ -43,8 +43,8 @@ const PromptVersionComparisonPage: React.FC = () => {
   const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
-    if (id) fetchDetail(id);
-  }, [id]);
+    if (key) fetchDetail(key);
+  }, [key]);
 
   const fetchDetail = async (promptKey: string) => {
     setLoading(true);
@@ -63,11 +63,11 @@ const PromptVersionComparisonPage: React.FC = () => {
   };
 
   const handleCompare = async () => {
-    if (!id || !version1 || !version2) return;
+    if (!key || !version1 || !version2) return;
 
     setComparing(true);
     try {
-      const data = await comparePromptVersions(id, version1, version2);
+      const data = await comparePromptVersions(key, version1, version2);
       setComparison(data);
     } catch (error) {
       notification.error('对比失败');
@@ -118,8 +118,8 @@ const PromptVersionComparisonPage: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/rag-eval/prompts/${id}`)}>
-          返回
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/prompt-management')}>
+          返回列表
         </Button>
         <Title level={3} style={{ margin: 0 }}>
           {detail.metadata.name_zh} - 版本对比
@@ -130,7 +130,7 @@ const PromptVersionComparisonPage: React.FC = () => {
         <Table
           columns={columns}
           dataSource={detail.versions}
-          rowKey="id"
+          rowKey="version_label"
           pagination={false}
           size="small"
         />

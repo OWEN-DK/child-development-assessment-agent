@@ -1,17 +1,16 @@
 import hashlib
-import os
-import uuid
+import asyncio
 from datetime import datetime
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
 from src.config import settings
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.schemas import LLMMessage, LLMRequest
+from src.schemas.task import TaskStatus
+from src.utils.di import get_task_state_service
+from src.service.task_sse_publisher import TaskSsePublisher
 from src.utils.logger import logger
-
-# 全局进度存储
-_task_progress: Dict[str, Dict] = {}
 
 try:
     from summa import summarizer
@@ -45,16 +44,23 @@ class LayeredContentGenerator:
         # 对于大量节点，使用更小的批次降低API压力
 
     async def generate_layers_batch(
-        self, contents: List[str], task_id: Optional[str] = None
+        self, 
+        contents: List[str], 
+        task_id: Optional[str] = None,
+        cancellation_event: Optional[asyncio.Event] = None
     ) -> List[Tuple[str, str, str]]:
         """批量生成分层内容，减少LLM调用次数
         Args:
             contents: 内容列表
             task_id: 可选任务ID，用于进度跟踪
+            cancellation_event: 可选取消事件，用于终止任务
         """
         results = []
         total = len(contents)
         processed = 0
+        TASK_TYPE = "layered_generation"
+        task_state_service = get_task_state_service()
+        
         # 根据节点总数动态调整批次大小
         batch_size = (
             self.large_batch_size
@@ -65,18 +71,24 @@ class LayeredContentGenerator:
             f"Starting layered content generation for {total} chunks, batch size: {batch_size}"
         )
 
-        # 初始化进度
+        # 初始化任务状态
         if task_id:
-            _task_progress[task_id] = {
-                "total": total,
-                "processed": processed,
-                "progress": 0.0,
-                "status": "running",
-                "start_time": datetime.now().isoformat(),
-                "end_time": None,
-            }
+            await task_state_service.update(
+                task_id=task_id,
+                task_type=TASK_TYPE,
+                updates={
+                    "status": TaskStatus.RUNNING,
+                    "progress": 0.0,
+                    "message": "生成分层内容中",
+                    "metadata": {"total": total, "processed": processed}
+                }
+            )
         # 按批次处理
         for i in range(0, total, batch_size):
+            # 检查是否取消
+            if cancellation_event and cancellation_event.is_set():
+                raise asyncio.CancelledError("任务已取消")
+                
             batch = contents[i : i + batch_size]
             if self.enable_llm_generation and self.llm_available:
                 try:
@@ -88,10 +100,23 @@ class LayeredContentGenerator:
                     logger.info(
                         f"Layered content generation progress: {processed}/{total} ({progress:.1f}%)"
                     )
-                    # 更新全局进度
-                    if task_id and task_id in _task_progress:
-                        _task_progress[task_id]["processed"] = processed
-                        _task_progress[task_id]["progress"] = round(progress, 1)
+                    # 更新任务状态
+                    if task_id:
+                        await task_state_service.update(
+                            task_id=task_id,
+                            task_type=TASK_TYPE,
+                            updates={
+                                "progress": round(progress, 1),
+                                "metadata": {"total": total, "processed": processed}
+                            }
+                        )
+                        # 推送进度事件
+                        await TaskSsePublisher.publish_progress(
+                            task_type=TASK_TYPE,
+                            task_id=task_id,
+                            progress=round(progress, 1),
+                            message=f"已处理 {processed}/{total} 个内容块"
+                        )
                     continue
                 except Exception as e:
                     logger.warning(
@@ -108,16 +133,42 @@ class LayeredContentGenerator:
             logger.info(
                 f"Layered content generation progress (local fallback): {processed}/{total} ({progress:.1f}%)"
             )
-            # 更新全局进度
-            if task_id and task_id in _task_progress:
-                _task_progress[task_id]["processed"] = processed
-                _task_progress[task_id]["progress"] = round(progress, 1)
+            # 更新任务状态
+            if task_id:
+                await task_state_service.update(
+                    task_id=task_id,
+                    task_type=TASK_TYPE,
+                    updates={
+                        "progress": round(progress, 1),
+                        "metadata": {"total": total, "processed": processed}
+                    }
+                )
+                # 推送进度事件
+                await TaskSsePublisher.publish_progress(
+                    task_type=TASK_TYPE,
+                    task_id=task_id,
+                    progress=round(progress, 1),
+                    message=f"已处理 {processed}/{total} 个内容块"
+                )
         logger.info(f"Completed layered content generation for {total} chunks")
         # 标记任务完成
-        if task_id and task_id in _task_progress:
-            _task_progress[task_id]["status"] = "completed"
-            _task_progress[task_id]["end_time"] = datetime.now().isoformat()
-            _task_progress[task_id]["progress"] = 100.0
+        if task_id:
+            await task_state_service.update(
+                task_id=task_id,
+                task_type=TASK_TYPE,
+                updates={
+                    "status": TaskStatus.COMPLETED,
+                    "progress": 100.0,
+                    "message": "分层内容生成完成",
+                    "result": {"total_chunks": total}
+                }
+            )
+            # 推送完成事件
+            await TaskSsePublisher.publish_complete(
+                task_type=TASK_TYPE,
+                task_id=task_id,
+                result={"total_chunks": total}
+            )
         return results
 
     async def generate_layers(
@@ -143,7 +194,7 @@ class LayeredContentGenerator:
         if self.enable_llm_generation and self.llm_available:
             try:
                 # 使用工厂创建 LLM 实例
-                llm = LLMServiceFactory.create(
+                llm = LLMServiceFactoryCompat.create(
                     framework=LLMFramework.LLAMAINDEX,
                     model_name=settings.llm_models.get(
                         "metadata_extraction", "qwen-turbo"
@@ -276,7 +327,7 @@ class LayeredContentGenerator:
 
         try:
             # 使用工厂创建 LLM 实例
-            llm = LLMServiceFactory.create(
+            llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LLAMAINDEX,
                 model_name=settings.llm_models.get("metadata_extraction", "qwen-turbo"),
                 scenario="layered_content_batch",
@@ -343,7 +394,7 @@ class LayeredContentGenerator:
                 async with semaphore:
                     try:
                         # 使用工厂创建 LLM 实例
-                        llm = LLMServiceFactory.create(
+                        llm = LLMServiceFactoryCompat.create(
                             framework=LLMFramework.LLAMAINDEX,
                             model_name=settings.llm_models.get(
                                 "metadata_extraction", "qwen-turbo"
@@ -427,22 +478,52 @@ def get_layered_generator():
     return LayeredContentGenerator()
 
 
-def get_task_progress(task_id: str) -> Optional[Dict]:
+async def get_task_progress(task_id: str) -> Optional[Dict]:
     """获取任务进度"""
-    return _task_progress.get(task_id)
+    task_state_service = get_task_state_service()
+    TASK_TYPE = "layered_generation"
+    
+    task_state = await task_state_service.get(task_id, TASK_TYPE)
+    if not task_state:
+        return None
+        
+    return {
+        "task_id": task_state.task_id,
+        "total": task_state.metadata.get("total", 0),
+        "processed": task_state.metadata.get("processed", 0),
+        "progress": task_state.progress,
+        "status": task_state.status.value,
+        "start_time": task_state.started_at.isoformat() if task_state.started_at else None,
+        "end_time": task_state.completed_at.isoformat() if task_state.completed_at else None
+    }
 
 
-def list_all_tasks() -> List[Dict]:
+async def list_all_tasks() -> List[Dict]:
     """获取所有任务进度"""
-    return [{"task_id": tid, **progress} for tid, progress in _task_progress.items()]
+    task_state_service = get_task_state_service()
+    
+    tasks = await task_state_service.list_active(task_type="layered_generation")
+    
+    return [
+        {
+            "task_id": task.task_id,
+            "total": task.metadata.get("total", 0),
+            "processed": task.metadata.get("processed", 0),
+            "progress": task.progress,
+            "status": task.status.value,
+            "start_time": task.started_at.isoformat() if task.started_at else None
+        } 
+        for task in tasks
+    ]
 
 
-def clear_task_progress(task_id: str) -> bool:
+async def clear_task_progress(task_id: str) -> bool:
     """清除任务进度"""
-    if task_id in _task_progress:
-        del _task_progress[task_id]
-        return True
-    return False
+    task_state_service = get_task_state_service()
+    TASK_TYPE = "layered_generation"
+    
+    success = await task_state_service.delete(task_id, TASK_TYPE)
+    return success
 
 
 layered_generator = get_layered_generator()

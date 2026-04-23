@@ -23,7 +23,7 @@ class IndexOperations:
             try:
                 vector_store = VectorStoreFactory.get_vector_store()
                 storage_context = StorageContext.from_defaults(vector_store=vector_store)
-                batch_size = 200
+                batch_size = settings.rag_index_insert_batch_size
                 total_nodes = len(nodes)
                 if total_nodes > batch_size:
                     logger.info(f"Large dataset detected ({total_nodes} nodes), using batch processing")
@@ -74,25 +74,36 @@ class IndexOperations:
         if not doc:
             logger.warning(f"Document {file_name} not found in registry.")
             return False
-        if not self.storage_manager.index:
-            logger.warning("Index not initialized, only deleting document record.")
-            document_manager.delete_document(doc.file_hash)
-            return True
-        logger.info(f"Deleting document: {file_name} (hash: {doc.file_hash})")
+        logger.info(f"Deleting document: {file_name} (hash: {doc.file_hash}, status: {doc.status})")
+        
+        # 首先删除文档记录（无论索引删除是否成功，都要删除记录）
         try:
-            for ref_id in doc.ref_doc_ids:
-                self.storage_manager.index.delete_ref_doc(ref_id, delete_from_docstore=True)
-            self.storage_manager._persist_index()
-            self.storage_manager._dirty = False
             document_manager.delete_document(doc.file_hash)
-            remaining_docs = document_manager.list_documents()
-            if not remaining_docs:
-                self.storage_manager._clear_index()
+        except Exception as e:
+            logger.error(f"Failed to delete document record: {e}")
+            return False
+        
+        if not self.storage_manager.index:
+            logger.warning("Index not initialized, document record deleted successfully.")
+            return True
+            
+        # 尝试从索引中删除
+        try:
+            if doc.status != "failed":  # 失败的文档没有在索引中，不需要删除
+                for ref_id in doc.ref_doc_ids:
+                    self.storage_manager.index.delete_ref_doc(ref_id, delete_from_docstore=True)
+                self.storage_manager._persist_index()
+                self.storage_manager._dirty = False
+                
+                remaining_docs = document_manager.list_documents()
+                if not remaining_docs:
+                    self.storage_manager._clear_index()
+                    
             logger.info(f"Successfully deleted {file_name}")
             return True
         except Exception as e:
-            logger.error(f"Failed to delete document: {e}")
-            return False
+            logger.error(f"Failed to delete document from index: {e}, but document record was deleted")
+            return True  # 即使索引删除失败，也返回成功，因为记录已经删除了
 
     def _parse_metadata_json_strings(self, metadata: dict) -> dict:
         if not metadata:

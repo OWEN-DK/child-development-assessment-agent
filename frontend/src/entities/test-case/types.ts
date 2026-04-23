@@ -52,6 +52,7 @@ export interface TestResult {
   f1_score: number;
   mrr: number;
   ndcg_at_k: number;
+  passed: boolean;
   results: TestResultItem[];
   executed_at: string;
   execution_time_ms: number;
@@ -123,19 +124,26 @@ export interface SourceDocument {
 
 export interface GenerationParams {
   target_domains: string[];
-  age_range: [number, number];
-  count: number;
-  difficulty: string;
+  age_stages: string[];                     // 替代 age_range
+  drafts_per_combination: number;           // 替代 count
+  query_types: string[];                    // 新增
+  difficulty_levels: string[];              // 替代 difficulty
   llm_model: string;
   temperature: number;
+  mode: 'append' | 'overwrite';             // 新增
 }
 
 export interface TestCaseDraft {
   id: string;
   source_document_id: string;
+  source_document_name?: string;
   query: string;
   age: number;
   domain: string;
+  age_stage_label: string;      // 年龄段标签
+  draft_index: number;          // 组合内草稿索引
+  batch_id: string | null;      // 生成批次 ID
+  version: number;              // 乐观锁
   expected_knowledge_ids: string[];
   expected_keywords: string[];
   description: string;
@@ -156,4 +164,81 @@ export interface TestSet {
   test_case_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+// SSE 事件类型
+export interface DraftSseEventStarted {
+  event: 'draft_generation_started';
+  total_combinations: number;
+  total_drafts: number;
+  mode: string;
+}
+
+export interface DraftSseEventProgress {
+  event: 'draft_combination_progress';
+  current_combination: number;
+  total_combinations: number;
+  domain: string;
+  age_stage: string;
+  generated: number;
+  deduplicated: number;
+}
+
+export interface DraftSseEventDeduplication {
+  event: 'draft_deduplication';
+  domain: string;
+  age_stage: string;
+  before: number;
+  after: number;
+  removed: number;
+  threshold: number;
+}
+
+export interface DraftSseEventCompleted {
+  event: 'draft_generation_completed';
+  total: number;
+  deduplicated: number;
+  duration: string;
+}
+
+export interface DraftSseEventFailed {
+  event: 'draft_generation_failed';
+  error: string;
+  combination: string;
+}
+
+export interface DraftSseEventCancelled {
+  event: 'draft_generation_cancelled';
+  total: number;
+  reason: string;
+}
+
+export type DraftSseEvent =
+  | DraftSseEventStarted
+  | DraftSseEventProgress
+  | DraftSseEventDeduplication
+  | DraftSseEventCompleted
+  | DraftSseEventFailed
+  | DraftSseEventCancelled;
+
+// 草稿生成进度
+export interface DraftGenerationProgress {
+  visible: boolean;
+  current: number;
+  total: number;
+  message: string;
+  taskType: string;
+  taskId: string;
+  generated?: number;
+  deduplicated?: number;
+}
+
+// 预估结果
+export interface EstimateResult {
+  combinations: number;
+  total_drafts: number;
+  domains: string[];
+  age_stages: string[];
+  drafts_per_combination: number;
+  estimated_cost?: number;
 }

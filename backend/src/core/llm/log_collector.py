@@ -12,10 +12,15 @@ class LLMLogCollector:
     _queue: asyncio.Queue = None
     _worker_task: asyncio.Task = None
     _monitoring: MonitoringService = None
+    _ever_started: bool = False
 
     @classmethod
     def start(cls):
         """启动采集器（应用启动时调用）"""
+        if cls._ever_started:
+            logger.debug("LLM 日志采集器已初始化过，跳过重复启动")
+            return
+        cls._ever_started = True
         cls._queue = asyncio.Queue(maxsize=10000)
         cls._monitoring = MonitoringService()
         cls._worker_task = asyncio.create_task(cls._worker())
@@ -24,6 +29,9 @@ class LLMLogCollector:
     @classmethod
     async def stop(cls):
         """停止采集器（应用关闭时调用，确保数据全部写入）"""
+        if cls._queue is None:
+            logger.debug("LLM 日志采集器未运行，跳过停止")
+            return
         if cls._worker_task:
             await cls._queue.put(None)
             await cls._worker_task

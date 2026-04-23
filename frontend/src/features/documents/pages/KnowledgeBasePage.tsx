@@ -4,7 +4,8 @@ import { CloudSyncOutlined } from '@ant-design/icons';
 import { useDocumentManagement } from '../hooks/useDocumentManagement';
 import { DocumentUploader } from '../../../components/documents/DocumentUploader';
 import { DocumentList } from '../../../components/documents/DocumentList';
-import { TaskProgressList } from '../../../components/documents/TaskProgressList';
+import { ProgressList } from '../../../components/progress';
+import { documentUploadConfig, adaptUploadTask, type AdaptedUploadTask } from '../../../components/progress/configs/documentUpload';
 import type { UploadTaskStatus } from '../../../api/documents/types';
 import { extractApiError, notification } from '@shared/lib/notification';
 import styles from './KnowledgeBasePage.module.scss';
@@ -19,6 +20,7 @@ const KnowledgeBasePage: React.FC = () => {
     processingTasks,
     loadDocuments,
     loadRagStatus,
+    loadTasks,
     handleCancel,
     addTask,
   } = useDocumentManagement();
@@ -30,7 +32,8 @@ const KnowledgeBasePage: React.FC = () => {
   const handleUploadSuccess = useCallback(async () => {
     await loadDocuments();
     await loadRagStatus();
-  }, [loadDocuments, loadRagStatus]);
+    await loadTasks();
+  }, [loadDocuments, loadRagStatus, loadTasks]);
 
   const handleCancelTask = useCallback(async (taskId: string) => {
     try {
@@ -42,9 +45,12 @@ const KnowledgeBasePage: React.FC = () => {
     }
   }, [handleCancel]);
 
+  // 适配任务数据格式
+  const adaptedTasks: AdaptedUploadTask[] = processingTasks.map(adaptUploadTask);
+
   const processingFilenames = new Set(
     processingTasks
-      .filter(t => t.status !== 'success')
+      .filter(t => t.status !== 'completed')
       .map(t => t.filename)
   );
 
@@ -74,9 +80,26 @@ const KnowledgeBasePage: React.FC = () => {
             onSuccess={handleUploadSuccess}
           />
 
-          <TaskProgressList
-            tasks={processingTasks}
-            onCancel={handleCancelTask}
+          <ProgressList
+            config={{
+              ...documentUploadConfig,
+              onCancel: async (task) => {
+                await handleCancelTask(task.taskId);
+              },
+              onDelete: async (task) => {
+                try {
+                  const { deleteTask } = await import('../../../api/documents');
+                  await deleteTask(task.taskId);
+                  notification.success('删除成功');
+                  loadDocuments();
+                  loadTasks();
+                } catch (e: any) {
+                  const apiError = extractApiError(e);
+                  notification.error(`删除失败: ${apiError.message}`);
+                }
+              },
+            }}
+            tasks={adaptedTasks}
           />
         </Space>
       </Card>

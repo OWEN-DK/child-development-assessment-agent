@@ -8,7 +8,7 @@
 """
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -73,22 +73,68 @@ class LLMSettings(BaseSettings):
         description="LLM 提供商凭证映射（支持 dashscope/openai/anthropic/ollama）",
     )
 
+    # ===== 新增：多模态模型前缀列表 =====
+    llm_multimodal_model_prefixes: List[str] = Field(
+        default=[
+            "qwen-vl",
+            "qwen-audio",
+            "qwen-omni",
+            "qwen-vl-plus",
+            "qwen-vl-max",
+            "qwen-vl-max-latest",
+            "qwen-audio-turbo",
+            "qwen-audio-turbo-latest",
+            "qwen-omni-turbo",
+            "qwen-omni-flash",
+            "qwen3-omni-flash",
+            "qwen3-omni-turbo",
+        ],
+        validation_alias="LLM_MULTIMODAL_MODEL_PREFIXES",
+        description="DashScope 多模态模型前缀列表（用于自动选择 API，匹配任一前缀即使用 MultiModalConversation API）",
+    )
+
     # ===== 新增：模型定价配置 =====
+    # 价格来源：阿里云百炼官网（中国内地，每百万 Token，CNY）
+    # https://help.aliyun.com/zh/model-studio/getting-started/models
     model_pricing: Dict[str, ModelPricingConfig] = Field(
         default_factory=lambda: {
+            # 旗舰模型
+            "qwen3-max": ModelPricingConfig(
+                input_per_million=2.5,
+                output_per_million=10.0,
+                currency="CNY",
+            ),
+            "qwen3.6-plus": ModelPricingConfig(
+                input_per_million=2.0,
+                output_per_million=12.0,
+                currency="CNY",
+            ),
+            "qwen3.6-flash": ModelPricingConfig(
+                input_per_million=1.2,
+                output_per_million=7.2,
+                currency="CNY",
+            ),
+            # 性价比之王（推荐默认）
             "qwen3.5-plus": ModelPricingConfig(
-                input_per_million=0.004,
-                output_per_million=0.012,
+                input_per_million=0.8,
+                output_per_million=4.8,
                 currency="CNY",
             ),
-            "qwen3.5-turbo": ModelPricingConfig(
-                input_per_million=0.002,
-                output_per_million=0.006,
+            # 均衡模型（非思考模式最便宜）
+            "qwen-plus": ModelPricingConfig(
+                input_per_million=0.8,
+                output_per_million=2.0,
                 currency="CNY",
             ),
+            # 多模态模型
             "qwen3-omni-flash": ModelPricingConfig(
-                input_per_million=0.001,
-                output_per_million=0.003,
+                input_per_million=0.2,
+                output_per_million=2.0,
+                currency="CNY",
+            ),
+            "qwen-vl-max": ModelPricingConfig(
+                input_per_million=2.0,
+                output_per_million=8.0,
                 currency="CNY",
             ),
         },
@@ -99,27 +145,27 @@ class LLMSettings(BaseSettings):
     model_report_generation: str = Field(
         default="qwen3.5-plus",
         validation_alias="MODEL_REPORT_GENERATION",
-        description="评估报告生成使用的模型",
+        description="评估报告生成使用的模型（性价比之王，效果媲美 Max）",
     )
     model_assessment: str = Field(
         default="qwen3.5-plus",
         validation_alias="MODEL_ASSESSMENT",
-        description="儿童发展评估使用的模型",
+        description="儿童发展评估使用的模型（性价比之王）",
     )
     model_validation: str = Field(
-        default="qwen3.5-turbo",
+        default="qwen-plus",
         validation_alias="MODEL_VALIDATION",
-        description="结果校验使用的模型",
+        description="结果校验使用的模型（最便宜）",
     )
     model_query_rewrite: str = Field(
-        default="qwen3-omni-flash",
+        default="qwen-plus",
         validation_alias="MODEL_QUERY_REWRITE",
-        description="查询重写使用的模型",
+        description="查询重写使用的模型（最便宜）",
     )
     model_metadata_extraction: str = Field(
-        default="qwen3-omni-flash",
+        default="qwen-plus",
         validation_alias="MODEL_METADATA_EXTRACTION",
-        description="元数据提取使用的模型",
+        description="元数据提取使用的模型（最便宜）",
     )
     model_vl_parsing: str = Field(
         default="qwen3-omni-flash",
@@ -127,14 +173,14 @@ class LLMSettings(BaseSettings):
         description="多模态内容解析使用的模型",
     )
     model_query_classification: str = Field(
-        default="qwen3-omni-flash",
+        default="qwen-plus",
         validation_alias="MODEL_QUERY_CLASSIFICATION",
-        description="查询分类使用的模型名称",
+        description="查询分类使用的模型名称（最便宜）",
     )
     ml_scoring_qwen_model: str = Field(
-        default="qwen3.5-turbo",
+        default="qwen-plus",
         validation_alias="ML_SCORING_QWEN_MODEL",
-        description="大模型评分使用的模型名称",
+        description="大模型评分使用的模型名称（最便宜）",
     )
 
     # ===== 新增：从旧字段自动构建的场景配置 =====
@@ -152,19 +198,19 @@ class LLMSettings(BaseSettings):
             ),
             "validation": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_validation or "qwen3.5-turbo",
+                model=self.model_validation or "qwen-plus",
             ),
             "query_rewrite": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_query_rewrite or "qwen3-omni-flash",
+                model=self.model_query_rewrite or "qwen-plus",
             ),
             "metadata_extraction": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_metadata_extraction or "qwen3-omni-flash",
+                model=self.model_metadata_extraction or "qwen-plus",
             ),
             "query_classification": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_query_classification or "qwen3-omni-flash",
+                model=self.model_query_classification or "qwen-plus",
             ),
             "vl_parsing": LLMSceneConfig(
                 provider="dashscope",
@@ -172,11 +218,15 @@ class LLMSettings(BaseSettings):
             ),
             "ml_scoring": LLMSceneConfig(
                 provider="dashscope",
-                model=self.ml_scoring_qwen_model or "qwen3.5-turbo",
+                model=self.ml_scoring_qwen_model or "qwen-plus",
             ),
             "content_generation": LLMSceneConfig(
                 provider="dashscope",
                 model=self.model_report_generation or "qwen3.5-plus",
+            ),
+            "draft_generation": LLMSceneConfig(
+                provider="dashscope",
+                model="qwen-plus",
             ),
         }
 

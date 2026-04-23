@@ -89,7 +89,7 @@ class StorageManager:
     def _start_auto_persist(self):
         if hasattr(settings, "rag_auto_persist_enabled") and settings.rag_auto_persist_enabled:
             interval = getattr(settings, "rag_auto_persist_interval", 300)
-            self._persist_thread = threading.Thread(target=self._auto_persist_worker, daemon=True)
+            self._persist_thread = threading.Thread(target=self._auto_persist_worker, daemon=False)
             self._persist_thread.start()
             logger.info(f"Auto-persist thread started, interval: {interval}s")
 
@@ -116,24 +116,48 @@ class StorageManager:
                 os.makedirs(temp_dir, exist_ok=True)
                 if hasattr(self.index, 'docstore') and self.index.docstore:
                     import json
+                    import gc
                     docstore_path = os.path.join(temp_dir, "docstore.json")
-                    docs = {}
-                    for doc_id, node in self.index.docstore.docs.items():
-                        docs[doc_id] = {
-                            "id": doc_id,
-                            "text": node.text,
-                            "metadata": node.metadata,
-                            "start_char_idx": node.start_char_idx,
-                            "end_char_idx": node.end_char_idx,
-                            "relationships": {
-                                k.value: {"node_id": v.node_id} if hasattr(v, 'node_id') else str(v)
-                                for k, v in node.relationships.items()
-                            } if node.relationships else {}
-                        }
-                    docstore_data = {"docs": docs}
+                    
+                    # 流式写入docstore.json，避免在内存中构建完整字典
                     with open(docstore_path, 'w', encoding='utf-8') as f:
-                        json.dump(docstore_data, f, ensure_ascii=False, indent=2)
-                    logger.info(f"Manually persisted {len(docs)} documents to docstore.json")
+                        f.write('{"docs": {')
+                        first = True
+                        count = 0
+                        
+                        for doc_id, node in self.index.docstore.docs.items():
+                            if not first:
+                                f.write(',')
+                            first = False
+                            
+                            # 构建单个节点的JSON并直接写入
+                            node_data = {
+                                "id": doc_id,
+                                "text": node.text,
+                                "metadata": node.metadata,
+                                "start_char_idx": node.start_char_idx,
+                                "end_char_idx": node.end_char_idx,
+                                "relationships": {
+                                    k.value: {"node_id": v.node_id} if hasattr(v, 'node_id') else str(v)
+                                    for k, v in node.relationships.items()
+                                } if node.relationships else {}
+                            }
+                            
+                            # 直接写入JSON，避免中间字典
+                            f.write(f'\n"{doc_id}": ')
+                            json.dump(node_data, f, ensure_ascii=False)
+                            count += 1
+                            
+                            # 每处理1000个节点清理一次内存
+                            if count % 1000 == 0:
+                                gc.collect()
+                        
+                        f.write('\n}}')
+                    
+                    logger.info(f"Manually persisted {count} documents to docstore.json")
+                    # 释放大对象
+                    del count
+                    gc.collect()
                 self.index.storage_context.persist(persist_dir=temp_dir)
                 if os.path.exists(index_dir):
                     if os.path.exists(backup_dir):

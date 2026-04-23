@@ -25,7 +25,7 @@ class TestSetService:
         self._initialized = True
 
     async def create_test_set(
-        self, name: str, description: str = "", source_type: str = "manual"
+        self, name: str, description: str = ""
     ) -> TestSet:
         from src.schemas import TestSourceType
         
@@ -34,7 +34,7 @@ class TestSetService:
                 id=str(uuid.uuid4()),
                 name=name,
                 description=description,
-                source_type=TestSourceType(source_type),
+                source_type=TestSourceType.MANUAL,
             )
             session.add(test_set)
             await session.commit()
@@ -91,6 +91,19 @@ class TestSetService:
             await session.commit()
             logger.info(f"Test set deleted: {test_set_id}")
             return True
+
+    async def batch_delete_test_sets(self, test_set_ids: List[str]) -> int:
+        deleted_count = 0
+        async with self.db_session_factory() as session:
+            stmt = select(TestSet).where(TestSet.id.in_(test_set_ids))
+            result = await session.execute(stmt)
+            test_sets = result.scalars().all()
+            for test_set in test_sets:
+                await session.delete(test_set)
+                deleted_count += 1
+            await session.commit()
+            logger.info(f"Batch deleted {deleted_count} test sets")
+            return deleted_count
 
     async def add_test_cases_to_set(
         self, test_set_id: str, case_ids: List[str]

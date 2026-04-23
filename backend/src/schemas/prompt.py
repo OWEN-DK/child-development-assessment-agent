@@ -27,21 +27,6 @@ class CreateVersionRequest(BaseModel):
     fallback: Optional[str] = None
 
 
-class CreateABTestRequest(BaseModel):
-    """创建 A/B 测试请求"""
-
-    name: str
-    variant_a_version: str
-    variant_b_version: str
-    variant_a_ratio: float = 0.5
-
-
-class ToggleABTestRequest(BaseModel):
-    """切换 A/B 测试请求"""
-
-    is_active: bool
-
-
 class PromptMetadataResponse(BaseModel):
     """提示词元数据响应"""
 

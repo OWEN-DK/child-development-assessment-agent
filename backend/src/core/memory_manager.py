@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 import aiofiles
 
 from src.config import settings
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.schemas import LLMMessage, LLMRequest
 from src.utils.logger import logger
 
@@ -198,7 +198,7 @@ class MemoryManager:
             """
 
             # 使用工厂创建 LLM 实例
-            llm = LLMServiceFactory.create(
+            llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LLAMAINDEX,
                 model_name=settings.llm_models.get("memory_extraction", "qwen-turbo"),
                 scenario="memory_extraction",
@@ -257,7 +257,7 @@ class MemoryManager:
             """
 
             # 使用工厂创建 LLM 实例
-            llm = LLMServiceFactory.create(
+            llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LLAMAINDEX,
                 model_name=settings.llm_models.get("memory_extraction", "qwen-turbo"),
                 scenario="memory_extraction",

@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from src.config import settings
 from src.schemas import KnowledgeItem
 from src.service.cache_service import CacheService
 from src.service.index_manager_service import IndexManagerService
@@ -7,10 +8,13 @@ from src.service.retrieval.knowledge_retriever import KnowledgeRetriever
 from src.service.retrieval.query_rewriter import QueryRewriter
 from src.service.retrieval.result_processor import ResultProcessor
 from src.service.retrieval.retriever_manager import RetrieverManager
+from src.utils.logger import logger
 
 
 class RetrievalFacade:
     """检索服务门面类，协调所有子服务，保持与原 RetrievalService 相同的 API"""
+
+    _pipeline_ever_logged = False
 
     def __init__(self, index_manager: IndexManagerService, cache_service: CacheService):
         self.index_manager = index_manager
@@ -47,6 +51,28 @@ class RetrievalFacade:
             query_rewriter=self.query_rewriter,
             result_processor=self.result_processor,
         )
+
+        # 初始化 PipelineOrchestrator（声明式流水线）
+        self._pipeline_orchestrator = None
+        self._init_pipeline_orchestrator()
+
+    def _init_pipeline_orchestrator(self):
+        """初始化 PipelineOrchestrator（失败时不阻塞启动）"""
+        try:
+            from src.core.pipeline.orchestrator import PipelineOrchestrator
+
+            config_path = str(
+                __import__("pathlib").Path(__file__).parent.parent.parent.parent
+                / "config"
+                / "rag_pipeline.yaml"
+            )
+            self._pipeline_orchestrator = PipelineOrchestrator(config_path=config_path)
+            if not RetrievalFacade._pipeline_ever_logged:
+                RetrievalFacade._pipeline_ever_logged = True
+                logger.info("PipelineOrchestrator 初始化成功")
+        except Exception as e:
+            logger.warning(f"PipelineOrchestrator 初始化失败，将使用硬编码链路: {e}")
+            self._pipeline_orchestrator = None
 
     # 向后兼容：暴露内部检索器属性
     @property
@@ -89,6 +115,18 @@ class RetrievalFacade:
         """重新加载检索器（索引更新后调用）"""
         self.retriever_manager.reload_retrievers()
 
+    async def bm25_search(self, query: str, top_k: int = 10) -> list:
+        """BM25 检索（top_k 已在初始化时固定，此处仅做兼容调用）"""
+        if self.retriever_manager.bm25_retriever:
+            return await self.retriever_manager.bm25_retriever.aretrieve(query)
+        return []
+
+    async def vector_search(self, query: str, top_k: int = 10) -> list:
+        """向量检索"""
+        if self.retriever_manager.vector_retriever:
+            return await self.retriever_manager.vector_retriever.aretrieve(query)
+        return []
+
     async def retrieve_knowledge(
         self, query: str, age: int, limit: int = 3, user_id: str = None
     ) -> List[KnowledgeItem]:
@@ -96,9 +134,34 @@ class RetrievalFacade:
         根据查询和年龄检索相关知识点
         :param user_id: 用户 ID，用于 A/B 测试分配
         """
-        return await self.knowledge_retriever.retrieve_knowledge(
-            query=query, age=age, limit=limit, user_id=user_id
+        use_pipeline = (
+            settings.rag_query_pipeline_enabled
+            and self._pipeline_orchestrator is not None
         )
+
+        if use_pipeline:
+            return await self._retrieve_via_pipeline(query, age, limit)
+        else:
+            return await self.knowledge_retriever.retrieve_knowledge(
+                query=query, age=age, limit=limit, user_id=user_id
+            )
+
+    async def _retrieve_via_pipeline(
+        self, query: str, age: int, limit: int
+    ) -> List[KnowledgeItem]:
+        """通过声明式流水线执行检索"""
+        try:
+            raw_results = await self._pipeline_orchestrator.execute(
+                query=query,
+                age=float(age),
+                limit=limit,
+            )
+            return self.knowledge_retriever._convert_to_knowledge_items(
+                raw_results, user_age=age
+            )
+        except Exception as e:
+            logger.error(f"Pipeline 检索失败，抛出异常: {e}")
+            raise
 
     async def search_content(
         self, query: str, limit: int = 20, offset: int = 0

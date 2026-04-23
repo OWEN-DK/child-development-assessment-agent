@@ -14,7 +14,7 @@ from src.models.rag_eval.config_change_set_prompt import \
     RagEvalConfigChangeSetPrompt
 from src.models.rag_eval.config_version import RagEvalConfigVersion
 from src.models.rag_eval.enums import RagEvalChangeSetStatus
-from src.models.rag_eval.prompt_version import RagEvalPromptVersion
+from src.models.prompt_version import PromptVersion
 from src.utils.logger import logger
 
 
@@ -80,13 +80,16 @@ class ConfigChangeSetService:
 
             # 3. 创建提示词版本并关联到变更集
             for prompt_item in prompt_data:
-                prompt_version = RagEvalPromptVersion(
+                import hashlib
+                content_hash = hashlib.sha256(prompt_item["content"].encode()).hexdigest()
+                prompt_version = PromptVersion(
                     prompt_key=prompt_item["key"],
                     version_label=prompt_item["version_string"],
                     version_number=await self.next_prompt_version_number(
                         session, prompt_item["key"]
                     ),
                     content=prompt_item["content"],
+                    content_hash=content_hash,
                     created_by=user_id,
                     change_summary=prompt_item.get("summary"),
                 )
@@ -166,8 +169,8 @@ class ConfigChangeSetService:
         Returns:
             int: 下一个版本号（从1开始）
         """
-        stmt = select(func.max(RagEvalPromptVersion.version_number)).where(
-            RagEvalPromptVersion.prompt_key == prompt_key
+        stmt = select(func.max(PromptVersion.version_number)).where(
+            PromptVersion.prompt_key == prompt_key
         )
         result = await session.execute(stmt)
         max_number = result.scalar_one_or_none()

@@ -24,11 +24,10 @@ class ConfigHealthService:
         4. 返回诊断报告
         """
         try:
-            from src.core.llm import LLMServiceFactory
-            from src.core.prompts import PromptManager
+            from src.core.llm.factory import LLMFramework, LLMServiceFactoryCompat
+            from src.core.prompt_impl.facade import prompt_manager
 
             # 从 PromptManager 获取诊断 Prompt
-            prompt_manager = PromptManager()
             prompt = await prompt_manager.get_prompt(
                 "config_health_diagnosis",
                 variables={
@@ -38,9 +37,12 @@ class ConfigHealthService:
                 },
             )
 
-            # 调用 LLM
-            llm = await LLMServiceFactory.create_llm(
-                provider="dashscope", model="qwen-turbo"
+            # 调用 LLM（使用兼容层）
+            llm = LLMServiceFactoryCompat.create(
+                framework=LLMFramework.LANGCHAIN,
+                model_name="qwen-turbo",
+                scenario="config_health_diagnosis",
+                temperature=0.7,
             )
             response = await llm.ainvoke(prompt)
 

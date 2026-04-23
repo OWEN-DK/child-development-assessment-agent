@@ -42,6 +42,8 @@ class QueryAnalysis:
 class QueryAnalyzer:
     """查询类型分析器（适配中文场景）"""
 
+    _ever_initialized = False
+
     def __init__(self, terminology_file: Optional[str] = None):
         self._terminology_set: Set[str] = self._load_terminology(terminology_file)
         self._question_words = {"怎么办", "如何", "为什么", "怎样", "什么", "哪些"}
@@ -62,7 +64,9 @@ class QueryAnalyzer:
             db_config = getattr(settings, "rag_terminology_list", None)
             if db_config and isinstance(db_config, list):
                 terminology.update(db_config)
-                logger.info(f"从数据库配置加载 {len(db_config)} 个专业术语")
+                if not QueryAnalyzer._ever_initialized:
+                    QueryAnalyzer._ever_initialized = True
+                    logger.info(f"从数据库配置加载 {len(db_config)} 个专业术语")
                 return terminology
         except Exception as e:
             logger.debug(f"从数据库加载术语失败：{e}")
@@ -90,9 +94,11 @@ class QueryAnalyzer:
                 elif isinstance(data, list):
                     terminology.update(data)
 
-                logger.info(
-                    f"从本地文件加载 {len(terminology)} 个专业术语：{file_path}"
-                )
+                if not QueryAnalyzer._ever_initialized:
+                    QueryAnalyzer._ever_initialized = True
+                    logger.info(
+                        f"从本地文件加载 {len(terminology)} 个专业术语：{file_path}"
+                    )
                 return terminology
         except Exception as e:
             logger.debug(f"从本地文件加载术语失败：{e}")

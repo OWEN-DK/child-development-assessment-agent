@@ -39,6 +39,11 @@ export const deleteDocument = async (filename: string): Promise<{ status: string
   return response.data;
 };
 
+export const deleteTask = async (taskId: string): Promise<{ status: string; message: string }> => {
+  const response = await apiClient.delete(`/rag/tasks/${encodeURIComponent(taskId)}`);
+  return response.data;
+};
+
 export const getUploadTaskStatus = async (taskId: string): Promise<UploadTaskStatus> => {
   const response = await apiClient.get<UploadTaskStatus>(`/rag/tasks/${taskId}`);
   return response.data;

@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand';
-import { getTestSets, createTestSet, deleteTestSet } from '@/api/rag-test';
+import { getTestSets, createTestSet, deleteTestSet, batchDeleteTestSets } from '@/api/rag-test';
 import type { TestSet } from '@/api/rag-test';
 
 export type SourceType = 'BOOK_GENERATED' | 'JSON_IMPORTED' | 'MANUAL';
@@ -26,6 +26,7 @@ interface TestSetStore {
   fetchTestSets: () => Promise<void>;
   createTestSet: (data: { name: string; description?: string; source_type?: SourceType }) => Promise<void>;
   deleteTestSet: (id: string) => Promise<void>;
+  batchDeleteTestSets: (ids: string[]) => Promise<void>;
   setPagination: (page: number, pageSize: number) => void;
   setFilters: (keyword: string, sourceType: SourceType | null) => void;
 }
@@ -77,6 +78,11 @@ export const useTestSetStore = create<TestSetStore>((set, get) => ({
 
   deleteTestSet: async (id: string) => {
     await deleteTestSet(id);
+    await get().fetchTestSets();
+  },
+
+  batchDeleteTestSets: async (ids: string[]) => {
+    await batchDeleteTestSets(ids);
     await get().fetchTestSets();
   },
 

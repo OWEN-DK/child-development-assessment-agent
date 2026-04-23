@@ -11,7 +11,6 @@ import {
   Col,
   Statistic,
   Table,
-  Tag,
   Button,
   Space,
   Typography,
@@ -29,6 +28,7 @@ import {
 import dayjs from 'dayjs';
 import { getTestRun, getTestSet } from '@/api/rag-test';
 import type { TestRun } from '@/api/rag-test';
+import ValidationResult from '@/features/rag-eval/components/ValidationResult';
 import RecommendationPanel from '@/features/rag-eval/components/RecommendationPanel';
 import TrendChart from '@/features/rag-eval/components/TrendChart';
 import RollbackConfirmDialog from '@/features/rag-eval/components/RollbackConfirmDialog';
@@ -38,13 +38,6 @@ import { rollbackToVersion } from '@/api/rag-eval/config';
 import { useSSE } from '@shared/hooks/useSSE';
 
 const { Title } = Typography;
-
-const STATUS_TAG: Record<string, { label: string; color: string }> = {
-  pass: { label: 'PASS', color: 'green' },
-  warn: { label: 'WARN', color: 'orange' },
-  fail: { label: 'FAIL', color: 'red' },
-  skipped: { label: 'SKIPPED', color: 'default' },
-};
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
@@ -158,39 +151,6 @@ export default function ReportPage() {
     }
   };
 
-  const validationColumns = [
-    { title: '层', dataIndex: 'layer', key: 'layer', width: 60 },
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (s: string) => <Tag color={STATUS_TAG[s]?.color}>{STATUS_TAG[s]?.label || s}</Tag>,
-    },
-    {
-      title: '得分',
-      dataIndex: 'score',
-      key: 'score',
-      width: 100,
-      render: (v: number | null) => v !== null ? v.toFixed(2) : '-',
-    },
-    {
-      title: '阈值',
-      dataIndex: 'threshold',
-      key: 'threshold',
-      width: 100,
-      render: (v: number | null) => v !== null ? v.toFixed(2) : '-',
-    },
-    {
-      title: '耗时',
-      dataIndex: 'duration_ms',
-      key: 'duration_ms',
-      width: 100,
-      render: (v: number) => `${v}ms`,
-    },
-  ];
-
   // 从运行数据提取指标
   const metrics = run ? {
     precision_at_1: run.overall_precision || 0,
@@ -201,18 +161,6 @@ export default function ReportPage() {
     total_cases: run.total_test_cases || 0,
     passed_cases: run.passed_test_cases || 0,
   } : null;
-
-  // 校验结果（Phase 4 完成后从 API 获取，当前展示占位）
-  const validationResults = run?.status === 'completed'
-    ? [
-        { layer: 1, name: '基础检索质量', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-        { layer: 2, name: '历史对比', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-        { layer: 3, name: '语义一致性', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-        { layer: 4, name: '数据质量', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-        { layer: 5, name: '检索链路', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-        { layer: 6, name: '综合评估', status: 'skipped', score: null, threshold: null, duration_ms: 0 },
-      ]
-    : [];
 
   const tabItems = [
     {
@@ -245,9 +193,7 @@ export default function ReportPage() {
     {
       key: 'validation',
       label: '6层校验',
-      children: validationResults.length > 0 ? (
-        <Table columns={validationColumns} dataSource={validationResults} rowKey="layer" pagination={false} />
-      ) : <Empty description="Phase 4 校验引擎实现后展示" />,
+      children: <ValidationResult runId={id!} />,
     },
     {
       key: 'suggestions',
@@ -292,7 +238,7 @@ export default function ReportPage() {
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/rag-eval/runs">
+        <Link to="/rag-eval?tab=runs">
           <Button type="link" icon={<ArrowLeftOutlined />}>返回</Button>
         </Link>
         <Space>

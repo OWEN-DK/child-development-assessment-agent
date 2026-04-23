@@ -1,155 +1,189 @@
-import asyncio
-import json
+"""统一任务 API 控制器
 
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
+承载所有任务类型的 CRUD + SSE + 取消操作
+"""
 
-from src.config import settings
-from src.core.graph import agent_app
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
-from src.core.tracing.context import trace_context
-from src.schemas import AgentState, UserInput
+import time
+import uuid
+from typing import Any, Optional
+
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
+
+from src.api.sse import sse_response
 from src.schemas.common import APIResponse
-from src.utils.exceptions import AssessmentFailedException, InternalServerErrorException
+from src.schemas.task import TaskState, TaskStatus
+from src.service.task_sse_publisher import TaskSsePublisher
+from src.service.task_state_service import TaskStateService
+from src.utils.di import get_task_state_service
+from src.utils.exceptions import AppException
 from src.utils.logger import logger
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 
-@router.get("/health")
-async def health_check():
-    return APIResponse.success(data={"status": "ok"})
+# ==================== 请求模型 ====================
 
 
-@router.post("/assess")
-async def assess_development(user_input: UserInput):
+class CreateTaskRequest(BaseModel):
+    """创建任务请求"""
+
+    task_type: str = Field(..., description="任务类型（upload/draft_generation/export/test_run）")
+    metadata: Optional[dict[str, Any]] = Field(None, description="扩展元数据")
+
+
+class UpdateTaskRequest(BaseModel):
+    """更新任务状态请求（内部使用）"""
+
+    status: TaskStatus
+    stage: Optional[str] = None
+    progress: Optional[float] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
+
+
+# ==================== API 端点 ====================
+
+
+@router.post("/{task_type}")
+async def create_task(
+    task_type: str,
+    request: CreateTaskRequest,
+):
+    """创建任务
+    
+    返回任务 ID 和初始状态（pending）
     """
-    接收儿童画像和拟定计划，返回评估报告。
-    支持流式输出 (is_streaming=True)
-    """
-    try:
-        # 创建 Trace 上下文
-        async with trace_context(
-            name="assessment_run",
-            metadata={
-                "child_profile_id": user_input.child_profile.get("id", "unknown")
-                if isinstance(user_input.child_profile, dict)
-                else "unknown",
-            },
-        ) as tid:
-            logger.info(f"Trace created: {tid} for assessment run")
-
-            # 初始化 State
-            initial_state = AgentState(
-                child_profile=user_input.child_profile,
-                proposed_plan=user_input.proposed_plan,
-                messages=[],
-                is_streaming=user_input.is_streaming,
-            )
-
-            # 调用 LangGraph
-            result = await agent_app.ainvoke(initial_state)
-
-            # 检查是否为流式模式
-            if user_input.is_streaming and result.get("report_prompts"):
-                return StreamingResponse(
-                    stream_report_generation(result), media_type="text/event-stream"
-                )
-
-            # 非流式模式直接返回结果
-            if "final_report" in result:
-                return APIResponse.success(data=result["final_report"])
-            else:
-                raise AssessmentFailedException(message="Failed to generate report")
-
-    except Exception as e:
-        raise InternalServerErrorException(message=str(e))
-
-
-async def stream_report_generation(result: dict):
-    """
-    流式生成报告内容
-    格式: Server-Sent Events (SSE)
-    - event: data (结构化数据)
-    - event: message (Markdown 内容片段)
-    - event: done (完成)
-    """
-    final_report = result["final_report"]
-    prompts = result["report_prompts"]
-
-    # 1. 发送结构化数据 (Metadata)
-    metadata = {
-        "score": final_report.structured_data.get("score", 0),
-        "radar_chart": final_report.structured_data.get("radar_chart", {}),
-        "key_suggestions": final_report.structured_data.get("key_suggestions", []),
-    }
-    yield f"event: data\ndata: {json.dumps(metadata, ensure_ascii=False)}\n\n"
-
-    # 2. 流式生成 Markdown 内容
-    logger.info(
-        f"Starting streaming report generation, prompts count: {len(prompts)}, prompt length: {len(prompts[0]) if prompts else 0}"
+    service = get_task_state_service()
+    
+    task_id = str(uuid.uuid4())
+    state = TaskState.create(
+        task_id=task_id,
+        task_type=task_type,
+        metadata=request.metadata or {},
     )
-    if settings.dashscope_api_key and prompts:
-        # 顺序生成所有部分以保证流的顺序
-        for i, prompt in enumerate(prompts):
-            try:
-                # 使用工厂创建 LLM 实例
-                llm = LLMServiceFactory.create(
-                    framework=LLMFramework.LLAMAINDEX,
-                    model_name=settings.llm_models["report_generation"],
-                    scenario="report_generation_streaming",
-                    temperature=0.7,
-                )
+    
+    await service.create(state)
+    
+    logger.info(f"Task created: type={task_type}, id={task_id}")
+    
+    return APIResponse.success({
+        "task_id": task_id,
+        "status": state.status.value,
+        "created_at": state.created_at,
+    })
 
-                # 构建提示词
-                from src.schemas import LLMMessage, LLMRequest
 
-                messages = [
-                    LLMMessage(
-                        role="system",
-                        content="你是一个专业的儿童发展评估报告撰写专家，根据提供的评估数据生成清晰、专业、易于家长理解的Markdown格式报告。",
-                    ),
-                    LLMMessage(role="user", content=prompt),
-                ]
+@router.get("/{task_type}/{task_id}")
+async def get_task_status(
+    task_type: str,
+    task_id: str,
+):
+    """查询任务状态"""
+    service = get_task_state_service()
+    
+    state = await service.get(task_id, task_type)
+    if not state:
+        raise AppException(
+            status_code=404,
+            code=10020,
+            message="任务不存在",
+            error_code="TASK_NOT_FOUND",
+        )
+    
+    return APIResponse.success(state.model_dump())
 
-                # 使用流式聊天接口
-                logger.info(f"Starting LLM stream for prompt {i + 1}/{len(prompts)}")
-                chunk_count = 0
-                async for delta in llm.chat_stream(
-                    LLMRequest(
-                        messages=messages,
-                        model_name=settings.llm_models["report_generation"],
-                        temperature=0.7,
-                        max_tokens=8000,
-                        scenario="report_generation_streaming",
-                        prompt_key="report_generation",
-                    )
-                ):
-                    chunk_count += 1
-                    if chunk_count % 10 == 0:
-                        logger.debug(
-                            f"Received chunk {chunk_count}, delta length: {len(delta)}"
-                        )
-                    safe_delta = json.dumps(delta, ensure_ascii=False)
-                    yield f"event: message\ndata: {safe_delta}\n\n"
-                logger.info(
-                    f"Completed LLM stream for prompt {i + 1}, total chunks: {chunk_count}"
-                )
 
-                # 多部分之间添加分隔符
-                if i < len(prompts) - 1:
-                    sep = "\n\n"
-                    yield f"event: message\ndata: {json.dumps(sep, ensure_ascii=False)}\n\n"
+@router.get("/{task_type}/{task_id}/stream")
+async def stream_task_events(
+    task_type: str,
+    task_id: str,
+):
+    """SSE 监听任务事件
+    
+    频道命名：{task_type}:{task_id}
+    """
+    channel = f"{task_type}:{task_id}"
+    return sse_response(channel)
 
-            except Exception as e:
-                logger.error(f"Error during prompt {i + 1} generation: {e}")
-                error_msg = f"\n[Generation Error: {str(e)}]\n"
-                yield f"event: message\ndata: {json.dumps(error_msg, ensure_ascii=False)}\n\n"
-    else:
-        # Fallback if no API key
-        fallback_msg = "AI Service Unavailable. Showing fallback data.\n\n"
-        yield f"event: message\ndata: {json.dumps(fallback_msg)}\n\n"
 
-    # 3. 发送完成信号
-    logger.info("Streaming report generation completed successfully")
-    yield "event: done\ndata: [DONE]\n\n"
+@router.post("/{task_type}/{task_id}/cancel")
+async def cancel_task(
+    task_type: str,
+    task_id: str,
+):
+    """取消任务
+    
+    1. 设置取消信号
+    2. 更新 Redis 状态为 cancelled
+    3. 推送 SSE 取消事件
+    """
+    service = get_task_state_service()
+    
+    # 先检查任务是否存在
+    state = await service.get(task_id, task_type)
+    if not state:
+        raise AppException(
+            status_code=404,
+            code=10020,
+            message="任务不存在",
+            error_code="TASK_NOT_FOUND",
+        )
+    
+    # 检查是否已经是终态
+    if state.is_terminal:
+        raise AppException(
+            status_code=400,
+            code=10021,
+            message=f"任务无法取消（当前状态：{state.status.value}）",
+            error_code="TASK_ALREADY_TERMINAL",
+        )
+    
+    # 执行取消
+    success = await service.cancel(task_id, task_type)
+    if not success:
+        raise AppException(
+            status_code=500,
+            code=10022,
+            message="取消失败（可能已进入终态）",
+            error_code="TASK_CANCEL_FAILED",
+        )
+    
+    # 推送 SSE 取消事件
+    await TaskSsePublisher.publish_cancelled(task_type, task_id)
+    
+    return APIResponse.success({"status": TaskStatus.CANCELLED.value})
+
+
+@router.delete("/{task_type}/{task_id}")
+async def delete_task(
+    task_type: str,
+    task_id: str,
+):
+    """删除任务
+    
+    同时从 Redis 和活跃任务索引中移除
+    """
+    service = get_task_state_service()
+    
+    success = await service.delete(task_id, task_type)
+    if not success:
+        logger.warning(f"Failed to delete task: type={task_type}, id={task_id}")
+    
+    return APIResponse.success()
+
+
+@router.get("/active")
+async def list_active_tasks(
+    task_type: Optional[str] = Query(None, description="过滤任务类型"),
+):
+    """列出所有活跃任务（非终态）"""
+    service = get_task_state_service()
+    
+    tasks = await service.list_active(task_type)
+    
+    return APIResponse.success({
+        "tasks": [task.model_dump() for task in tasks],
+        "count": len(tasks),
+    })

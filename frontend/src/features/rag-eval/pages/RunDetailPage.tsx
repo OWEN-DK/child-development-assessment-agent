@@ -45,8 +45,8 @@ export default function RunDetailPage() {
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Link to="/rag-eval/runs">
-          <Button type="link" icon={<ArrowLeftOutlined />}>返回运行列表</Button>
+        <Link to="/rag-eval?tab=runs">
+          <Button type="link" icon={<ArrowLeftOutlined />}>返回</Button>
         </Link>
       </div>
 

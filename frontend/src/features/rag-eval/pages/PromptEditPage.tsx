@@ -1,6 +1,6 @@
 /**
  * 提示词编辑页
- * 路由: /rag-eval/prompts/:id
+ * 路由: /prompt-management/:key
  */
 
 import React, { useEffect, useState } from 'react';
@@ -39,7 +39,7 @@ const RISK_LEVEL_MAP: Record<string, { color: string; text: string }> = {
 };
 
 const PromptEditPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { key } = useParams<{ key: string }>();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -49,8 +49,8 @@ const PromptEditPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (id) fetchDetail(id);
-  }, [id]);
+    if (key) fetchDetail(key);
+  }, [key]);
 
   const fetchDetail = async (promptKey: string) => {
     setLoading(true);
@@ -70,11 +70,11 @@ const PromptEditPage: React.FC = () => {
 
   const handleAnalyze = async () => {
     const content = form.getFieldValue('content');
-    if (!content || !id) return;
+    if (!content || !key) return;
 
     setAnalyzing(true);
     try {
-      const impactData = await analyzePromptImpact(id, content);
+      const impactData = await analyzePromptImpact(key, content);
       setImpact(impactData);
     } catch (error) {
       notification.error('分析影响失败');
@@ -84,18 +84,18 @@ const PromptEditPage: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!id) return;
+    if (!key) return;
     const values = form.getFieldsValue();
 
     setSaving(true);
     try {
-      const result = await updatePrompt(id, {
+      const result = await updatePrompt(key, {
         content: values.content,
         change_summary: values.change_summary,
         created_by: 'user',
       });
       notification.success(`提示词已更新到 ${result.version}`);
-      fetchDetail(id);
+      fetchDetail(key);
     } catch (error) {
       notification.error('保存失败');
     } finally {
@@ -116,8 +116,8 @@ const PromptEditPage: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/rag-eval/prompts')}>
-          返回
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/prompt-management')}>
+          返回列表
         </Button>
         <Title level={3} style={{ margin: 0 }}>{detail.metadata.name_zh}</Title>
         <Tag color="blue">{detail.metadata.category}</Tag>

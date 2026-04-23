@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import threading
@@ -47,7 +48,7 @@ class DocumentManager:
             logger.info("No existing document store found. Starting fresh.")
 
     def _save_store(self):
-        """Save document store to JSON file."""
+        """Save document store to JSON file（同步，用于线程池执行）"""
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(self.store_path), exist_ok=True)
@@ -58,11 +59,21 @@ class DocumentManager:
         except Exception as e:
             logger.error(f"Failed to save document store: {e}")
 
+    async def _save_store_async(self):
+        """Save document store to JSON file（异步版本，使用线程池避免阻塞事件循环）"""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._save_store)
+
     def add_document(self, doc: DocumentRecord):
-        """Add or update a document record."""
+        """Add or update a document record（同步，用于线程池执行）"""
         with self._lock:
             self.store.docs[doc.file_hash] = doc
             self._save_store()
+
+    async def add_document_async(self, doc: DocumentRecord):
+        """Add or update a document record（异步版本，使用线程池避免阻塞事件循环）"""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.add_document, doc)
 
     def get_document(self, file_hash: str) -> Optional[DocumentRecord]:
         """Get a document record by hash."""

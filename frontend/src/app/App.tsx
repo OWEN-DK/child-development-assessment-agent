@@ -30,15 +30,7 @@ function App() {
               { path: '/', name: '首页' },
               { path: '/knowledge-base', name: '知识库' },
                { path: '/knowledge-search', name: '内容搜索' },
-               {
-                 path: '/rag-eval',
-                 name: 'RAG 评估',
-                 icon: <ExperimentOutlined />,
-                 children: [
-                   { path: '/rag-eval/test-sets', name: '测试集管理' },
-                   { path: '/rag-eval/runs', name: '运行历史' },
-                 ],
-               },
+               { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
                { path: '/prompt-management', name: '提示词管理' },
                { path: '/monitoring', name: 'LLM监控' },
                { path: '/system-config', name: '系统配置' },

@@ -1,0 +1,21 @@
+.container {
+  padding: 24px;
+}
+
+.headerCard {
+  margin-bottom: 24px;
+}
+
+.filterBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.listCard {
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}

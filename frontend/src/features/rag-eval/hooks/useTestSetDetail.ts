@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Form } from 'antd';
-import { useNavigate } from 'react-router-dom';
+
 import { getTestSet, getTestCases, addCasesToSet, removeCasesFromSet, runAllTests } from '@/api/rag-test';
 import type { TestSet, TestCase } from '@/api/rag-test';
 import { handleApiCall } from '@shared/lib/notification';
 
 export function useTestSetDetail(id: string | undefined) {
-  const navigate = useNavigate();
+
   const [testSet, setTestSet] = useState<TestSet | null>(null);
   const [cases, setCases] = useState<TestCase[]>([]);
   const [availableCases, setAvailableCases] = useState<TestCase[]>([]);
@@ -20,7 +19,7 @@ export function useTestSetDetail(id: string | undefined) {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [runModalVisible, setRunModalVisible] = useState(false);
   const [runName, setRunName] = useState('');
-  const [form] = Form.useForm();
+  const [transferSelectedKeys, setTransferSelectedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -56,23 +55,22 @@ export function useTestSetDetail(id: string | undefined) {
     await handleApiCall(() => runAllTests({ name: runName || `${testSet?.name}-运行`, test_set_ids: [id] }), {
       successMsg: '测试已启动',
       errorMsg: '启动失败',
-      onSuccess: (result) => {
+      onSuccess: () => {
         setRunModalVisible(false);
-        if (result?.run_id) {
-          navigate(`/rag-eval/runs/${result.run_id}`);
-        }
+        // 不跳转，留在当前页面，通过 SSE 推送进度
+        // 用户可在运行列表页查看进度
       },
     });
   };
 
-  const handleAddCases = async (values: { case_ids: string[] }) => {
-    if (!id) return;
-    await handleApiCall(() => addCasesToSet(id, values.case_ids), {
-      successMsg: '添加成功',
+  const handleAddCases = async () => {
+    if (!id || transferSelectedKeys.length === 0) return;
+    await handleApiCall(() => addCasesToSet(id, transferSelectedKeys), {
+      successMsg: `已添加 ${transferSelectedKeys.length} 个用例`,
       errorMsg: '添加失败',
       onSuccess: () => {
         setAddModalVisible(false);
-        form.resetFields();
+        setTransferSelectedKeys([]);
         loadData();
       },
     });
@@ -86,12 +84,20 @@ export function useTestSetDetail(id: string | undefined) {
     });
   }, [cases, keyword, domainFilter]);
 
-  const domains = useMemo(() => [...new Set(cases.map(c => c.domain))], [cases]);
+  const filteredAvailableCases = useMemo(() => {
+    return availableCases.filter(c => {
+      if (keyword && !c.query.toLowerCase().includes(keyword.toLowerCase())) return false;
+      if (domainFilter && c.domain !== domainFilter) return false;
+      return true;
+    });
+  }, [availableCases, keyword, domainFilter]);
+
+  const domains = useMemo(() => [...new Set(availableCases.map(c => c.domain))], [availableCases]);
 
   return {
     testSet,
     cases: filteredCases,
-    availableCases,
+    availableCases: filteredAvailableCases,
     loading,
     domains,
     filters: {
@@ -107,7 +113,8 @@ export function useTestSetDetail(id: string | undefined) {
       setRunModalVisible,
       runName,
       setRunName,
-      form,
+      transferSelectedKeys,
+      setTransferSelectedKeys,
     },
     actions: {
       handleRemoveCase,

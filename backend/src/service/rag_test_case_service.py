@@ -17,7 +17,7 @@ from src.config.modules.rag.testing import (TestCaseGenerationConfig,
                                             calculate_draft_count_by_pages)
 from src.core.database import db_session_factory
 from src.core.llm.factory import LLMServiceFactory
-from src.core.prompts_fallback import TEST_CASE_DRAFT_GENERATION_PROMPT
+from src.core.prompt_impl.facade import prompt_manager
 from src.repository.test_case_repository import TestCaseDraftRepository
 from src.utils.logger import logger
 
@@ -100,9 +100,19 @@ class RagTestCaseService:
     def __init__(self):
         self.test_case_draft_repo = TestCaseDraftRepository(db_session_factory)
         self.config_manager = ConfigManager()
-        self.llm_service = LLMServiceFactory()
+        self._llm_service = None
         self._deduplicator_cache: Dict[str, DraftDeduplicator] = {}
         self._chapter_cache: Dict[int, List[Tuple[str, str]]] = {}
+
+    @property
+    def llm_service(self):
+        """延迟初始化 LLM 工厂"""
+        if self._llm_service is None:
+            from src.core.llm.provider_registry import ProviderRegistry
+
+            provider_registry = ProviderRegistry()
+            self._llm_service = LLMServiceFactory(self.config_manager, provider_registry)
+        return self._llm_service
 
     def _get_testing_config(self) -> TestCaseGenerationConfig:
         """从 ConfigManager 加载测试用例生成配置"""
@@ -340,14 +350,16 @@ class RagTestCaseService:
                     continue
 
                 try:
-                    prompt = TEST_CASE_DRAFT_GENERATION_PROMPT.render(
-                        document_content=chapter_content[:10000],
-                        domain=domain,
-                        age_stage=task["age_stage"],
-                        query_type=task["query_type"],
-                        difficulty_level=task["difficulty_level"],
-                        count=current_batch_count,
-                    )
+                    prompt = await prompt_manager.get_prompt(
+                    "test_case_generation",
+                    variables={
+                        "count": current_batch_count,
+                        "text": chapter_content[:10000],
+                        "domains": domain or "通用领域",
+                        "age_range_min": task["age_stage"].get("age_min", 0),
+                        "age_range_max": task["age_stage"].get("age_max", 18),
+                    },
+                )
 
                     llm = await self.llm_service.create("test_case_generation")
                     response = await llm.ainvoke(prompt)

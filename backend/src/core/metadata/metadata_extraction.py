@@ -77,7 +77,8 @@ class MetadataExtractionService:
         total = total_chunks or len(nodes)
         processed_count = 0
 
-        doc_level_metadata = doc_level_metadata or self._extract_doc_metadata(nodes)
+        if doc_level_metadata is None:
+            doc_level_metadata = await self._extract_doc_metadata(nodes)
 
         key_indices = identify_key_chunks(nodes)
         logger.info(f"Identified {len(key_indices)} key chunks out of {total}")

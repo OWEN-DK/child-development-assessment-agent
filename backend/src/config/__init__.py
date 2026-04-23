@@ -22,6 +22,7 @@ from src.config.modules.rag.pageindex import PageIndexSettings
 from src.config.modules.rag.pipeline import RagPipelineSettings
 from src.config.modules.rag.retrieval import RagRetrievalSettings
 from src.config.modules.rag.vector_store import VectorStoreSettings
+from src.config.modules.rag.testing import TestCaseGenerationConfig
 from src.config.modules.redis import redis_settings
 from src.config.modules.tracing import TracingConfig
 from src.config.rules.rules import rules
@@ -43,6 +44,7 @@ class Settings(
     PageIndexSettings,
     RagPipelineSettings,
     TracingConfig,
+    TestCaseGenerationConfig,
 ):
     """统一的配置类，聚合所有拆分后的配置"""
 
@@ -144,6 +146,18 @@ class Settings(
             return "rules.metadata"
         elif field_name.startswith(("app_", "host", "port", "debug")):
             return "app"
+        elif field_name.startswith("draft_"):
+            return "rag.testing"
+        elif field_name.startswith((
+            "default_domains", "default_age_stages", "default_drafts_per_combination",
+            "default_query_types", "default_difficulty_levels", "default_model",
+            "deduplication_threshold", "batch_size", "combination_interval_seconds",
+            "max_concurrent_tasks", "max_tokens_per_generation", "max_memory_mb",
+            "max_llm_retries", "supported_domains", "age_stages", "query_types",
+            "difficulty_levels", "enable_breakpoint_resume", "enable_quality_check",
+            "enable_relevance_check",
+        )):
+            return "rag.testing"
         else:
             return "other"
 
@@ -164,12 +178,27 @@ class Settings(
             "rag_chunk_",
             "semantic_splitter_",
             "embedding_batch_size",
+            "embedding_use_async_batch",
+            "embedding_async_batch_threshold",
             "rule_",
-        )
-        cold_reload_prefixes = (
+            # LLM 相关（改为热加载）
             "model_",
             "llm_",
             "dashscope_api_key",
+            "llm_providers",
+            "llm_scene_configs",
+            "model_pricing",
+            # 草稿生成配置（热加载）
+            "draft_",
+            "default_domains", "default_age_stages", "default_drafts_per_combination",
+            "default_query_types", "default_difficulty_levels", "default_model",
+            "deduplication_threshold", "batch_size", "combination_interval_seconds",
+            "max_concurrent_tasks", "max_tokens_per_generation", "max_memory_mb",
+            "max_llm_retries", "supported_domains", "age_stages", "query_types",
+            "difficulty_levels", "enable_breakpoint_resume", "enable_quality_check",
+            "enable_relevance_check",
+        )
+        cold_reload_prefixes = (
             "pageindex_",
             "rag_storage_dir",
             "data_dir",

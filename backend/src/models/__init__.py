@@ -4,7 +4,12 @@ from .config import ConfigAuditLog, ConfigVersion
 from .document import (DocumentRecord, DocumentStatus, ImportStatus,
                        SourceDocument)
 from .monitor import ABTestMetrics, CallLevel, LLMCallLog, LLMCallStatus
-from .prompt import PromptABTest, PromptVersion
+from .prompt_enums import PromptCategory
+from .prompt_metadata import PromptMetadata
+from .prompt_version import PromptVersion
+from .rag_eval.config_change_set_prompt import RagEvalConfigChangeSetPrompt
+from .rag_eval.config_change_set import RagEvalConfigChangeSet
+from .rag_eval.prompt_suggestion import RagEvalPromptSuggestionRecord
 from .test_case import (DifficultyLevel, TestCase, TestCaseDraft,
                         TestCaseStatus, TestDomain, TestRun, TestRunResult,
                         TestRunStatus, TestSet, TestSetCase, TestSourceType)
@@ -33,8 +38,12 @@ __all__ = [
     "LLMCallLog",
     "LLMCallStatus",
     "CallLevel",
+    "PromptCategory",
+    "PromptMetadata",
     "PromptVersion",
-    "PromptABTest",
+    "RagEvalConfigChangeSetPrompt",
+    "RagEvalConfigChangeSet",
+    "RagEvalPromptSuggestionRecord",
     "Trace",
     "TraceStatus",
 ]

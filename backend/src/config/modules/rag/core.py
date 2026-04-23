@@ -77,15 +77,25 @@ class RagCoreSettings(BaseSettings):
         validation_alias="RAG_SCORING_KEYWORD_BONUS_MULTIPLIER",
         description="关键词匹配加成系数",
     )
+    rag_scoring_keyword_bonus_log_weight: float = Field(
+        default=0.08,
+        validation_alias="RAG_SCORING_KEYWORD_BONUS_LOG_WEIGHT",
+        description="关键词对数加成权重（对数压缩后的乘数）",
+    )
+    rag_scoring_keyword_bonus_max: float = Field(
+        default=0.12,
+        validation_alias="RAG_SCORING_KEYWORD_BONUS_MAX",
+        description="关键词加成上限（防止覆盖检索本身相关性）",
+    )
     rag_scoring_max_expected_score: float = Field(
         default=0.65,
         validation_alias="RAG_SCORING_MAX_EXPECTED_SCORE",
         description="最大预期内部分数",
     )
     rag_scoring_base_display_score: float = Field(
-        default=0.60,
+        default=0.55,
         validation_alias="RAG_SCORING_BASE_DISPLAY_SCORE",
-        description="基础展示分数",
+        description="基础展示分数（阈值附近结果的最低显示分数）",
     )
     rag_scoring_max_display_score: float = Field(
         default=0.98,

@@ -59,10 +59,17 @@ export const CATEGORY_TREE = [
     ]
   },
   {
-    title: '📊 其他配置',
+    title: ' 其他配置',
     key: 'other',
     children: [
-      { title: '通用配置', key: 'other' }
+      { title: '通用配置', key: 'other.general' }
+    ]
+  },
+  {
+    title: '📝 草稿生成',
+    key: 'draft',
+    children: [
+      { title: '草稿生成配置', key: 'rag.testing' }
     ]
   }
 ];

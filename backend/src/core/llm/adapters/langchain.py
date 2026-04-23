@@ -66,6 +66,7 @@ class LangChainLLMAdapter(LLMService):
                             "scenario": request.scenario,
                             "prompt_key": request.prompt_key,
                         },
+                        request_id=request_id,
                     )
 
                     # 实际调用
@@ -92,6 +93,7 @@ class LangChainLLMAdapter(LLMService):
                             "total_tokens": input_tokens + output_tokens,
                         },
                         ttft=ttft,
+                        request_id=request_id,
                     )
 
                     llm_response = LLMResponse(

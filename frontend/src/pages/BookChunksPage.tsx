@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Typography, List, Button, Space, Tag, Input, Descriptions, Modal } from 'antd';
+import { Card, Typography, Button, Flex, Tag, Input, Descriptions, Modal, Pagination, Empty } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { getDocumentChunks, getChunkDetail } from '../api/documents';
 import type { DocumentChunk, ChunkDetail } from '../api/documents/types';
@@ -130,7 +130,7 @@ const BookChunksPage = () => {
   return (
     <div className={styles.container}>
       <Card className={styles.headerCard}>
-        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+        <Flex vertical gap="large" style={{ width: '100%' }}>
           <div className={styles.header}>
             <Button 
               icon={<ArrowLeftOutlined />} 
@@ -154,7 +154,7 @@ const BookChunksPage = () => {
             onChange={(e) => setSearchKeyword(e.target.value)}
             value={searchKeyword}
           />
-        </Space>
+        </Flex>
       </Card>
 
       <Card
@@ -170,82 +170,80 @@ const BookChunksPage = () => {
           </Button>
         }
       >
-        <List
-          loading={loading}
-          dataSource={filteredChunks}
-          renderItem={(chunk, index) => (
-            <List.Item
-              actions={[
-                <Button
-                  type="link"
-                  onClick={() => handleViewChunkDetail(chunk.id)}
-                >
-                  查看详情
-                </Button>,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    <Text strong>#{index + 1}</Text>
-                    {chunk.metadata.page_label && (
-                      <Text type="secondary">| 第 {(() => {
-                        const pageLabel = chunk.metadata.page_label;
-                        let displayLabel = pageLabel;
-                        if (pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html')) {
-                          const match = pageLabel.match(/part(\d+)/i) || pageLabel.match(/chapter(\d+)/i);
-                          if (match) {
-                            displayLabel = `${parseInt(match[1])}`;
-                          } else {
-                            const numMatch = pageLabel.match(/(\d+)/);
-                            if (numMatch) {
-                              displayLabel = `${parseInt(numMatch[1])}`;
+        {loading ? (
+          <Flex justify="center" style={{ padding: '24px 0' }}>
+            <Typography.Text>加载中...</Typography.Text>
+          </Flex>
+        ) : filteredChunks.length === 0 ? (
+          <Empty description={searchKeyword ? '没有找到匹配的分块' : '暂无分块数据'} />
+        ) : (
+          <>
+            <Flex vertical gap="small">
+              {filteredChunks.map((chunk, index) => (
+                <Card key={chunk.id} size="small" extra={
+                  <Button type="link" onClick={() => handleViewChunkDetail(chunk.id)}>
+                    查看详情
+                  </Button>
+                }>
+                  <Flex vertical gap="small" style={{ width: '100%' }}>
+                    <Flex gap="small" align="center">
+                      <Text strong>#{index + 1}</Text>
+                      {chunk.metadata.page_label && (
+                        <Text type="secondary">| 第 {(() => {
+                          const pageLabel = chunk.metadata.page_label;
+                          let displayLabel = pageLabel;
+                          if (pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html')) {
+                            const match = pageLabel.match(/part(\d+)/i) || pageLabel.match(/chapter(\d+)/i);
+                            if (match) {
+                              displayLabel = `${parseInt(match[1])}`;
                             } else {
-                              displayLabel = '';
+                              const numMatch = pageLabel.match(/(\d+)/);
+                              if (numMatch) {
+                                displayLabel = `${parseInt(numMatch[1])}`;
+                              } else {
+                                displayLabel = '';
+                              }
                             }
                           }
-                        }
-                        return displayLabel;
-                      })()} {(() => {
-                        const pageLabel = chunk.metadata.page_label;
-                        return pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html') ? '章' : '页';
-                      })()}</Text>
-                    )}
-                    {chunk.metadata.chapter_title && (
-                      <Text type="secondary">| {chunk.metadata.chapter_title}</Text>
-                    )}
-                  </Space>
-                }
-                description={
-                  <Space orientation="vertical" style={{ width: '100%' }}>
-                    <Paragraph
-                      ellipsis={{ rows: 2, expandable: true, symbol: '展开' }}
-                      className={styles.contentPreview}
-                    >
-                      {chunk.content}
-                    </Paragraph>
-                    <Space wrap>
-                      {renderChunkMetadata(chunk)}
-                    </Space>
-                  </Space>
-                }
+                          return displayLabel;
+                        })()} {(() => {
+                          const pageLabel = chunk.metadata.page_label;
+                          return pageLabel.endsWith('.xhtml') || pageLabel.endsWith('.html') ? '章' : '页';
+                        })()}</Text>
+                      )}
+                      {chunk.metadata.chapter_title && (
+                        <Text type="secondary">| {chunk.metadata.chapter_title}</Text>
+                      )}
+                    </Flex>
+                    <Flex vertical gap="small" style={{ width: '100%' }}>
+                      <Paragraph
+                        ellipsis={{ rows: 2, expandable: true, symbol: '展开' }}
+                        className={styles.contentPreview}
+                      >
+                        {chunk.content}
+                      </Paragraph>
+                      <Flex wrap gap="small">
+                        {renderChunkMetadata(chunk)}
+                      </Flex>
+                    </Flex>
+                  </Flex>
+                </Card>
+              ))}
+            </Flex>
+            <Flex justify="center" style={{ marginTop: 16 }}>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger
+                showQuickJumper
+                showTotal={(total) => `共 ${total} 个分块`}
+                onChange={handlePageChange}
+                onShowSizeChange={(_, size) => handlePageChange(1, size)}
               />
-            </List.Item>
-          )}
-          locale={{
-            emptyText: searchKeyword ? '没有找到匹配的分块' : '暂无分块数据',
-          }}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个分块`,
-            onChange: handlePageChange,
-            onShowSizeChange: (_, size) => handlePageChange(1, size),
-          }}
-        />
+            </Flex>
+          </>
+        )}
       </Card>
 
       <Modal

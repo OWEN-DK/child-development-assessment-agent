@@ -1,7 +1,7 @@
 import json
 import re
 
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
 from src.schemas import LLMMessage, LLMRequest
 from src.utils.logger import logger
@@ -18,7 +18,7 @@ class SynonymExpansionStep(PipelineStep):
         max_length = self.config.get('max_length', 10)
         
         # 创建LLM实例
-        llm = LLMServiceFactory.create(
+        llm = LLMServiceFactoryCompat.create(
             framework=LLMFramework.LANGCHAIN,
             model_name=model,
             scenario='synonym_expansion',

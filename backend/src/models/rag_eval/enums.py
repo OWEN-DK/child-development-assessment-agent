@@ -136,14 +136,3 @@ class RagEvalSuggestionType(enum.Enum):
     PARAM_TUNING = "param_tuning"
     FUNCTION_SWITCH = "function_switch"
     SAFE_RANGE = "safe_range"
-
-
-class RagEvalPromptCategory(enum.Enum):
-    """提示词分类（Phase 7 提示词管理用）"""
-
-    RAG_RETRIEVAL = "rag_retrieval"
-    RAG_GENERATION = "rag_generation"
-    ASSESSMENT = "assessment"
-    SCORING = "scoring"
-    REPORTING = "reporting"
-    TEST_CASE_GENERATION = "test_case_generation"

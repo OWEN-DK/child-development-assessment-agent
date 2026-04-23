@@ -6,6 +6,12 @@ from src.core.database import db_session_factory
 from src.models.test_case import TestCase, TestRun, TestRunResult
 from src.repository.test_case_repository import TestRunRepository
 from src.schemas import TestResult, TestRunStatus
+from src.service.rag_test.test_run import (
+    TestBatchRunner,
+    TestExecutor,
+    TestResultAnalyzer,
+    TestRunCreator,
+)
 
 
 class TestRunService:

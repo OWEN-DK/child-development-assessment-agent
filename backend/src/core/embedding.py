@@ -61,7 +61,7 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
 
         # 添加重试机制以应对网络波动
         max_retries = 3
-        retry_delay = 2.0  # 秒
+        retry_delay = 1.0  # 秒（缩短退避时间，减少失败时的等待）
         
         for attempt in range(max_retries):
             try:
@@ -178,7 +178,7 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
 
         # 添加重试机制以应对网络波动
         max_retries = 3
-        retry_delay = 2.0  # 秒
+        retry_delay = 1.0  # 秒（缩短退避时间，减少失败时的等待）
         
         for attempt in range(max_retries):
             try:

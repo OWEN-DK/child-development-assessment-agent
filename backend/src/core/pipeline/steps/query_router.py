@@ -1,4 +1,4 @@
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
 from src.schemas import LLMMessage, LLMRequest
 from src.utils.logger import logger
@@ -13,7 +13,7 @@ class QueryRouterStep(PipelineStep):
         confidence_threshold = self.config.get('confidence_threshold', 0.8)
         
         # 创建 LLM 实例
-        llm = LLMServiceFactory.create(
+        llm = LLMServiceFactoryCompat.create(
             framework=LLMFramework.LANGCHAIN,
             model_name=model,
             scenario='query_routing',

@@ -7,7 +7,6 @@ from src.config.core.entities import ConfigVersion
 from src.config.core.events import ConfigChangedEvent
 from src.core.crypto import crypto_service
 from src.core.event_bus import event_bus
-from src.service.cache_service import cache_service
 from src.utils.logger import logger
 from src.utils.serializers import create_serializer, safe_isoformat
 
@@ -79,6 +78,8 @@ class ConfigManager:
 
     async def load_latest_version(self) -> None:
         """加载最新配置版本"""
+        from src.service.cache_service import cache_service
+
         # 优先从缓存获取
         cache_key = f"{self._cache_key_prefix}latest"
         cached = await cache_service.get(cache_key)
@@ -194,6 +195,7 @@ class ConfigManager:
                 is_factory_reset=False,
             )
             self._current_version = new_version
+            from src.service.cache_service import cache_service
             await cache_service.delete(f"{self._cache_key_prefix}latest")
             await cache_service.invalidate_tag("config")
             event_bus.publish(
@@ -261,6 +263,7 @@ class ConfigManager:
                 is_factory_reset=True,
             )
             self._current_version = new_version
+            from src.service.cache_service import cache_service
             await cache_service.delete(f"{self._cache_key_prefix}latest")
             await cache_service.invalidate_tag("config")
             event_bus.publish(
@@ -325,6 +328,7 @@ class ConfigManager:
                 is_factory_reset=False,
             )
             self._current_version = rollback_version
+            from src.service.cache_service import cache_service
             await cache_service.delete(f"{self._cache_key_prefix}latest")
             await cache_service.invalidate_tag("config")
             event_bus.publish(

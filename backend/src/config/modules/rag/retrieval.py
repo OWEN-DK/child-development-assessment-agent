@@ -108,14 +108,14 @@ class RagRetrievalSettings(BaseSettings):
         description="搜索页面向量权重",
     )
     rag_search_no_match_vector_penalty: float = Field(
-        default=0.5,
+        default=0.3,
         validation_alias="RAG_SEARCH_NO_MATCH_VECTOR_PENALTY",
-        description="无关键词匹配惩罚",
+        description="无关键词匹配惩罚（越低越严格，设为 1.0 表示不惩罚）",
     )
     rag_search_score_threshold_hybrid: float = Field(
         default=0.25,
         validation_alias="RAG_SEARCH_SCORE_THRESHOLD_HYBRID",
-        description="搜索页面混合阈值",
+        description="搜索页面混合阈值（低于此分数的结果将被过滤）",
     )
     rag_search_score_threshold_vector: float = Field(
         default=0.25,

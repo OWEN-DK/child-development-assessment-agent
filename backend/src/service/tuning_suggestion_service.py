@@ -1,15 +1,17 @@
 """调优建议服务
 
-负责获取、忽略调优建议等业务逻辑
+负责获取、忽略、状态更新、批量操作、统计等调优建议相关业务逻辑
 """
 
-from typing import List
+from datetime import datetime
+from typing import Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.rag_eval.enums import (RagEvalIgnoredSuggestionType,
-                                       RagEvalIgnoreScope)
+                                       RagEvalIgnoreScope,
+                                       RagEvalSuggestionSource)
 from src.models.rag_eval.ignored_suggestion import RagEvalIgnoredSuggestion
 from src.models.rag_eval.tuning_suggestion import RagEvalTuningSuggestionRecord
 from src.utils.logger import logger
@@ -70,6 +72,175 @@ class TuningSuggestionService:
 
         return active_suggestions
 
+    async def get_suggestions_by_report(
+        self,
+        report_id: str,
+        session: AsyncSession,
+        status: Optional[str] = None,
+    ) -> List[RagEvalTuningSuggestionRecord]:
+        """获取指定报告的所有调优建议
+
+        Args:
+            report_id: 报告ID
+            session: 数据库会话
+            status: 状态筛选（pending/applied/ignored）
+
+        Returns:
+            建议列表
+        """
+        stmt = select(RagEvalTuningSuggestionRecord).where(
+            RagEvalTuningSuggestionRecord.report_id == report_id
+        )
+
+        if status == "applied":
+            stmt = stmt.where(RagEvalTuningSuggestionRecord.applied == True)
+        elif status == "pending":
+            stmt = stmt.where(RagEvalTuningSuggestionRecord.applied == False)
+
+        stmt = stmt.order_by(RagEvalTuningSuggestionRecord.priority.desc())
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_suggestion_by_id(
+        self,
+        suggestion_id: str,
+        session: AsyncSession,
+    ) -> Optional[RagEvalTuningSuggestionRecord]:
+        """根据ID获取调优建议
+
+        Args:
+            suggestion_id: 建议ID
+            session: 数据库会话
+
+        Returns:
+            建议对象或None
+        """
+        stmt = select(RagEvalTuningSuggestionRecord).where(
+            RagEvalTuningSuggestionRecord.id == suggestion_id
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def update_suggestion_status(
+        self,
+        suggestion_id: str,
+        applied: bool,
+        session: AsyncSession,
+        applied_config_version_id: Optional[str] = None,
+    ) -> Optional[RagEvalTuningSuggestionRecord]:
+        """更新调优建议状态
+
+        Args:
+            suggestion_id: 建议ID
+            applied: 是否已采纳
+            session: 数据库会话
+            applied_config_version_id: 采纳后应用到的配置版本ID
+
+        Returns:
+            更新后的建议对象或None
+        """
+        suggestion = await self.get_suggestion_by_id(suggestion_id, session)
+        if not suggestion:
+            return None
+
+        suggestion.applied = applied
+        if applied and applied_config_version_id:
+            suggestion.applied_config_version_id = applied_config_version_id
+
+        await session.commit()
+        await session.refresh(suggestion)
+
+        logger.info(
+            f"调优建议状态已更新: suggestion_id={suggestion_id}, applied={applied}"
+        )
+
+        return suggestion
+
+    async def batch_update_suggestions(
+        self,
+        suggestion_ids: List[str],
+        applied: bool,
+        session: AsyncSession,
+        applied_config_version_id: Optional[str] = None,
+    ) -> int:
+        """批量更新调优建议状态
+
+        Args:
+            suggestion_ids: 建议ID列表
+            applied: 是否已采纳
+            session: 数据库会话
+            applied_config_version_id: 采纳后应用到的配置版本ID
+
+        Returns:
+            更新的建议数量
+        """
+        stmt = (
+            update(RagEvalTuningSuggestionRecord)
+            .where(RagEvalTuningSuggestionRecord.id.in_(suggestion_ids))
+            .values(
+                applied=applied,
+                applied_config_version_id=applied_config_version_id,
+            )
+        )
+        result = await session.execute(stmt)
+        await session.commit()
+
+        updated_count = result.rowcount
+        logger.info(
+            f"批量更新调优建议: count={updated_count}, applied={applied}"
+        )
+
+        return updated_count
+
+    async def get_suggestion_stats(
+        self,
+        report_id: Optional[str] = None,
+        session: Optional[AsyncSession] = None,
+    ) -> Dict[str, int]:
+        """获取调优建议统计
+
+        Args:
+            report_id: 报告ID（可选，不传则统计全部）
+            session: 数据库会话
+
+        Returns:
+            统计数据 {pending: int, applied: int, ignored: int, total: int}
+        """
+        if session is None:
+            return {"pending": 0, "applied": 0, "ignored": 0, "total": 0}
+
+        stmt = select(
+            func.count().label("total"),
+            func.sum(func.cast(RagEvalTuningSuggestionRecord.applied, int)).label("applied"),
+        )
+
+        if report_id:
+            stmt = stmt.where(RagEvalTuningSuggestionRecord.report_id == report_id)
+
+        result = await session.execute(stmt)
+        row = result.first()
+
+        total = row.total if row and row.total else 0
+        applied = row.applied if row and row.applied else 0
+        pending = total - applied
+
+        # 查询忽略记录数量
+        ignored_stmt = select(func.count()).select_from(RagEvalIgnoredSuggestion)
+        if report_id:
+            ignored_stmt = ignored_stmt.where(
+                RagEvalIgnoredSuggestion.report_id == report_id,
+                RagEvalIgnoredSuggestion.restored == False,
+            )
+        ignored_result = await session.execute(ignored_stmt)
+        ignored = ignored_result.scalar() or 0
+
+        return {
+            "total": total,
+            "pending": pending,
+            "applied": applied,
+            "ignored": ignored,
+        }
+
     async def ignore_suggestion(
         self,
         suggestion_id: str,
@@ -118,3 +289,34 @@ class TuningSuggestionService:
         )
 
         return ignored_record
+
+    async def restore_ignored_suggestion(
+        self,
+        ignored_suggestion_id: str,
+        session: AsyncSession,
+    ) -> Optional[RagEvalIgnoredSuggestion]:
+        """恢复被忽略的建议
+
+        Args:
+            ignored_suggestion_id: 忽略记录ID
+            session: 数据库会话
+
+        Returns:
+            恢复后的忽略记录或None
+        """
+        stmt = select(RagEvalIgnoredSuggestion).where(
+            RagEvalIgnoredSuggestion.id == ignored_suggestion_id
+        )
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+        if not record:
+            return None
+
+        record.restored = True
+        await session.commit()
+        await session.refresh(record)
+
+        logger.info(f"已恢复调优建议: ignored_id={ignored_suggestion_id}")
+
+        return record

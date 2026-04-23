@@ -5,6 +5,7 @@
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Optional
 
 from fastapi.encoders import jsonable_encoder
@@ -40,7 +41,8 @@ async def notify_export_ready(
                     "download_url": download_url,
                     "file_size_bytes": file_size_bytes,
                     "timestamp": datetime.utcnow().isoformat() + "Z",
-                }
+                },
+                custom_encoder={Decimal: lambda v: float(v)}
             ),
         )
         logger.info(f"导出完成通知已发送: user_id={user_id}, task_id={task_id}")
@@ -72,7 +74,8 @@ async def notify_export_failed(
                     "report_id": report_id,
                     "error": error,
                     "timestamp": datetime.utcnow().isoformat() + "Z",
-                }
+                },
+                custom_encoder={Decimal: lambda v: float(v)}
             ),
         )
         logger.info(f"导出失败通知已发送: user_id={user_id}, task_id={task_id}")

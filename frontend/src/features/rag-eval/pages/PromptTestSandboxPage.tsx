@@ -1,6 +1,6 @@
 /**
  * 提示词测试沙箱页
- * 路由: /rag-eval/prompts/:id/test
+ * 路由: /prompt-management/:key/test
  */
 
 import React, { useEffect, useState } from 'react';
@@ -28,7 +28,7 @@ const { Title } = Typography;
 const { TextArea } = Input;
 
 const PromptTestSandboxPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { key } = useParams<{ key: string }>();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -37,8 +37,8 @@ const PromptTestSandboxPage: React.FC = () => {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    if (id) fetchDetail(id);
-  }, [id]);
+    if (key) fetchDetail(key);
+  }, [key]);
 
   const fetchDetail = async (promptKey: string) => {
     setLoading(true);
@@ -60,13 +60,13 @@ const PromptTestSandboxPage: React.FC = () => {
   };
 
   const handleTest = async () => {
-    if (!id) return;
+    if (!key) return;
     const values = form.getFieldsValue();
 
     setTesting(true);
     try {
       const result = await testPrompt(
-        id,
+        key,
         values.variables || {},
         values.version
       );
@@ -89,8 +89,8 @@ const PromptTestSandboxPage: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/rag-eval/prompts/${id}`)}>
-          返回
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/prompt-management')}>
+          返回列表
         </Button>
         <Title level={3} style={{ margin: 0 }}>
           {detail.metadata.name_zh} - 测试沙箱

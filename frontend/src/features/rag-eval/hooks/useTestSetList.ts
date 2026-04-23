@@ -34,11 +34,19 @@ export function useTestSetList() {
     });
   };
 
+  const handleBatchDelete = async (ids: string[]) => {
+    await handleApiCall(() => store.batchDeleteTestSets(ids), {
+      successMsg: `已删除 ${ids.length} 个测试集`,
+      errorMsg: '批量删除失败',
+    });
+  };
+
   return {
     ...store,
     createModalVisible,
     setCreateModalVisible,
     handleCreate,
     handleDelete,
+    handleBatchDelete,
   };
 }

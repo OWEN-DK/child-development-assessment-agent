@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from src.config import settings
 from src.utils.logger import logger
 from src.core.prompt.manager import prompt_manager
-from src.core.llm.factory import LLMServiceFactory, LLMFramework
+from src.core.llm.factory import LLMServiceFactory, LLMServiceFactoryCompat, LLMFramework
 from src.core.llm.base import LLMRequest
 from src.schemas.llm import LLMMessage
 
@@ -116,9 +116,11 @@ class RuleBasedMetadataExtractor:
 _rule_extractor = RuleBasedMetadataExtractor()
 
 
+import time
 # LLM 响应缓存（内存缓存，进程级别）
-_llm_response_cache: Dict[str, ExtractedMetadata] = {}
+_llm_response_cache: Dict[str, Tuple[ExtractedMetadata, float]] = {}  # (metadata, timestamp)
 _cache_max_size = 10000  # 最大缓存条目数
+_cache_ttl = 86400  # 缓存过期时间，单位秒，默认24小时
 
 
 class MetadataExtractor:
@@ -157,8 +159,14 @@ class MetadataExtractor:
 
             cache_key = hashlib.md5(cleaned_text[:2000].encode()).hexdigest()
             if cache_key in _llm_response_cache:
-                logger.debug(f"LLM 元数据提取命中缓存")
-                return _llm_response_cache[cache_key]
+                metadata, timestamp = _llm_response_cache[cache_key]
+                # 检查是否过期
+                if time.time() - timestamp < _cache_ttl:
+                    logger.debug(f"LLM 元数据提取命中缓存")
+                    return metadata
+                else:
+                    # 过期删除
+                    del _llm_response_cache[cache_key]
 
         # 截断文本以避免 Token 限制问题
         truncated_text = cleaned_text[:2000]
@@ -180,7 +188,7 @@ class MetadataExtractor:
 
                 # 使用工厂创建 LLM 实例
                 # 注意：temperature/max_tokens 当前由兼容层处理，未来将迁移到 LLMSceneConfig 统一管理
-                llm = LLMServiceFactory.create(
+                llm = LLMServiceFactoryCompat.create(
                     framework=LLMFramework.LLAMAINDEX,
                     model_name=settings.llm_models["metadata_extraction"],
                     scenario="metadata_extraction",
@@ -316,9 +324,21 @@ class MetadataExtractor:
                 # 缓存结果
                 if use_cache and cache_key:
                     if len(_llm_response_cache) >= _cache_max_size:
-                        # 简单 LRU：删除第一个元素
-                        _llm_response_cache.pop(next(iter(_llm_response_cache)))
-                    _llm_response_cache[cache_key] = result
+                        # 先尝试清理过期条目
+                        current_time = time.time()
+                        expired_keys = [
+                            key for key, (_, ts) in _llm_response_cache.items()
+                            if current_time - ts >= _cache_ttl
+                        ]
+                        for key in expired_keys:
+                            del _llm_response_cache[key]
+                        
+                        # 如果还是满的，删除最早的条目
+                        if len(_llm_response_cache) >= _cache_max_size:
+                            _llm_response_cache.pop(next(iter(_llm_response_cache)))
+                    
+                    # 存储结果和当前时间戳
+                    _llm_response_cache[cache_key] = (result, time.time())
 
                 logger.info("LLM 元数据提取成功")
                 return result

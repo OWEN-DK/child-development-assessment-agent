@@ -186,3 +186,8 @@ SseEvent = Union[
     ExportReadyEvent,
     ExportFailedEvent,
 ]
+
+
+# ==================== 统一任务事件格式（新增） ====================
+# 所有任务类型使用统一的 SSE 事件格式，定义在 schemas/task.py 中
+# 参见：TaskSseEvent 模型

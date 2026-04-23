@@ -41,18 +41,20 @@ class ProviderRegistry:
 
     def _register_default_providers(self):
         """注册默认提供商适配器（按提供商隔离 ImportError）"""
-        # DashScope
+        # DashScope - 统一使用 MultiModalConversation
         try:
-            from langchain_community.chat_models import ChatTongyi
+            from src.core.llm.adapters.dashscope_multimodal import \
+                DashScopeMultiModalAdapter
 
-            self.register("dashscope", "langchain", ChatTongyi)
+            self.register("dashscope", "langchain", DashScopeMultiModalAdapter)
         except ImportError:
             pass
 
         try:
-            from llama_index.llms.dashscope import DashScope
+            from src.core.llm.adapters.dashscope_multimodal import \
+                DashScopeMultiModalAdapter
 
-            self.register("dashscope", "llamaindex", DashScope)
+            self.register("dashscope", "llamaindex", DashScopeMultiModalAdapter)
         except ImportError:
             pass
 

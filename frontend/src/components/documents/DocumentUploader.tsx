@@ -16,12 +16,22 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   onUploadStart,
   onSuccess,
 }) => {
+  const [uploading, setUploading] = React.useState(false);
+
   const handleUpload: UploadProps['beforeUpload'] = async (file) => {
+    // 防止重复上传
+    if (uploading) {
+      notification.warning('文件正在上传中，请勿重复提交');
+      return Upload.LIST_IGNORE;
+    }
+
     const validation = validateFile(file);
     if (!validation.valid) {
       notification.error(validation.message!);
       return Upload.LIST_IGNORE;
     }
+
+    setUploading(true);
 
     try {
       const result = await uploadDocument(file);
@@ -44,6 +54,9 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     } catch (e: any) {
       const apiError = extractApiError(e);
       notification.error(`上传失败: ${apiError.message}`);
+    } finally {
+      // 延迟重置，避免快速连续点击
+      setTimeout(() => setUploading(false), 500);
     }
 
     return false;
@@ -55,9 +68,9 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       fileList={[]}
       showUploadList={false}
       accept=".pdf,.epub"
-      multiple
+      disabled={uploading}
     >
-      <Button type="primary" icon={<UploadOutlined />} size="large">
+      <Button type="primary" icon={<UploadOutlined />} size="large" loading={uploading}>
         上传文档
       </Button>
     </Upload>

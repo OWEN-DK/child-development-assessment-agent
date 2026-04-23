@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
 from src.core.nodes.base import BaseNode
-from src.core.prompts_fallback import RAG_QUERY_TEMPLATE
+from src.core.prompt_impl.facade import prompt_manager
 from src.schemas import AgentState
 from src.utils.logger import logger
 
@@ -13,13 +13,12 @@ class RetrievalNode(BaseNode):
         logger.info("Executing Retrieval Node...")
         from src.service.rag_service import rag_service
 
-        # 构造查询
-        query = RAG_QUERY_TEMPLATE.format(
-            issues=state.child_profile.issues, goals=state.proposed_plan.goals
+        query = await prompt_manager.get_prompt(
+            "rag_query_template",
+            variables={"issues": state.child_profile.issues, "goals": state.proposed_plan.goals},
         )
         age = state.child_profile.age
 
-        # 调用 RAG 服务
         docs = await rag_service.retrieve_knowledge(query, age, limit=5)
 
         return {"retrieved_docs": docs}

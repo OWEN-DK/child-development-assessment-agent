@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 from injector import singleton
 
 from src.config.core.manager import ConfigManager
-from src.core.event_bus import ConfigChangedEvent, event_bus
+from src.config.core.events import ConfigChangedEvent
+from src.core.event_bus import event_bus
 from src.core.llm.adapters.langchain import LangChainLLMAdapter
 from src.core.llm.adapters.llamaindex import LlamaIndexLLMAdapter
 from src.core.llm.base import LLMService
@@ -31,7 +32,7 @@ PROVIDER_PARAM_WHITELIST = {
         "presence_penalty",
         "frequency_penalty",
         "api_key",
-        "base_url",
+        "result_format",
     },
     "openai": {
         "model",
@@ -180,15 +181,24 @@ class LLMServiceFactory:
 
             # 创建实例
             try:
-                llm_instance = llm_cls(**params)
+                # DashScopeMultiModalAdapter 已实现 LLMService，无需再包装
+                from src.core.llm.adapters.dashscope_multimodal import \
+                    DashScopeMultiModalAdapter
 
-                # 包装为统一的 LLMService 接口
-                if framework == LLMFramework.LANGCHAIN:
-                    instance = LangChainLLMAdapter(llm_instance, scene_config.model)
-                elif framework == LLMFramework.LLAMAINDEX:
-                    instance = LlamaIndexLLMAdapter(llm_instance, scene_config.model)
+                if llm_cls == DashScopeMultiModalAdapter:
+                    # 从配置读取多模态前缀列表
+                    from src.config import settings
+                    params['multimodal_prefixes'] = settings.llm_multimodal_model_prefixes
+                    instance = llm_cls(**params)
                 else:
-                    raise ValueError(f"Unsupported framework: {framework}")
+                    llm_instance = llm_cls(**params)
+                    # 包装为统一的 LLMService 接口
+                    if framework == LLMFramework.LANGCHAIN:
+                        instance = LangChainLLMAdapter(llm_instance, scene_config.model)
+                    elif framework == LLMFramework.LLAMAINDEX:
+                        instance = LlamaIndexLLMAdapter(llm_instance, scene_config.model)
+                    else:
+                        raise ValueError(f"Unsupported framework: {framework}")
 
             except Exception as e:
                 # 实例创建失败，保留旧实例（若有）
@@ -441,35 +451,19 @@ class LLMServiceFactoryCompat:
         factory = _get_legacy_factory()
         loop = asyncio.get_event_loop()
 
-        # 由于旧接口是同步的，我们需要在异步上下文中创建
-        # 这里使用一个简化的同步版本
-        from langchain_community.chat_models import ChatTongyi
-        from llama_index.llms.dashscope import DashScope
-
         from src.config import settings
+        from src.core.llm.adapters.dashscope_multimodal import \
+            DashScopeMultiModalAdapter
 
-        if framework == LLMFramework.LANGCHAIN:
-            llm = ChatTongyi(
-                model=model_name,
-                dashscope_api_key=settings.dashscope_api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            instance = LangChainLLMAdapter(llm, model_name)
-            logger.info(f"LangChain LLM 实例已创建：{model_name}")
-
-        elif framework == LLMFramework.LLAMAINDEX:
-            llm = DashScope(
-                model=model_name,
-                api_key=settings.dashscope_api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            instance = LlamaIndexLLMAdapter(llm, model_name)
-            logger.info(f"LlamaIndex LLM 实例已创建：{model_name}")
-
-        else:
-            raise ValueError(f"不支持的 LLM 框架：{framework}")
+        # 统一使用 MultiModalConversation 适配器
+        instance = DashScopeMultiModalAdapter(
+            model=model_name,
+            api_key=settings.dashscope_api_key,
+            multimodal_prefixes=settings.llm_multimodal_model_prefixes,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        logger.info(f"DashScope MultiModal LLM 实例已创建：{model_name}")
 
         # 缓存实例
         cls._instances[cache_key] = instance

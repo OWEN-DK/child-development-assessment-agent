@@ -1,7 +1,7 @@
 import json
 import re
 
-from src.core.llm.factory import LLMFramework, LLMServiceFactory
+from src.core.llm.factory import LLMFramework, LLMServiceFactory, LLMServiceFactoryCompat
 from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
 from src.schemas import LLMMessage, LLMRequest
 from src.utils.logger import logger
@@ -16,7 +16,7 @@ class QueryRewriteStep(PipelineStep):
         temperature = self.config.get('temperature', 0.3)
         
         # 创建LLM实例
-        llm = LLMServiceFactory.create(
+        llm = LLMServiceFactoryCompat.create(
             framework=LLMFramework.LANGCHAIN,
             model_name=model,
             scenario='query_rewrite',

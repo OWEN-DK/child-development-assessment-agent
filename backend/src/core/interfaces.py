@@ -69,6 +69,14 @@ class IRetrievalService(ABC):
         pass
     
     @abstractmethod
+    async def bm25_search(self, query: str, top_k: int = 10) -> List[Any]:
+        pass
+    
+    @abstractmethod
+    async def vector_search(self, query: str, top_k: int = 10) -> List[Any]:
+        pass
+    
+    @abstractmethod
     def reload_retrievers(self):
         pass
 

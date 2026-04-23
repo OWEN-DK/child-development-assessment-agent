@@ -130,6 +130,7 @@ class ChildState(BaseModel):
 class KnowledgeItem(BaseModel):
     """检索到的知识条目"""
 
+    id: Optional[str] = Field(default=None, description="知识项唯一标识")
     content: str
     source_book: str
     chapter_title: Optional[str] = None

@@ -8,6 +8,7 @@
 
 import asyncio
 import logging
+from decimal import Decimal
 from typing import Any, Awaitable, Callable, Optional
 
 from fastapi.encoders import jsonable_encoder
@@ -129,7 +130,10 @@ class RagEvalTaskManager:
         """统一事件发布入口，确保jsonable_encoder处理"""
         payload = {"type": event_type, **data}
         try:
-            safe_payload = jsonable_encoder(payload)
+            safe_payload = jsonable_encoder(
+                payload,
+                custom_encoder={Decimal: lambda v: float(v)}
+            )
         except Exception as e:
             logger.error(f"SSE事件序列化失败 [{event_type}]: {e}")
             safe_payload = {"type": event_type, "error": "序列化失败"}

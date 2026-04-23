@@ -1,6 +1,7 @@
-"""提示词管理 API 控制器 - Phase 7"""
+"""提示词管理 API 控制器"""
 
 from fastapi import APIRouter
+from typing import Optional
 
 from src.core.database import async_session_factory
 from src.core.prompt.manager import prompt_manager
@@ -38,24 +39,23 @@ class PromptController:
             try:
                 from sqlalchemy import select
 
-                from src.models.rag_eval.enums import RagEvalPromptCategory
-                from src.models.rag_eval.prompt_metadata import \
-                    RagEvalPromptMetadata
+                from src.models.prompt_enums import PromptCategory
+                from src.models.prompt_metadata import PromptMetadata
 
                 async with async_session_factory() as session:
-                    query = select(RagEvalPromptMetadata)
+                    query = select(PromptMetadata)
 
                     if category:
                         try:
-                            cat_enum = RagEvalPromptCategory(category)
-                            query = query.where(RagEvalPromptMetadata.category == cat_enum)
+                            cat_enum = PromptCategory(category)
+                            query = query.where(PromptMetadata.category == cat_enum)
                         except ValueError:
                             raise InvalidParamsException(message=f"无效的分类: {category}")
 
                     if is_active is not None:
-                        query = query.where(RagEvalPromptMetadata.is_active == is_active)
+                        query = query.where(PromptMetadata.is_active == is_active)
 
-                    query = query.order_by(RagEvalPromptMetadata.updated_at.desc())
+                    query = query.order_by(PromptMetadata.updated_at.desc())
                     result = await session.execute(query)
                     prompts = result.scalars().all()
 
@@ -86,16 +86,14 @@ class PromptController:
             try:
                 from sqlalchemy import select
 
-                from src.models.rag_eval.prompt_metadata import \
-                    RagEvalPromptMetadata
-                from src.models.rag_eval.prompt_version import \
-                    RagEvalPromptVersion
+                from src.models.prompt_metadata import PromptMetadata
+                from src.models.prompt_version import PromptVersion
 
                 async with async_session_factory() as session:
                     # 获取元数据
                     result = await session.execute(
-                        select(RagEvalPromptMetadata).where(
-                            RagEvalPromptMetadata.prompt_key == prompt_key
+                        select(PromptMetadata).where(
+                            PromptMetadata.prompt_key == prompt_key
                         )
                     )
                     metadata = result.scalar_one_or_none()
@@ -104,9 +102,9 @@ class PromptController:
 
                     # 获取所有版本
                     result = await session.execute(
-                        select(RagEvalPromptVersion)
-                        .where(RagEvalPromptVersion.prompt_key == prompt_key)
-                        .order_by(RagEvalPromptVersion.version_number.desc())
+                        select(PromptVersion)
+                        .where(PromptVersion.prompt_key == prompt_key)
+                        .order_by(PromptVersion.version_number.desc())
                     )
                     versions = result.scalars().all()
 
@@ -158,16 +156,14 @@ class PromptController:
 
                 from sqlalchemy import select
 
-                from src.models.rag_eval.prompt_metadata import \
-                    RagEvalPromptMetadata
-                from src.models.rag_eval.prompt_version import \
-                    RagEvalPromptVersion
+                from src.models.prompt_metadata import PromptMetadata
+                from src.models.prompt_version import PromptVersion
 
                 async with async_session_factory() as session:
                     # 获取元数据
                     result = await session.execute(
-                        select(RagEvalPromptMetadata).where(
-                            RagEvalPromptMetadata.prompt_key == prompt_key
+                        select(PromptMetadata).where(
+                            PromptMetadata.prompt_key == prompt_key
                         )
                     )
                     metadata = result.scalar_one_or_none()
@@ -179,9 +175,9 @@ class PromptController:
 
                     # 获取当前版本
                     result = await session.execute(
-                        select(RagEvalPromptVersion)
-                        .where(RagEvalPromptVersion.prompt_key == prompt_key)
-                        .order_by(RagEvalPromptVersion.version_number.desc())
+                        select(PromptVersion)
+                        .where(PromptVersion.prompt_key == prompt_key)
+                        .order_by(PromptVersion.version_number.desc())
                         .limit(1)
                     )
                     current_version = result.scalar_one_or_none()
@@ -204,7 +200,7 @@ class PromptController:
                     next_version_number = (current_version.version_number + 1) if current_version else 1
                     version_label = f"v{next_version_number}"
 
-                    new_version = RagEvalPromptVersion(
+                    new_version = PromptVersion(
                         id=str(uuid.uuid4()),
                         prompt_key=prompt_key,
                         version_label=version_label,
@@ -237,15 +233,14 @@ class PromptController:
             try:
                 from sqlalchemy import select
 
-                from src.models.rag_eval.prompt_version import \
-                    RagEvalPromptVersion
+                from src.models.prompt_version import PromptVersion
 
                 async with async_session_factory() as session:
                     # 获取当前版本变量
                     result = await session.execute(
-                        select(RagEvalPromptVersion)
-                        .where(RagEvalPromptVersion.prompt_key == prompt_key)
-                        .order_by(RagEvalPromptVersion.version_number.desc())
+                        select(PromptVersion)
+                        .where(PromptVersion.prompt_key == prompt_key)
+                        .order_by(PromptVersion.version_number.desc())
                         .limit(1)
                     )
                     current_version = result.scalar_one_or_none()
@@ -301,14 +296,13 @@ class PromptController:
             try:
                 from sqlalchemy import select
 
-                from src.models.rag_eval.prompt_version import \
-                    RagEvalPromptVersion
+                from src.models.prompt_version import PromptVersion
 
                 async with async_session_factory() as session:
                     result = await session.execute(
-                        select(RagEvalPromptVersion).where(
-                            RagEvalPromptVersion.prompt_key == prompt_key,
-                            RagEvalPromptVersion.version_label.in_([version_1, version_2]),
+                        select(PromptVersion).where(
+                            PromptVersion.prompt_key == prompt_key,
+                            PromptVersion.version_label.in_([version_1, version_2]),
                         )
                     )
                     versions = result.scalars().all()

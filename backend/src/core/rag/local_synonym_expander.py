@@ -16,11 +16,15 @@ from src.utils.logger import logger
 class LocalSynonymExpander:
     """本地同义词扩展器（LLM 失败时兜底）"""
 
+    _ever_initialized = False
+
     def __init__(self, synonyms_file: Optional[str] = None):
         self._synonyms_dict = self._load_synonyms(synonyms_file)
-        logger.info(
-            f"LocalSynonymExpander 初始化完成，加载 {len(self._synonyms_dict)} 个领域词典"
-        )
+        if not LocalSynonymExpander._ever_initialized:
+            LocalSynonymExpander._ever_initialized = True
+            logger.info(
+                f"LocalSynonymExpander 初始化完成，加载 {len(self._synonyms_dict)} 个领域词典"
+            )
 
     def expand(self, query: str) -> List[str]:
         """
@@ -105,7 +109,8 @@ class LocalSynonymExpander:
                     if isinstance(config_value, str)
                     else config_value
                 )
-                logger.info("本地同义词词典从数据库配置加载成功")
+                if not LocalSynonymExpander._ever_initialized:
+                    logger.info("本地同义词词典从数据库配置加载成功")
                 return synonyms
         except Exception as e:
             logger.warning(f"从数据库配置加载本地同义词词典失败: {e}")
@@ -117,7 +122,8 @@ class LocalSynonymExpander:
             if Path(file_path).exists():
                 with open(file_path, "r", encoding="utf-8") as f:
                     synonyms = json.load(f)
-                logger.info(f"本地同义词词典从本地文件加载成功: {file_path}")
+                if not LocalSynonymExpander._ever_initialized:
+                    logger.info(f"本地同义词词典从本地文件加载成功: {file_path}")
                 return synonyms
         except Exception as e:
             logger.warning(f"从本地文件加载本地同义词词典失败: {e}")

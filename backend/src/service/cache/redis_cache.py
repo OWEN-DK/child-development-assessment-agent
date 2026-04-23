@@ -4,11 +4,12 @@ from typing import Any, List, Optional
 
 from src.config import redis_settings, settings
 from src.core.circuit_breaker import redis_circuit_breaker
-from src.core.redis_client import RedisClient
 from src.utils.logger import logger
 
 
 class RedisCache:
+    _redis_ever_initialized = False
+
     def __init__(self):
         self.redis_client = None
         self._init_redis()
@@ -16,8 +17,11 @@ class RedisCache:
     def _init_redis(self):
         if redis_settings.cache_enabled:
             try:
+                from src.core.redis_client import RedisClient
                 self.redis_client = RedisClient.get_client()
-                logger.info("CacheService: Redis 客户端已初始化")
+                if not RedisCache._redis_ever_initialized:
+                    RedisCache._redis_ever_initialized = True
+                    logger.info("CacheService: Redis 客户端已初始化")
             except Exception as e:
                 logger.warning(f"CacheService: Redis 初始化失败: {e}")
                 self.redis_client = None

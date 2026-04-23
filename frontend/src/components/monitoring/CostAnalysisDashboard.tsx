@@ -27,7 +27,7 @@ export const CostAnalysisDashboard: React.FC<CostAnalysisDashboardProps> = ({
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'outer',
+      position: 'outside',
       content: (datum: any) => `${datum.type} ¥${datum.value.toFixed(4)}`,
     },
     interactions: [{ type: 'element-active' }],

@@ -14,8 +14,8 @@ export const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.epub'];
 // 任务状态相关
 export const TASK_STATUS = {
   PENDING: 'pending',
-  PROCESSING: 'processing',
-  SUCCESS: 'success',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
   FAILED: 'failed',
   CANCELLED: 'cancelled',
 } as const;

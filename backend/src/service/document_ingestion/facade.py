@@ -1,13 +1,11 @@
 from typing import Callable
 
 from src.service.document_ingestion.book_ingestor import BookIngestor
-from src.service.document_ingestion.task_state_manager import \
-    task_state_manager
 
 
 class DocumentIngestionService:
     def __init__(self, index_manager):
-        self.book_ingestor = BookIngestor(index_manager, task_state_manager)
+        self.book_ingestor = BookIngestor(index_manager)
 
     async def ingest_book_resumable(
         self,
@@ -27,5 +25,6 @@ class DocumentIngestionService:
         file_path: str,
         original_filename: str = None,
         progress_callback: Callable[[str, float, str], None] = None,
+        task_id: str = None,
     ):
-        return await self.book_ingestor.ingest_book(file_path, original_filename, progress_callback)
+        return await self.book_ingestor.ingest_book(file_path, original_filename, progress_callback, task_id)

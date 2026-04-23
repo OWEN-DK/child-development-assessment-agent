@@ -28,6 +28,8 @@ class ValidationReport:
 class SynonymValidator:
     """同义词质量验证器"""
 
+    _ever_initialized = False
+
     def __init__(self, validation_file: Optional[str] = None):
         self._validation_rules = self._load_rules(validation_file)
         self._blacklist_set = set(self._validation_rules.get("domain_blacklist", []))
@@ -37,9 +39,11 @@ class SynonymValidator:
         self._chinese_pattern = re.compile(r"[\u4e00-\u9fa5]")
         self._valid_char_pattern = re.compile(r"^[\u4e00-\u9fa5a-zA-Z0-9\s]+$")
 
-        logger.info(
-            f"SynonymValidator 初始化完成，黑名单 {len(self._blacklist_set)} 个词，白名单 {len(self._whitelist_set)} 个词"
-        )
+        if not SynonymValidator._ever_initialized:
+            SynonymValidator._ever_initialized = True
+            logger.info(
+                f"SynonymValidator 初始化完成，黑名单 {len(self._blacklist_set)} 个词，白名单 {len(self._whitelist_set)} 个词"
+            )
 
     def validate(
         self,
@@ -163,7 +167,8 @@ class SynonymValidator:
                     if isinstance(config_value, str)
                     else config_value
                 )
-                logger.info("同义词验证规则从数据库配置加载成功")
+                if not SynonymValidator._ever_initialized:
+                    logger.info("同义词验证规则从数据库配置加载成功")
                 return rules
         except Exception as e:
             logger.warning(f"从数据库配置加载同义词验证规则失败: {e}")
@@ -175,7 +180,8 @@ class SynonymValidator:
             if Path(file_path).exists():
                 with open(file_path, "r", encoding="utf-8") as f:
                     rules = json.load(f)
-                logger.info(f"同义词验证规则从本地文件加载成功: {file_path}")
+                if not SynonymValidator._ever_initialized:
+                    logger.info(f"同义词验证规则从本地文件加载成功: {file_path}")
                 return rules
         except Exception as e:
             logger.warning(f"从本地文件加载同义词验证规则失败: {e}")

@@ -32,9 +32,10 @@ export function useConfig() {
   const loadVersions = async () => {
     try {
       const versions = await configApi.listVersions();
-      store.setVersions(Array.isArray(versions) ? versions : []);
-      if (!store.activeVersion && versions.length > 0) {
-        store.setActiveVersion(versions[0].id);
+      const versionList = Array.isArray(versions) ? versions : [];
+      store.setVersions(versionList);
+      if (!store.activeVersion && versionList.length > 0) {
+        store.setActiveVersion(versionList[0].id);
       }
     } catch (error) {
       console.error('Failed to load versions:', error);

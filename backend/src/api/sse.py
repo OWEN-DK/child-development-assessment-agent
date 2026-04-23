@@ -160,10 +160,15 @@ class SSEPublisher:
         优先通过 Redis Pub/Sub 发布（支持多实例），
         如果 Redis 不可用，仅发布到本地队列（单实例模式）。
         """
+        from decimal import Decimal
+
         from fastapi.encoders import jsonable_encoder
 
         try:
-            safe_message = jsonable_encoder(message)
+            safe_message = jsonable_encoder(
+                message,
+                custom_encoder={Decimal: lambda v: float(v)}
+            )
         except Exception as e:
             logger.error(f"SSE 消息序列化失败: {e}")
             return
@@ -190,30 +195,6 @@ class SSEPublisher:
             except Exception as e:
                 logger.warning(f"通过 Redis 发布消息失败: {e}，仅使用本地队列")
                 cls._redis_available = False
-
-    @classmethod
-    async def publish_progress(cls, run_id: str, progress: dict):
-        """发布进度消息"""
-        await cls.publish(
-            f"test_run:{run_id}",
-            {
-                "type": "progress",
-                "run_id": run_id,
-                **progress,
-            },
-        )
-
-    @classmethod
-    async def publish_complete(cls, run_id: str, summary: dict):
-        """发布完成消息"""
-        await cls.publish(
-            f"test_run:{run_id}",
-            {
-                "type": "complete",
-                "run_id": run_id,
-                **summary,
-            },
-        )
 
     @classmethod
     async def publish_event(cls, channel: str, event_type: str, data: dict):

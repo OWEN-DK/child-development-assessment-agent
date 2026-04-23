@@ -13,7 +13,6 @@ from src.models.rag_eval.enums import (RagEvalABTestSide,
                                        RagEvalChangeSetStatus,
                                        RagEvalIgnoredSuggestionType,
                                        RagEvalIgnoreScope, RagEvalIntentType,
-                                       RagEvalPromptCategory,
                                        RagEvalPromptSuggestionType,
                                        RagEvalSuggestionSource,
                                        RagEvalSuggestionType,
@@ -27,9 +26,7 @@ from src.models.rag_eval.enums import (RagEvalABTestSide,
                                        RagEvalValidationStatus)
 from src.models.rag_eval.ignored_suggestion import RagEvalIgnoredSuggestion
 from src.models.rag_eval.intent_annotation import RagEvalIntentAnnotation
-from src.models.rag_eval.prompt_metadata import RagEvalPromptMetadata
 from src.models.rag_eval.prompt_suggestion import RagEvalPromptSuggestionRecord
-from src.models.rag_eval.prompt_version import RagEvalPromptVersion
 # 辅助模型
 from src.models.rag_eval.query_intent_log import RagEvalQueryIntentLog
 from src.models.rag_eval.synonym_query_pair import RagEvalSynonymQueryPair
@@ -62,7 +59,6 @@ __all__ = [
     "RagEvalIntentType",
     "RagEvalValidationStatus",
     "RagEvalSuggestionType",
-    "RagEvalPromptCategory",
     # 核心业务模型
     "RagEvalTestSet",
     "RagEvalTestSetCase",
@@ -73,8 +69,6 @@ __all__ = [
     "RagEvalIntentAnnotation",
     # 配置与提示词模型
     "RagEvalConfigVersion",
-    "RagEvalPromptVersion",
-    "RagEvalPromptMetadata",
     "RagEvalConfigChangeSet",
     "RagEvalConfigChangeSetPrompt",
     # 报告与建议模型

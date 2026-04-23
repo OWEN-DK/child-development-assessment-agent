@@ -3,18 +3,13 @@
  * 路由: /rag-eval/test-sets
  */
 
-import { Button, Input, Select, Modal, Form, Typography } from 'antd';
+import { Button, Input, Modal, Form, Typography, Popconfirm } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { useState } from 'react';
 import { useTestSetList, type CreateFormValues } from '../hooks/useTestSetList';
 import { TestSetListTable } from '../components/TestSetListTable';
 
 const { Title } = Typography;
-
-const SOURCE_TYPE_OPTIONS = [
-  { value: 'BOOK_GENERATED', label: '书籍生成' },
-  { value: 'JSON_IMPORTED', label: 'JSON导入' },
-  { value: 'MANUAL', label: '手动创建' },
-];
 
 export default function TestSetListPage() {
   const {
@@ -31,9 +26,11 @@ export default function TestSetListPage() {
     setFilters,
     handleCreate,
     handleDelete,
+    handleBatchDelete,
   } = useTestSetList();
 
   const [form] = Form.useForm<CreateFormValues>();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
   const onFinish = (values: CreateFormValues) => {
     handleCreate(values, () => form.resetFields());
@@ -48,7 +45,7 @@ export default function TestSetListPage() {
         </Button>
       </div>
 
-      <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
         <Input
           placeholder="按名称搜索"
           prefix={<SearchOutlined />}
@@ -57,14 +54,13 @@ export default function TestSetListPage() {
           onChange={e => setFilters(e.target.value, sourceType)}
           allowClear
         />
-        <Select
-          placeholder="来源类型"
-          style={{ width: 140 }}
-          value={sourceType}
-          onChange={val => setFilters(keyword, val)}
-          allowClear
-          options={SOURCE_TYPE_OPTIONS}
-        />
+        {selectedRowKeys.length > 0 && (
+          <Popconfirm title={`确认删除 ${selectedRowKeys.length} 个测试集？`} onConfirm={() => handleBatchDelete(selectedRowKeys as string[])}>
+            <Button danger>
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          </Popconfirm>
+        )}
       </div>
 
       <TestSetListTable
@@ -75,6 +71,8 @@ export default function TestSetListPage() {
         pageSize={pageSize}
         setPagination={setPagination}
         onDelete={handleDelete}
+        selectedRowKeys={selectedRowKeys}
+        onSelectChange={setSelectedRowKeys}
       />
 
       <Modal
@@ -97,9 +95,6 @@ export default function TestSetListPage() {
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={3} placeholder="请输入描述（可选）" />
-          </Form.Item>
-          <Form.Item name="source_type" label="来源类型">
-            <Select options={SOURCE_TYPE_OPTIONS} placeholder="请选择来源类型" allowClear />
           </Form.Item>
         </Form>
       </Modal>

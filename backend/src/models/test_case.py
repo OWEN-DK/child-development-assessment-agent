@@ -39,6 +39,7 @@ DraftStatus = TestCaseStatus
 
 
 class TestRunStatus(PyEnum):
+    PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -135,6 +136,12 @@ class TestCaseDraft(Base):
     )
     description: Mapped[str | None] = mapped_column(Text)
 
+    # 新增：幂等性字段
+    age_stage_label: Mapped[str] = mapped_column(String(20), nullable=False, default="", comment="年龄段标签")
+    draft_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="组合内草稿索引")
+    batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True, comment="生成批次 ID")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="乐观锁版本号")
+
     generation_batch_id: Mapped[str | None] = mapped_column(String(64), index=True)
 
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(JSON)
@@ -160,6 +167,8 @@ class TestCaseDraft(Base):
         Index("idx_source_doc", "source_document_id"),
         Index("idx_domain_status", "domain", "status"),
         Index("idx_generation_batch", "generation_batch_id"),
+        # 新增：业务唯一键约束（幂等性）
+        Index("idx_draft_combination", "source_document_id", "domain", "age_stage_label", "draft_index"),
     )
 
 

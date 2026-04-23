@@ -47,11 +47,16 @@ class PipelineStep:
 class PipelineOrchestrator:
     """流水线编排器（支持 simple/complex 双流水线）"""
 
+    _ever_initialized = False
+    _pipelines_ever_loaded = False
+
     def __init__(self, config_path: str = "config/rag_pipeline.yaml"):
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.step_pipelines = self._initialize_pipelines()
-        logger.info(f"RAG 流水线已初始化：{self.config['pipeline']['name']}")
+        if not PipelineOrchestrator._ever_initialized:
+            PipelineOrchestrator._ever_initialized = True
+            logger.info(f"RAG 流水线已初始化：{self.config['pipeline']['name']}")
 
     def _load_config(self) -> dict:
         """加载 YAML 配置"""
@@ -99,8 +104,10 @@ class PipelineOrchestrator:
                 step_instances.append(step)
 
             pipelines[pipeline_name] = step_instances
-            logger.info(f"流水线 [{pipeline_name}] 已加载 {len(step_instances)} 个步骤")
+            if not PipelineOrchestrator._pipelines_ever_loaded:
+                logger.info(f"流水线 [{pipeline_name}] 已加载 {len(step_instances)} 个步骤")
 
+        PipelineOrchestrator._pipelines_ever_loaded = True
         return pipelines
 
     async def execute(self, query: str, age: float, limit: int = 5) -> list[Any]:
@@ -145,12 +152,44 @@ class PipelineOrchestrator:
         logger.info(
             f"RAG 流水线 [{query_type}] 执行完成，返回 {len(context.results)} 个结果"
         )
+
+        self._record_metrics(context, query_type)
         return context.results
 
+    def _record_metrics(self, context: PipelineContext, query_type: str):
+        """记录 Pipeline 执行指标"""
+        elapsed_ms = (time.time() - context.start_time) * 1000
+
+        logger.info(
+            f"RAG 流水线 [{query_type}] 执行完成："
+            f"{len(context.results)} 个结果，耗时 {elapsed_ms:.0f}ms"
+        )
+
+        if context.errors:
+            logger.warning(f"流水线执行错误：{', '.join(context.errors)}")
+
     async def _classify_query(self, query: str) -> str:
-        """简单查询分类（可替换为 LLM 分类器）"""
-        # 默认使用 complex 流水线，后续可接入 QueryRouter
-        return "complex"
+        """基于规则简单/复杂查询分类"""
+        complex_keywords = [
+            "区别",
+            "对比",
+            "差异",
+            "比较",
+            "如何",
+            "为什么",
+            "原因",
+            "分析",
+            "评估",
+        ]
+
+        for keyword in complex_keywords:
+            if keyword in query:
+                return "complex"
+
+        if len(query) > 20:
+            return "complex"
+
+        return "simple"
 
     def reload_config(self):
         """重新加载配置（热重载）"""

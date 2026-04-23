@@ -8,6 +8,8 @@ from sqlalchemy.orm import selectinload
 from src.core.database import db_session_factory
 from src.models.test_case import TestCase, TestRun, TestRunResult, TestSetCase
 from src.schemas import TestRunStatus
+from src.schemas.task import TaskState
+from src.service.test_run_task_adapter import test_run_task_adapter
 from src.utils.logger import logger
 
 
@@ -52,11 +54,24 @@ class TestRunCreator:
                 description=description,
                 total_test_cases=len(test_cases),
                 passed_test_cases=0,
-                status=TestRunStatus.RUNNING,
+                status=TestRunStatus.PENDING,
             )
 
             session.add(test_run)
             await session.commit()
+
+            # 创建统一任务状态（Redis）
+            initial_state = TaskState.create(
+                task_id=run_id,
+                task_type="test_run",
+                metadata={
+                    "name": name,
+                    "description": description,
+                    "total_test_cases": len(test_cases),
+                },
+            )
+            initial_state.message = "等待执行"
+            await test_run_task_adapter.create(initial_state)
 
             logger.info(f"测试运行已创建：{run_id}, 共 {len(test_cases)} 个用例")
             return run_id

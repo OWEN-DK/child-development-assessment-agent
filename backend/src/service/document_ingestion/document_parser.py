@@ -7,7 +7,6 @@ from llama_index.core.schema import Document
 
 from src.config import settings
 from src.core.parsers import PDFParser, PDFVLParser, get_parser
-from src.service.document_ingestion.task_state_manager import TaskStatus
 from src.utils.logger import logger
 
 

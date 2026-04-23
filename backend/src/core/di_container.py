@@ -6,11 +6,11 @@ from src.core.interfaces import (ICacheService, IDocumentIngestionService,
                                  IIndexManager, IRetrievalService)
 from src.repository import (ABTestMetricRepository, ConfigAuditLogRepository,
                             ConfigVersionRepository, DocumentRecordRepository,
-                            LLMCallLogRepository, PromptABTestRepository,
-                            PromptVersionRepository, SourceDocumentRepository,
+                            LLMCallLogRepository, SourceDocumentRepository,
                             TestCaseDraftRepository, TestCaseRepository,
                             TestRunRepository, TestRunResultRepository,
                             TestSetCaseRepository, TestSetRepository)
+from src.service.task_state_service import TaskStateService
 
 
 class CoreModule(Module):
@@ -33,9 +33,9 @@ class CoreModule(Module):
     def provide_retrieval_service(
         self, index_manager: IIndexManager, cache_service: ICacheService
     ) -> IRetrievalService:
-        from src.service.retrieval_service import RetrievalService
+        from src.service.retrieval_service import get_retrieval_service
 
-        return RetrievalService(index_manager, cache_service)
+        return get_retrieval_service(index_manager, cache_service)
 
     @provider
     @singleton
@@ -107,16 +107,6 @@ class RepositoryModule(Module):
 
     @provider
     @singleton
-    def provide_prompt_version_repository(self) -> PromptVersionRepository:
-        return PromptVersionRepository(async_session_factory)
-
-    @provider
-    @singleton
-    def provide_prompt_ab_test_repository(self) -> PromptABTestRepository:
-        return PromptABTestRepository(async_session_factory)
-
-    @provider
-    @singleton
     def provide_llm_call_log_repository(self) -> LLMCallLogRepository:
         return LLMCallLogRepository(async_session_factory)
 
@@ -126,5 +116,18 @@ class RepositoryModule(Module):
         return ABTestMetricRepository(async_session_factory)
 
 
+class TaskModule(Module):
+    """任务状态管理模块"""
+    
+    @provider
+    @singleton
+    def provide_task_state_service(self) -> TaskStateService:
+        from src.service.task_state_service import TaskStateService
+        
+        return TaskStateService(
+            multi_instance=settings.multi_instance_deployment,
+        )
+
+
 # 全局注入器实例
-injector = Injector([CoreModule(), RepositoryModule()])
+injector = Injector([CoreModule(), RepositoryModule(), TaskModule()])

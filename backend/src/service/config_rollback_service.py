@@ -17,7 +17,7 @@ from src.models.rag_eval.config_change_set_prompt import \
     RagEvalConfigChangeSetPrompt
 from src.models.rag_eval.config_version import RagEvalConfigVersion
 from src.models.rag_eval.enums import RagEvalChangeSetStatus
-from src.models.rag_eval.prompt_version import RagEvalPromptVersion
+from src.models.prompt_version import PromptVersion
 from src.utils.logger import logger
 from src.utils.serializers import create_serializer, safe_isoformat
 
@@ -97,12 +97,12 @@ async def rollback_to_version(
 
         # 复制目标版本关联的 PromptVersions
         prompt_stmt = (
-            select(RagEvalPromptVersion)
+            select(PromptVersion)
             .where(
-                RagEvalPromptVersion.created_by
+                PromptVersion.created_by
                 == user_id  # 简化处理：复制用户相关的 prompt
             )
-            .order_by(RagEvalPromptVersion.created_at.desc())
+            .order_by(PromptVersion.created_at.desc())
         )
         prompt_result = await session.execute(prompt_stmt)
         prompt_versions = prompt_result.scalars().all()

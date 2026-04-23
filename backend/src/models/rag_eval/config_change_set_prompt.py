@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.models.prompt_version import PromptVersion
 
 
 class RagEvalConfigChangeSetPrompt(Base):
@@ -31,13 +32,13 @@ class RagEvalConfigChangeSetPrompt(Base):
     )
     prompt_version_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey("rag_eval_prompt_versions.id", ondelete="CASCADE"),
+        ForeignKey("prompt_versions.id", ondelete="CASCADE"),
         nullable=False,
     )
 
     change_set: Mapped["RagEvalConfigChangeSet"] = relationship(
         back_populates="prompt_changes"
     )
-    prompt_version: Mapped["RagEvalPromptVersion"] = relationship(
+    prompt_version: Mapped["PromptVersion"] = relationship(
         back_populates="change_set_prompts"
     )

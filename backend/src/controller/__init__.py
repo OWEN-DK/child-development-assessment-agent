@@ -6,7 +6,6 @@ from .config_management_controller import router as config_mgmt_router
 from .export_controller import router as export_router
 from .health_controller import router as health_router
 from .monitoring_controller import router as monitoring_router
-from .prompt_controller import router as prompt_router
 from .prompt_management_controller import router as prompt_mgmt_router
 from .rag_controller import router as rag_router
 from .rag_test_controller import router as rag_test_router
@@ -21,7 +20,6 @@ __all__ = [
     "rag_test_router",
     "config_router",
     "monitoring_router",
-    "prompt_router",
     "health_router",
     "config_mgmt_router",
     "prompt_mgmt_router",

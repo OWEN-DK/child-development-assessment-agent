@@ -107,11 +107,11 @@ class RagService:
             return results
 
     async def ingest_book(
-        self, file_path: str, original_filename: str = None, progress_callback=None
+        self, file_path: str, original_filename: str = None, progress_callback=None, task_id: str = None
     ):
         """导入书籍（原有接口）"""
         return await self.document_ingestion_service.ingest_book(
-            file_path, original_filename, progress_callback
+            file_path, original_filename, progress_callback, task_id
         )
 
     def delete_document(self, file_name: str) -> bool:

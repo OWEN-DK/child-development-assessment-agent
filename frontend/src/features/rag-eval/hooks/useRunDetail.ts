@@ -29,6 +29,7 @@ export function useRunDetail(id: string | undefined) {
           f1_score: event.hit_at_1 ? 1 : 0,
           mrr: event.hit_at_1 ? 1 : 0,
           ndcg_at_k: 0,
+          passed: event.passed || false,
           results: [],
           executed_at: event.timestamp,
           execution_time_ms: 0,
@@ -71,7 +72,7 @@ export function useRunDetail(id: string | undefined) {
       setProgress({ current: data.passed_test_cases || 0, total: data.total_test_cases || 0 });
 
       if (data.status === 'running') {
-        setSseUrl(`/api/rag-test/runs/${id}/sse`);
+        setSseUrl(`/api/v1/tasks/test_run/${id}/stream`);
       }
     }, {
       errorMsg: '加载失败',

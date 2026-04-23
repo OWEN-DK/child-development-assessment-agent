@@ -243,7 +243,7 @@ CREATE TABLE `test_runs` (
   `overall_ndcg` decimal(5,4) DEFAULT NULL COMMENT '整体NDCG',
   `total_test_cases` int NOT NULL COMMENT '总用例数',
   `passed_test_cases` int NOT NULL COMMENT '通过用例数',
-  `status` enum('running','completed','failed','cancelled') NOT NULL COMMENT '执行状态',
+  `status` enum('pending','running','completed','failed','cancelled') NOT NULL COMMENT '执行状态',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `completed_at` datetime DEFAULT NULL COMMENT '完成时间',
   `snapshot_id` varchar(64) DEFAULT NULL COMMENT '知识快照ID',
@@ -324,6 +324,22 @@ CREATE TABLE `llm_call_logs` (
   `duration_ms` int DEFAULT NULL COMMENT '耗时 (毫秒)',
   `status` enum('success','failed','timeout') NOT NULL COMMENT '调用状态',
   `error_message` text DEFAULT NULL COMMENT '错误信息',
+  `trace_id` varchar(64) DEFAULT NULL COMMENT 'Trace ID',
+  `span_id` varchar(64) DEFAULT NULL COMMENT 'Span ID',
+  `parent_span_id` varchar(64) DEFAULT NULL COMMENT '父 Span ID',
+  `prompt_messages` json DEFAULT NULL COMMENT '提示词消息',
+  `completion_message` text DEFAULT NULL COMMENT '完成消息',
+  `full_prompt_path` varchar(512) DEFAULT NULL COMMENT '完整提示词文件路径',
+  `full_completion_path` varchar(512) DEFAULT NULL COMMENT '完整完成内容文件路径',
+  `call_parameters` json DEFAULT NULL COMMENT '调用参数',
+  `model_parameters` json DEFAULT NULL COMMENT '模型参数',
+  `cost` decimal(10,4) DEFAULT NULL COMMENT '调用成本',
+  `tags` json DEFAULT NULL COMMENT '标签列表',
+  `tokens` int DEFAULT NULL COMMENT 'Token 总数',
+  `completion_start_time_ms` int DEFAULT NULL COMMENT '完成开始时间 (毫秒)',
+  `level` enum('DEBUG','INFO','WARNING','ERROR') DEFAULT 'INFO' COMMENT '日志级别',
+  `user_id` varchar(64) DEFAULT NULL COMMENT '用户 ID',
+  `session_id` varchar(64) DEFAULT NULL COMMENT '会话 ID',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_llm_logs_request_id` (`request_id`),
@@ -332,8 +348,10 @@ CREATE TABLE `llm_call_logs` (
   KEY `idx_llm_logs_model_name` (`model_name`),
   KEY `idx_llm_logs_duration_ms` (`duration_ms`),
   KEY `idx_llm_logs_status` (`status`),
-  KEY `idx_llm_logs_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM调用日志表';
+  KEY `idx_llm_logs_created_at` (`created_at`),
+  KEY `idx_llm_trace_id` (`trace_id`),
+  UNIQUE KEY `uk_llm_span_id` (`span_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 调用日志表';
 
 -- ----------------------------
 -- 15. 提示词版本表
@@ -353,9 +371,10 @@ CREATE TABLE `prompt_versions` (
   `fallback` text DEFAULT NULL COMMENT '降级内容',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  KEY `idx_prompt_versions_prompt_key` (`prompt_key`),
-  KEY `idx_prompt_versions_content_hash` (`content_hash`),
-  UNIQUE KEY `uk_prompt_key_version` (`prompt_key`, `version`)
+                                    KEY `idx_prompt_versions_prompt_key` (`prompt_key`),
+                                    KEY `idx_prompt_versions_content_hash` (`content_hash`),
+                                    KEY `idx_prompt_key_created` (`prompt_key`, `created_at`),
+                                    UNIQUE KEY `uk_prompt_key_version` (`prompt_key`, `version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='提示词版本表';
 
 -- ----------------------------

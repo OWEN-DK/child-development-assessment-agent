@@ -1,11 +1,11 @@
 /**
  * 提示词列表页
- * 路由: /rag-eval/prompts
+ * 路由: /prompt-management
  */
 
 import React, { useEffect, useState } from 'react';
 import { Table, Tag, Input, Select, Button, Space, Typography, Card } from 'antd';
-import { SearchOutlined, EditOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import { SearchOutlined, EditOutlined, UnorderedListOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { getPromptList, PromptMetadata } from '@/api/rag-eval/prompts';
 
@@ -57,7 +57,7 @@ const PromptListPage: React.FC = () => {
       dataIndex: 'name_zh',
       key: 'name_zh',
       render: (text: string, record: PromptMetadata) => (
-        <a onClick={() => navigate(`/rag-eval/prompts/${record.prompt_key}`)}>{text}</a>
+        <a onClick={() => navigate(`/prompt-management/${record.prompt_key}`)}>{text}</a>
       ),
     },
     {
@@ -97,16 +97,23 @@ const PromptListPage: React.FC = () => {
           <Button
             type="link"
             icon={<EditOutlined />}
-            onClick={() => navigate(`/rag-eval/prompts/${record.prompt_key}`)}
+            onClick={() => navigate(`/prompt-management/${record.prompt_key}`)}
           >
             编辑
           </Button>
           <Button
             type="link"
             icon={<UnorderedListOutlined />}
-            onClick={() => navigate(`/rag-eval/prompts/${record.prompt_key}/versions`)}
+            onClick={() => navigate(`/prompt-management/${record.prompt_key}/versions`)}
           >
             版本
+          </Button>
+          <Button
+            type="link"
+            icon={<ExperimentOutlined />}
+            onClick={() => navigate(`/prompt-management/${record.prompt_key}/test`)}
+          >
+            沙箱
           </Button>
         </Space>
       ),

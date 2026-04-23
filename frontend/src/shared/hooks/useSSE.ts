@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { API_BASE_URL } from '@shared/lib/constants';
 
 export interface UseSSEOptions {
   url: string;
@@ -8,6 +9,15 @@ export interface UseSSEOptions {
   onOpen?: () => void;
   reconnectAttempts?: number;
   reconnectInterval?: number;
+}
+
+function buildAbsoluteUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${base}${path}`;
 }
 
 export function useSSE(options: UseSSEOptions) {
@@ -44,7 +54,8 @@ export function useSSE(options: UseSSEOptions) {
     disconnect(); // Ensure any existing connection is closed
 
     try {
-      const es = new EventSource(url);
+      const absoluteUrl = buildAbsoluteUrl(url);
+      const es = new EventSource(absoluteUrl);
       eventSourceRef.current = es;
 
       es.onopen = () => {

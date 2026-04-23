@@ -10,10 +10,10 @@ class HybridRetrievalStep(PipelineStep):
     def __init__(self, name: str, config: dict[str, Any]):
         super().__init__(name, config)
         # 单例注入，避免每次调用创建新实例
-        from src.di import injector
-        from src.service.retrieval_service import RetrievalService
+        from src.core.di_container import injector
+        from src.core.interfaces import IRetrievalService
 
-        self._retrieval_service = injector.get(RetrievalService)
+        self._retrieval_service = injector.get(IRetrievalService)
 
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """执行混合检索"""
@@ -60,7 +60,11 @@ class HybridRetrievalStep(PipelineStep):
         self, bm25: list, vector: list, bm25_w: float, vector_w: float
     ) -> list:
         """融合结果"""
-        from src.core.hybrid_retrieval import HybridRetriever
+        from src.core.hybrid_retrieval import HybridRetrievalMerger
 
-        merger = HybridRetriever()
-        return merger.fuse(bm25, vector, bm25_w, vector_w)
+        return HybridRetrievalMerger.merge_results(
+            bm25_nodes=bm25,
+            vector_nodes=vector,
+            bm25_weight=bm25_w,
+            vector_weight=vector_w,
+        )

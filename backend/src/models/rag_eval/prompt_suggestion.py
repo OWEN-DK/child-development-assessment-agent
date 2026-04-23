@@ -7,6 +7,7 @@ from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.models.prompt_version import PromptVersion
 from src.models.rag_eval.enums import RagEvalPromptSuggestionType
 
 
@@ -29,11 +30,11 @@ class RagEvalPromptSuggestionRecord(Base):
     prompt_key: Mapped[str] = mapped_column(String(128), nullable=False)
     current_version_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("rag_eval_prompt_versions.id", ondelete="SET NULL"),
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
     )
     suggested_version_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("rag_eval_prompt_versions.id", ondelete="SET NULL"),
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
     )
 
     reason: Mapped[str | None] = mapped_column(Text)
@@ -49,18 +50,18 @@ class RagEvalPromptSuggestionRecord(Base):
     applied: Mapped[bool] = mapped_column(Boolean, default=False)
     applied_version_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("rag_eval_prompt_versions.id", ondelete="SET NULL"),
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
     )
 
     report: Mapped["RagEvalTestReport"] = relationship(
         back_populates="prompt_suggestions"
     )
-    current_prompt_version: Mapped["RagEvalPromptVersion | None"] = relationship(
+    current_prompt_version: Mapped["PromptVersion | None"] = relationship(
         foreign_keys=[current_version_id]
     )
-    suggested_prompt_version: Mapped["RagEvalPromptVersion | None"] = relationship(
+    suggested_prompt_version: Mapped["PromptVersion | None"] = relationship(
         foreign_keys=[suggested_version_id]
     )
-    applied_prompt_version: Mapped["RagEvalPromptVersion | None"] = relationship(
+    applied_prompt_version: Mapped["PromptVersion | None"] = relationship(
         foreign_keys=[applied_version_id]
     )

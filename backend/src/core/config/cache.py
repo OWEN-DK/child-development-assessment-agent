@@ -44,7 +44,9 @@ class ConfigCache:
         self._listen_task: asyncio.Task | None = None
         self._cleanup_task: asyncio.Task | None = None
         self._polling_task: asyncio.Task | None = None  # 轮询任务（pubsub降级备份）
+        self._pubsub = None  # 持有pubsub实例避免被提前GC
         self._initialized = False
+        self._ever_initialized = False
 
     @classmethod
     def get_instance(cls) -> "ConfigCache":
@@ -61,10 +63,16 @@ class ConfigCache:
         """初始化缓存
 
         加载最新配置并订阅 Redis 事件。
+        幂等操作：如果已初始化则跳过，防止 uvicorn reload 时重复创建后台任务。
 
         Args:
             redis_client: Redis 异步客户端实例
         """
+        if self._ever_initialized:
+            logger.debug("ConfigCache 已初始化过，跳过重复初始化")
+            return
+        self._ever_initialized = True
+
         self._redis_client = redis_client
 
         # 加载最新配置
@@ -81,6 +89,7 @@ class ConfigCache:
         # 启动后台清理任务
         self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
         self._initialized = True
+        logger.info("ConfigCache 初始化完成")
 
     async def reload(self) -> None:
         """从数据库重新加载最新配置
@@ -147,23 +156,25 @@ class ConfigCache:
 
     async def _listen_config_changes(self) -> None:
         """后台任务：监听 Redis 配置变更事件
-
         收到 config_changed 事件后自动重新加载配置。
         最多重试3次，失败后放弃pubsub，完全依赖轮询备份。
         """
-        pubsub = None
         retry_count = 0
         max_retries = 3  # 最多重试3次
+        subscribed = False  # 标记是否已记录订阅日志
         while retry_count < max_retries:
             try:
-                if not pubsub:
+                if not self._pubsub:
                     # 创建pubsub并订阅
-                    pubsub = self._redis_client.pubsub()
-                    await pubsub.subscribe("config_changed")
-                    logger.info("ConfigCache 已订阅 Redis config_changed 事件")
+                    self._pubsub = self._redis_client.pubsub()
+                    await self._pubsub.subscribe("config_changed")
+                    # 仅在首次订阅时记录日志，避免超时重连时日志过多
+                    if not subscribed:
+                        logger.info("ConfigCache 已订阅 Redis config_changed 事件")
+                        subscribed = True
                     retry_count = 0  # 连接成功重置重试计数
                 
-                async for message in pubsub.listen():
+                async for message in self._pubsub.listen():
                     if (
                         message["type"] == "message"
                         and message["channel"] == "config_changed"
@@ -174,27 +185,37 @@ class ConfigCache:
                 logger.info("ConfigCache 监听任务已取消")
                 break
             except Exception as e:
-                retry_count += 1
-                if retry_count >= max_retries:
-                    logger.error(f"ConfigCache 监听事件连续失败{max_retries}次，放弃pubsub监听，将使用轮询模式: {e}")
-                    break
-                logger.error(f"ConfigCache 监听事件异常，将在5秒后重试({retry_count}/{max_retries}): {e}")
+                from redis.exceptions import TimeoutError
+                # 超时是正常情况（长时间无消息），不增加重试计数，直接重连继续监听
+                if isinstance(e, TimeoutError):
+                    logger.debug("ConfigCache pubsub 监听超时（无新消息），将重连继续监听")
+                else:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        logger.error(f"ConfigCache 监听事件连续失败{max_retries}次，放弃pubsub监听，将使用轮询模式: {e}")
+                        break
+                    logger.error(f"ConfigCache 监听事件异常，将在5秒后重试({retry_count}/{max_retries}): {e}")
+                    await asyncio.sleep(5)
+                    # 非超时异常需要重置订阅状态
+                    subscribed = False
+                
                 try:
                     # 关闭旧的pubsub连接
-                    if pubsub:
-                        await pubsub.close()
+                    if self._pubsub:
+                        await self._pubsub.unsubscribe()
+                        await self._pubsub.close()
                 except:
                     pass
-                pubsub = None
-                # 等待5秒后重连
-                await asyncio.sleep(5)
+                self._pubsub = None
         
         # 清理pubsub资源
         try:
-            if pubsub:
-                await pubsub.close()
+            if self._pubsub:
+                await self._pubsub.unsubscribe()
+                await self._pubsub.close()
         except:
             pass
+        self._pubsub = None
 
     async def _periodic_polling(self) -> None:
         """定时轮询配置：每分钟自动拉取最新配置，作为pubsub的降级备份"""
@@ -239,7 +260,6 @@ class ConfigCache:
 
     async def shutdown(self) -> None:
         """关闭缓存服务，取消后台任务
-
         在应用关闭时调用，确保后台任务正确清理。
         """
         # 取消监听任务
@@ -249,6 +269,16 @@ class ConfigCache:
                 await self._listen_task
             except asyncio.CancelledError:
                 logger.info("ConfigCache 监听任务已关闭")
+
+        # 清理pubsub资源
+        try:
+            if self._pubsub:
+                await self._pubsub.unsubscribe()
+                await self._pubsub.close()
+                self._pubsub = None
+                logger.info("ConfigCache pubsub 连接已关闭")
+        except:
+            pass
 
         # 取消清理任务
         if self._cleanup_task and not self._cleanup_task.done():

@@ -64,16 +64,8 @@ class PromptManager:
         )
 
     async def list_versions(self, prompt_key: str) -> list[dict]:
-        versions = await self.prompt_storage.list_versions(prompt_key)
-        if not versions:
-            default_content = self.prompt_storage._get_fallback_prompt(prompt_key)
-            if default_content != "You are a helpful assistant.":
-                await self.create_prompt_version(
-                    prompt_key=prompt_key, content=default_content, description="系统默认版本",
-                    created_by="system", variables=[], tags=["default"], fallback=default_content,
-                )
-                versions = await self.prompt_storage.list_versions(prompt_key)
-        return versions
+        """查询提示词版本列表（不自动创建）"""
+        return await self.prompt_storage.list_versions(prompt_key)
 
     async def get_version_detail(self, prompt_key: str, version: str) -> Optional[dict]:
         return await self.prompt_storage.get_version_detail(prompt_key, version)
@@ -81,8 +73,8 @@ class PromptManager:
     async def compare_versions(self, prompt_key: str, version_1: str, version_2: str) -> dict:
         v1, v2 = await self.prompt_storage.get_versions_for_compare(prompt_key, version_1, version_2)
         return {
-            "version_1": {"version": version_1, "content": v1.content, "created_at": v1.created_at.isoformat() if v1.created_at else None, "description": v1.description},
-            "version_2": {"version": version_2, "content": v2.content, "created_at": v2.created_at.isoformat() if v2.created_at else None, "description": v2.description},
+            "version_1": {"version": v1.version_label, "content": v1.content, "created_at": v1.created_at.isoformat() if v1.created_at else None, "change_summary": v1.change_summary},
+            "version_2": {"version": v2.version_label, "content": v2.content, "created_at": v2.created_at.isoformat() if v2.created_at else None, "change_summary": v2.change_summary},
             "diff": {"added_chars": len(v2.content) - len(v1.content), "version_1_length": len(v1.content), "version_2_length": len(v2.content)},
         }
 

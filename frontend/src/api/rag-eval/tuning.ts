@@ -14,11 +14,10 @@ import type { PromptComparison } from '@/features/rag-eval/components/PromptComp
  */
 export const getSuggestions = async (
   reportId: string,
-  testSetId: string
+  _testSetId: string
 ): Promise<TuningSuggestion[]> => {
   const response = await apiClient.get<TuningSuggestion[]>(
-    `/rag/test/reports/${reportId}/suggestions`,
-    { params: { test_set_id: testSetId } }
+    `/api/v1/rag/test/reports/${reportId}/suggestions`
   );
   return response.data;
 };
@@ -30,9 +29,9 @@ export const ignoreSuggestion = async (
   suggestionId: string,
   data: IgnoreSuggestionRequest
 ): Promise<IgnoreSuggestionResponse> => {
-  const response = await apiClient.post<IgnoreSuggestionResponse>(
-    `/rag/test/suggestions/${suggestionId}/ignore`,
-    data
+  const response = await apiClient.patch<IgnoreSuggestionResponse>(
+    `/api/v1/rag/test/suggestions/${suggestionId}`,
+    { applied: false, ...data }
   );
   return response.data;
 };

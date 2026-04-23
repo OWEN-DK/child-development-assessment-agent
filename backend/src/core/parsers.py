@@ -61,113 +61,115 @@ class PDFParser:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         doc = fitz.open(file_path)
-        documents = []
-        file_name = os.path.basename(file_path)
-        total_pages = len(doc)
+        try:
+            documents = []
+            file_name = os.path.basename(file_path)
+            total_pages = len(doc)
 
-        # 首先尝试获取PDF书签（目录）
-        toc = doc.get_toc()
-        # 过滤无效的TOC条目（页码不在有效范围内）
-        valid_toc = [item for item in toc if 1 <= item[2] <= total_pages]
+            # 首先尝试获取PDF书签（目录）
+            toc = doc.get_toc()
+            # 过滤无效的TOC条目（页码不在有效范围内）
+            valid_toc = [item for item in toc if 1 <= item[2] <= total_pages]
 
-        if valid_toc:
-            logger.info(
-                f"PDF has {len(valid_toc)} bookmarks, splitting by bookmark structure"
-            )
+            if valid_toc:
+                logger.info(
+                    f"PDF has {len(valid_toc)} bookmarks, splitting by bookmark structure"
+                )
 
-            # 处理TOC，为每个书签计算结束页码并构建完整层级标题
-            processed_toc = []
-            # 记录各级别的父标题路径，用于拼接完整标题
-            level_path = []
+                # 处理TOC，为每个书签计算结束页码并构建完整层级标题
+                processed_toc = []
+                # 记录各级别的父标题路径，用于拼接完整标题
+                level_path = []
 
-            for i, (level, title, start_page) in enumerate(valid_toc):
-                # 查找下一个同级或更高级别的书签，作为当前书签的结束边界
-                end_page = total_pages
-                for j in range(i + 1, len(valid_toc)):
-                    next_level, _, next_start_page = valid_toc[j]
-                    if next_level <= level:
-                        end_page = next_start_page - 1
-                        break
+                for i, (level, title, start_page) in enumerate(valid_toc):
+                    # 查找下一个同级或更高级别的书签，作为当前书签的结束边界
+                    end_page = total_pages
+                    for j in range(i + 1, len(valid_toc)):
+                        next_level, _, next_start_page = valid_toc[j]
+                        if next_level <= level:
+                            end_page = next_start_page - 1
+                            break
 
-                # 确保结束页码不小于开始页码且不超过总页数
-                end_page = max(start_page, min(end_page, total_pages))
+                    # 确保结束页码不小于开始页码且不超过总页数
+                    end_page = max(start_page, min(end_page, total_pages))
 
-                # 构建完整层级标题路径
-                # 先截断到当前层级的父级
-                while len(level_path) >= level:
-                    level_path.pop()
-                # 添加当前标题到路径
-                level_path.append(title)
-                # 拼接完整标题
-                full_chapter_title = "-".join(level_path)
+                    # 构建完整层级标题路径
+                    # 先截断到当前层级的父级
+                    while len(level_path) >= level:
+                        level_path.pop()
+                    # 添加当前标题到路径
+                    level_path.append(title)
+                    # 拼接完整标题
+                    full_chapter_title = "-".join(level_path)
 
-                processed_toc.append(
-                    {
-                        "level": level,
-                        "title": title,
-                        "full_chapter_title": full_chapter_title,
-                        "start_page": start_page,
-                        "end_page": end_page,
+                    processed_toc.append(
+                        {
+                            "level": level,
+                            "title": title,
+                            "full_chapter_title": full_chapter_title,
+                            "start_page": start_page,
+                            "end_page": end_page,
+                        }
+                    )
+
+                # 按书签分割文档
+                for toc_idx, toc_item in enumerate(processed_toc):
+                    # 合并当前书签范围内的所有页面文本
+                    combined_text = ""
+                    for page_num in range(toc_item["start_page"] - 1, toc_item["end_page"]):
+                        page = doc[page_num]
+                        text = page.get_text()
+                        if text.strip():
+                            combined_text += text + "\n\n"
+
+                    if len(combined_text.strip()) < 10:
+                        continue
+
+                    metadata = {
+                        "file_name": file_name,
+                        "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
+                        "section_title": toc_item["title"],  # 当前小节标题
+                        "page_label": f"{toc_item['start_page']}-{toc_item['end_page']}",
+                        "total_pages": total_pages,
+                        "toc_level": toc_item["level"],
+                        "start_page": toc_item["start_page"],
+                        "end_page": toc_item["end_page"],
                     }
-                )
 
-            # 按书签分割文档
-            for toc_idx, toc_item in enumerate(processed_toc):
-                # 合并当前书签范围内的所有页面文本
-                combined_text = ""
-                for page_num in range(toc_item["start_page"] - 1, toc_item["end_page"]):
-                    page = doc[page_num]
+                    documents.append(
+                        Document(text=combined_text.strip(), metadata=metadata)
+                    )
+
+                    # 报告进度
+                    if progress_callback:
+                        current_page = toc_item["end_page"]
+                        progress_callback(current_page, total_pages)
+
+                logger.info(f"Split PDF into {len(documents)} sections based on bookmarks")
+            else:
+                # 没有书签，按原有逻辑逐页分割
+                logger.info("PDF has no bookmarks, splitting by page")
+                for page_num, page in enumerate(doc):
                     text = page.get_text()
-                    if text.strip():
-                        combined_text += text + "\n\n"
+                    # 降低过滤阈值，保留更多内容，即使是少量文本
+                    if len(text.strip()) < 10:
+                        continue
 
-                if len(combined_text.strip()) < 10:
-                    continue
+                    metadata = {
+                        "file_name": file_name,
+                        "page_label": str(page_num + 1),
+                        "total_pages": total_pages,
+                    }
 
-                metadata = {
-                    "file_name": file_name,
-                    "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
-                    "section_title": toc_item["title"],  # 当前小节标题
-                    "page_label": f"{toc_item['start_page']}-{toc_item['end_page']}",
-                    "total_pages": total_pages,
-                    "toc_level": toc_item["level"],
-                    "start_page": toc_item["start_page"],
-                    "end_page": toc_item["end_page"],
-                }
+                    documents.append(Document(text=text, metadata=metadata))
 
-                documents.append(
-                    Document(text=combined_text.strip(), metadata=metadata)
-                )
+                    # 报告进度
+                    if progress_callback:
+                        progress_callback(page_num + 1, total_pages)
 
-                # 报告进度
-                if progress_callback:
-                    current_page = toc_item["end_page"]
-                    progress_callback(current_page, total_pages)
-
-            logger.info(f"Split PDF into {len(documents)} sections based on bookmarks")
-        else:
-            # 没有书签，按原有逻辑逐页分割
-            logger.info("PDF has no bookmarks, splitting by page")
-            for page_num, page in enumerate(doc):
-                text = page.get_text()
-                # 降低过滤阈值，保留更多内容，即使是少量文本
-                if len(text.strip()) < 10:
-                    continue
-
-                metadata = {
-                    "file_name": file_name,
-                    "page_label": str(page_num + 1),
-                    "total_pages": total_pages,
-                }
-
-                documents.append(Document(text=text, metadata=metadata))
-
-                # 报告进度
-                if progress_callback:
-                    progress_callback(page_num + 1, total_pages)
-
-        doc.close()
-        return documents
+            return documents
+        finally:
+            doc.close()
 
 
 class PDFVLParser:
@@ -328,16 +330,24 @@ class PDFVLParser:
 
 class EPUBParser:
     @staticmethod
-    def _get_item_content(book, item_href: str) -> Optional[str]:
+    def _get_item_content(href_item_map: Dict[str, Any], item_href: str) -> Optional[str]:
         """根据href获取item的文本内容"""
-        for item in book.get_items():
-            if (
-                item.get_type() == ebooklib.ITEM_DOCUMENT
-                and item.get_name() == item_href
-            ):
-                content = item.get_content()
-                soup = BeautifulSoup(content, "html.parser")
-                return soup.get_text(separator="\n")
+        item = href_item_map.get(item_href)
+        if not item:
+            return None
+        
+        try:
+            content = item.get_content()
+            soup = BeautifulSoup(content, "html.parser")
+            text = soup.get_text(separator="\n")
+            # 及时释放大对象引用，帮助垃圾回收
+            del content
+            del soup
+            return text
+        finally:
+            # 释放item的内容缓存
+            if hasattr(item, '_content'):
+                del item._content
         return None
 
     @staticmethod
@@ -346,8 +356,8 @@ class EPUBParser:
         level: int,
         level_path: list,
         processed_toc: list,
-        book,
-        total_pages: int,
+        book = None,
+        total_pages: int = 0,
     ):
         """递归遍历TOC节点，构建层级结构"""
         if isinstance(toc_node, epub.Link):
@@ -407,91 +417,111 @@ class EPUBParser:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         book = epub.read_epub(file_path)
-        documents = []
-        file_name = os.path.basename(file_path)
-        total_pages = len(
-            [
-                item
-                for item in book.get_items()
-                if item.get_type() == ebooklib.ITEM_DOCUMENT
-            ]
-        )
+        try:
+            documents = []
+            file_name = os.path.basename(file_path)
+            
+            # 提前构建href到document item的映射，避免重复遍历
+            href_item_map = {}
+            document_items = []
+            for item in book.get_items():
+                if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                    document_items.append(item)
+                    href_item_map[item.get_name()] = item
+            
+            total_pages = len(document_items)
+            # 释放book items的引用，帮助垃圾回收
+            if hasattr(book, '_items'):
+                del book._items
 
-        # 首先尝试获取EPUB的TOC
-        toc = book.toc
-        processed_toc = []
+            # 首先尝试获取EPUB的TOC
+            toc = book.toc
+            processed_toc = []
 
-        if toc:
-            logger.info(f"EPUB has TOC, processing with hierarchical structure")
-            level_path = []
-            # 递归遍历TOC构建层级结构
-            for node in toc:
-                EPUBParser._traverse_toc(
-                    node, 1, level_path, processed_toc, book, total_pages
-                )
+            if toc:
+                logger.info(f"EPUB has TOC, processing with hierarchical structure")
+                level_path = []
+                # 递归遍历TOC构建层级结构，不需要book参数了
+                for node in toc:
+                    EPUBParser._traverse_toc(
+                        node, 1, level_path, processed_toc, None, total_pages
+                    )
 
-            # 为每个TOC条目获取内容并创建Document
-            for idx, toc_item in enumerate(processed_toc):
-                text = EPUBParser._get_item_content(book, toc_item["href"])
-                if not text or not text.strip():
-                    continue
+                # 为每个TOC条目获取内容并创建Document
+                for idx, toc_item in enumerate(processed_toc):
+                    text = EPUBParser._get_item_content(href_item_map, toc_item["href"])
+                    if not text or not text.strip():
+                        continue
 
-                metadata = {
-                    "file_name": file_name,
-                    "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
-                    "section_title": toc_item["title"],  # 当前小节标题
-                    "page_label": toc_item["href"],
-                    "toc_level": toc_item["level"],
-                    "total_pages": total_pages,
-                }
+                    metadata = {
+                        "file_name": file_name,
+                        "chapter_title": toc_item["full_chapter_title"],  # 完整层级标题
+                        "section_title": toc_item["title"],  # 当前小节标题
+                        "page_label": toc_item["href"],
+                        "toc_level": toc_item["level"],
+                        "total_pages": total_pages,
+                    }
 
-                documents.append(Document(text=text.strip(), metadata=metadata))
+                    documents.append(Document(text=text.strip(), metadata=metadata))
 
-                # 报告进度
-                if progress_callback:
-                    progress_callback(idx + 1, len(processed_toc))
+                    # 报告进度
+                    if progress_callback:
+                        progress_callback(idx + 1, len(processed_toc))
 
-            logger.info(f"Processed {len(documents)} chapters from EPUB TOC")
-        else:
-            # 没有TOC，按原有逻辑处理每个document item
-            logger.info("EPUB has no TOC, processing by document items")
-            document_items = [
-                item
-                for item in book.get_items()
-                if item.get_type() == ebooklib.ITEM_DOCUMENT
-            ]
+                logger.info(f"Processed {len(documents)} chapters from EPUB TOC")
+            else:
+                # 没有TOC，按原有逻辑处理每个document item
+                logger.info("EPUB has no TOC, processing by document items")
 
-            for idx, item in enumerate(document_items):
-                content = item.get_content()
-                soup = BeautifulSoup(content, "html.parser")
-                text = soup.get_text(separator="\n")
+                for idx, item in enumerate(document_items):
+                    try:
+                        content = item.get_content()
+                        soup = BeautifulSoup(content, "html.parser")
+                        text = soup.get_text(separator="\n")
 
-                if not text.strip():
-                    continue
+                        if not text.strip():
+                            continue
 
-                # Try to extract chapter title
-                title = ""
-                if soup.h1:
-                    title = soup.h1.get_text().strip()
-                elif soup.h2:
-                    title = soup.h2.get_text().strip()
-                elif soup.title:
-                    title = soup.title.get_text().strip()
+                        # Try to extract chapter title
+                        title = ""
+                        if soup.h1:
+                            title = soup.h1.get_text().strip()
+                        elif soup.h2:
+                            title = soup.h2.get_text().strip()
+                        elif soup.title:
+                            title = soup.title.get_text().strip()
 
-                metadata = {
-                    "file_name": file_name,
-                    "chapter_title": title if title else item.get_name(),
-                    "page_label": item.get_name(),
-                    "total_pages": total_pages,
-                }
+                        metadata = {
+                            "file_name": file_name,
+                            "chapter_title": title if title else item.get_name(),
+                            "page_label": item.get_name(),
+                            "total_pages": total_pages,
+                        }
 
-                documents.append(Document(text=text, metadata=metadata))
+                        documents.append(Document(text=text, metadata=metadata))
+                    finally:
+                        # 及时释放大对象
+                        if 'content' in locals():
+                            del content
+                        if 'soup' in locals():
+                            del soup
+                        if hasattr(item, '_content'):
+                            del item._content
 
-                # 报告进度
-                if progress_callback:
-                    progress_callback(idx + 1, len(document_items))
+                    # 报告进度
+                    if progress_callback:
+                        progress_callback(idx + 1, len(document_items))
+            
+            # 释放不再需要的映射
+            del href_item_map
+            del document_items
 
-        return documents
+            return documents
+        finally:
+            # 释放book对象的所有资源
+            if hasattr(book, 'close'):
+                book.close()
+            del book
 
 
 class PDFParserV2:

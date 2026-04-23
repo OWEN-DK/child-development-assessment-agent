@@ -11,9 +11,16 @@ BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
 class RagPipelineSettings(BaseSettings):
     """RAG 导入流水线配置"""
 
+    # 查询流水线开关
+    rag_query_pipeline_enabled: bool = Field(
+        default=True,
+        validation_alias="RAG_QUERY_PIPELINE_ENABLED",
+        description="是否启用声明式查询流水线（PipelineOrchestrator）",
+    )
+
     # 解析并发
     rag_vl_max_workers: int = Field(
-        default=2,
+        default=4,
         validation_alias="RAG_VL_MAX_WORKERS",
         description="VL 解析器最大并发线程数",
     )
@@ -25,7 +32,7 @@ class RagPipelineSettings(BaseSettings):
 
     # 元数据提取
     rag_metadata_extraction_concurrency: int = Field(
-        default=20,
+        default=8,
         validation_alias="RAG_METADATA_EXTRACTION_CONCURRENCY",
         description="元数据提取最大并发数",
     )
@@ -40,6 +47,13 @@ class RagPipelineSettings(BaseSettings):
         default=300,
         validation_alias="RAG_AUTO_PERSIST_INTERVAL",
         description="自动持久化间隔（秒）",
+    )
+    
+    # 索引插入批处理
+    rag_index_insert_batch_size: int = Field(
+        default=50,
+        validation_alias="RAG_INDEX_INSERT_BATCH_SIZE",
+        description="索引插入批处理大小，控制每次插入的节点数量以优化内存使用",
     )
 
     # 分层内容生成

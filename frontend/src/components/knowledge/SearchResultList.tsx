@@ -1,5 +1,5 @@
 import React from 'react';
-import { List, Button, Space, Tag, Typography, Pagination, Empty, Tooltip } from 'antd';
+import { Button, Flex, Tag, Typography, Pagination, Empty, Tooltip, Card } from 'antd';
 import { EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { SearchResultItem } from '../../api/knowledge/types';
 import { highlightKeywords } from '@shared/lib/highlight';
@@ -46,27 +46,22 @@ export const SearchResultList: React.FC<SearchResultListProps> = React.memo(({
 
   return (
     <>
-      <List
-        dataSource={results}
-        renderItem={(item) => (
-          <List.Item
-            key={item.id}
-            className={styles.resultItem}
-            actions={[
-              <Button
-                type="link"
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() => onPreview(item)}
-              >
-                查看详情
-              </Button>
-            ]}
-          >
-            <List.Item.Meta
-              avatar={<FileTextOutlined style={{ fontSize: '24px', color: '#1890ff' }} />}
-              title={
-                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+      <Flex vertical gap="small">
+        {results.map((item) => (
+          <Card key={item.id} size="small" className={styles.resultItem} extra={
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => onPreview(item)}
+            >
+              查看详情
+            </Button>
+          }>
+            <Flex vertical gap="small" style={{ width: '100%' }}>
+              <Flex align="flex-start" gap="small">
+                <FileTextOutlined style={{ fontSize: '24px', color: '#1890ff', marginTop: 4 }} />
+                <Flex vertical gap="small" style={{ flex: 1 }}>
                   <div className={styles.resultTitle}>
                     {highlightKeywords(
                       item.content.slice(0, 100) + (item.content.length > 100 ? '...' : ''),
@@ -74,7 +69,7 @@ export const SearchResultList: React.FC<SearchResultListProps> = React.memo(({
                       styles.highlight
                     )}
                   </div>
-                  <Space size="small" wrap>
+                  <Flex gap="small" wrap>
                     <Tooltip title="检索相关度：内容与查询关键词的相关程度，来自 Cross-Encoder 重排序">
                       <Tag color="blue">检索相关度: {(item.score * 100).toFixed(1)}%</Tag>
                     </Tooltip>
@@ -96,37 +91,35 @@ export const SearchResultList: React.FC<SearchResultListProps> = React.memo(({
                         }
                       </Tag>
                     )}
-                  </Space>
-                </Space>
-              }
-              description={
-                <div className={styles.resultMeta}>
-                  {Array.isArray(item.topics) && item.topics.length > 0 && (
-                    <div className={styles.topicRow}>
-                      <Typography.Text type="secondary" strong>主题:</Typography.Text>
-                      <Space wrap size="small" style={{ marginLeft: 8 }}>
-                        {item.topics.map((topic: string, idx: number) => (
-                          <Tag key={idx}>{topic}</Tag>
-                        ))}
-                      </Space>
-                    </div>
-                  )}
-                  {Array.isArray(item.brain_regions) && item.brain_regions.length > 0 && (
-                    <div className={styles.topicRow}>
-                      <Typography.Text type="secondary" strong>脑区:</Typography.Text>
-                      <Space wrap size="small" style={{ marginLeft: 8 }}>
-                        {item.brain_regions.map((region: string, idx: number) => (
-                          <Tag key={idx} color="cyan">{region}</Tag>
-                        ))}
-                      </Space>
-                    </div>
-                  )}
-                </div>
-              }
-            />
-          </List.Item>
-        )}
-      />
+                  </Flex>
+                </Flex>
+              </Flex>
+              <div className={styles.resultMeta}>
+                {Array.isArray(item.topics) && item.topics.length > 0 && (
+                  <div className={styles.topicRow}>
+                    <Typography.Text type="secondary" strong>主题:</Typography.Text>
+                    <Flex wrap gap="small" style={{ marginLeft: 8 }}>
+                      {item.topics.map((topic: string, idx: number) => (
+                        <Tag key={idx}>{topic}</Tag>
+                      ))}
+                    </Flex>
+                  </div>
+                )}
+                {Array.isArray(item.brain_regions) && item.brain_regions.length > 0 && (
+                  <div className={styles.topicRow}>
+                    <Typography.Text type="secondary" strong>脑区:</Typography.Text>
+                    <Flex wrap gap="small" style={{ marginLeft: 8 }}>
+                      {item.brain_regions.map((region: string, idx: number) => (
+                        <Tag key={idx} color="cyan">{region}</Tag>
+                      ))}
+                    </Flex>
+                  </div>
+                )}
+              </div>
+            </Flex>
+          </Card>
+        ))}
+      </Flex>
 
       {total > pageSize && (
         <div className={styles.pagination}>

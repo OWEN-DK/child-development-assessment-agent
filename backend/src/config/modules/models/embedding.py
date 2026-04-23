@@ -40,6 +40,16 @@ class EmbeddingSettings(BaseSettings):
         validation_alias="EMBEDDING_PROVIDER",
         description="Embedding 提供商（dashscope/openai/ollama）",
     )
+    embedding_use_async_batch: bool = Field(
+        False,
+        validation_alias="EMBEDDING_USE_ASYNC_BATCH",
+        description="是否使用异步批量 API（text-embedding-async-v2），适用于大规模文档导入",
+    )
+    embedding_async_batch_threshold: int = Field(
+        50,
+        validation_alias="EMBEDDING_ASYNC_BATCH_THRESHOLD",
+        description="触发异步批量 API 的节点数量阈值，默认 50",
+    )
 
     @property
     def embedding_config(self) -> dict:
@@ -49,4 +59,6 @@ class EmbeddingSettings(BaseSettings):
             "model": self.embedding_model_name,
             "batch_size": self.embedding_batch_size,
             "max_length": self.embedding_max_text_length,
+            "use_async_batch": self.embedding_use_async_batch,
+            "async_batch_threshold": self.embedding_async_batch_threshold,
         }

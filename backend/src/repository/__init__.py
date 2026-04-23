@@ -4,7 +4,6 @@ from .config_repository import (ConfigAuditLogRepository,
 from .document_repository import (DocumentRecordRepository,
                                   SourceDocumentRepository)
 from .monitor_repository import ABTestMetricRepository, LLMCallLogRepository
-from .prompt_repository import PromptABTestRepository, PromptVersionRepository
 from .test_case_repository import (TestCaseDraftRepository, TestCaseRepository,
                                    TestRunRepository, TestRunResultRepository,
                                    TestSetCaseRepository, TestSetRepository)
@@ -24,9 +23,6 @@ __all__ = [
     "TestSetCaseRepository",
     "TestRunRepository",
     "TestRunResultRepository",
-    # Prompt
-    "PromptVersionRepository",
-    "PromptABTestRepository",
     # Monitor
     "LLMCallLogRepository",
     "ABTestMetricRepository",

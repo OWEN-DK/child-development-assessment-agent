@@ -9,6 +9,7 @@ from typing import Callable, List, Optional
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, Node
 
+from src.core.metadata.node_cleaner import clean_node_content
 from src.core.metadata.splitter_manager import get_chapter_splitter
 from src.utils.logger import logger
 from src.utils.text_cleaner import clean_document_text
@@ -96,6 +97,7 @@ def _process_chapter(
     for sub_doc in docs_to_process:
         try:
             chunks = splitter.get_nodes_from_documents([sub_doc])
+            chunks = _filter_empty_nodes(chunks)
             final_chunks = _refine_chunks(chunks, chunk_target_size)
             for chunk in final_chunks:
                 _attach_metadata(chunk, doc.metadata, file_hash)
@@ -119,8 +121,32 @@ def _pre_split_if_needed(doc: Document) -> List[Document]:
     if len(doc.text) > MAX_PRE_SPLIT_SIZE:
         logger.debug(f"Chapter too large ({len(doc.text)} chars), pre-splitting...")
         pre_splitter = SentenceSplitter(chunk_size=MAX_PRE_SPLIT_SIZE, chunk_overlap=500)
-        return pre_splitter.get_nodes_from_documents([doc])
+        return _filter_empty_nodes(pre_splitter.get_nodes_from_documents([doc]))
     return [doc]
+
+
+def _filter_empty_nodes(nodes: List) -> List:
+    """过滤空节点和纯空格节点"""
+    from llama_index.core.schema import TextNode
+    
+    filtered = []
+    for node in nodes:
+        cleaned = clean_node_content(node.text)
+        if not cleaned:
+            continue
+        new_node = TextNode(
+            text=cleaned,
+            metadata=node.metadata.copy(),
+            relationships=node.relationships.copy(),
+            embedding=node.embedding,
+            excluded_embed_metadata_keys=node.excluded_embed_metadata_keys.copy(),
+            excluded_llm_metadata_keys=node.excluded_llm_metadata_keys.copy(),
+            metadata_separator=node.metadata_separator,
+            metadata_template=node.metadata_template,
+            text_template=node.text_template,
+        )
+        filtered.append(new_node)
+    return filtered
 
 
 def _refine_chunks(chunks: List, chunk_target_size: int) -> List:
@@ -130,17 +156,19 @@ def _refine_chunks(chunks: List, chunk_target_size: int) -> List:
 
     merged = _merge_adjacent(valid_chunks, chunk_target_size)
 
+    # 二次分割阈值降低至 1.2 倍，确保不超过 embedding 模型 1536 字符限制
+    SECONDARY_SPLIT_THRESHOLD = int(chunk_target_size * 1.2)
     secondary = SentenceSplitter(chunk_size=chunk_target_size, chunk_overlap=200)
     final = []
     for chunk in merged:
-        if len(chunk.text) > chunk_target_size * 1.5:
+        if len(chunk.text) > SECONDARY_SPLIT_THRESHOLD:
             sub = secondary.get_nodes_from_documents(
                 [Document(text=chunk.text, metadata=chunk.metadata)]
             )
             final.extend(sub)
         else:
             final.append(chunk)
-    return final
+    return _filter_empty_nodes(final)
 
 
 def _merge_adjacent(valid_chunks: List, chunk_target_size: int) -> List:
@@ -156,8 +184,9 @@ def _merge_adjacent(valid_chunks: List, chunk_target_size: int) -> List:
         combined = len(current.text) + len(next_chunk.text)
 
         if curr_ch == next_ch and combined <= chunk_target_size * 1.2:
+            merged_text = current.text.strip() + "\n\n" + next_chunk.text.strip()
             current = Document(
-                text=current.text + "\n\n" + next_chunk.text, metadata=current.metadata
+                text=merged_text, metadata=current.metadata
             )
         else:
             merged.append(current)
@@ -172,6 +201,7 @@ def _fallback_split(
     """降级为规则分块"""
     splitter = SentenceSplitter(chunk_size=chunk_target_size, chunk_overlap=200)
     chunks = splitter.get_nodes_from_documents(docs)
+    chunks = _filter_empty_nodes(chunks)
     for chunk in chunks:
         _attach_metadata(chunk, meta, file_hash)
     return chunks

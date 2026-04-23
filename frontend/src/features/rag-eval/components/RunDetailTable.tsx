@@ -25,7 +25,7 @@ export function RunDetailTable({ results }: RunDetailTableProps) {
       key: 'status',
       width: 60,
       render: (_: unknown, record: TestResult) => (
-        record.precision > 0
+        record.passed
           ? <Tag color="green"><CheckCircleOutlined /></Tag>
           : <Tag color="red"><CloseCircleOutlined /></Tag>
       ),

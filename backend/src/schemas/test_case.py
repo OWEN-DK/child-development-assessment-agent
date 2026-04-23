@@ -42,6 +42,7 @@ class DocumentStatus(str, Enum):
 class TestRunStatus(str, Enum):
     """测试运行状态"""
 
+    PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -129,12 +130,34 @@ class SourceDocument(BaseModel):
 class GenerationParams(BaseModel):
     """测试用例生成参数"""
 
-    target_domains: List[str] = Field(default_factory=list)
-    age_range: Tuple[int, int] = Field(default=(0, 18))
-    count: int = 10
-    difficulty: str = "medium"
-    llm_model: str = "qwen-plus"
-    temperature: float = 0.7
+    # 维度选择
+    target_domains: List[str] = Field(default_factory=list, description="选中的发展领域")
+    age_stages: List[str] = Field(default_factory=list, description="选中的年龄段标签（如 '3-6岁'）")
+
+    # 每组合草稿数（替代旧 count）
+    drafts_per_combination: int = Field(default=3, ge=1, le=10, description="每个组合生成草稿数")
+
+    # 查询类型与难度
+    query_types: List[str] = Field(
+        default_factory=lambda: ["事实性查询", "比较性查询", "方案性查询"],
+        description="选中的查询类型",
+    )
+    difficulty_levels: List[str] = Field(
+        default_factory=lambda: ["入门级", "中级", "高级"],
+        description="选中的难度级别",
+    )
+
+    # LLM 参数
+    llm_model: str = Field(default="qwen-plus", description="使用的 LLM 模型")
+    temperature: float = Field(default=0.8, ge=0.0, le=1.0, description="温度参数")
+
+    # 执行模式
+    mode: str = Field(default="append", pattern="^(append|overwrite)$", description="入库模式：追加/覆盖")
+
+    # ========== 向后兼容字段（已废弃，仅用于旧 API 调用降级） ==========
+    age_range: Optional[Tuple[int, int]] = Field(default=None, deprecated=True)
+    count: Optional[int] = Field(default=None, deprecated=True)
+    difficulty: Optional[str] = Field(default=None, deprecated=True)
 
 
 class TestCaseDraft(BaseModel):
@@ -142,9 +165,14 @@ class TestCaseDraft(BaseModel):
 
     id: str
     source_document_id: str
+    source_document_name: Optional[str] = None
     query: str
-    age: int
+    age: float  # 月龄（与 ORM DECIMAL(4,1) 一致，前端展示时取整）
     domain: str = ""
+    age_stage_label: str = Field(default="", description="年龄段标签（如 '3-6岁'）")
+    draft_index: int = Field(default=0, description="组合内草稿索引（0, 1, 2...）")
+    batch_id: Optional[str] = Field(default=None, description="生成批次 ID")
+    version: int = Field(default=1, description="乐观锁版本号")
     expected_knowledge_ids: List[str] = Field(default_factory=list)
     expected_keywords: List[str] = Field(default_factory=list)
     description: str = ""
@@ -317,6 +345,21 @@ class GenerateDraftsRequest(BaseModel):
     params: GenerationParams
 
 
+class CreateDraftRequest(BaseModel):
+    """创建草稿请求"""
+
+    source_document_id: str
+    query: str
+    age: int
+    domain: str
+    expected_knowledge_ids: List[str] = Field(default_factory=list)
+    expected_keywords: List[str] = Field(default_factory=list)
+    description: str = ""
+    answer_points: List[str] = Field(default_factory=list)
+    professional_terms: List[str] = Field(default_factory=list)
+    age_requirement: str = ""
+
+
 class UpdateDraftRequest(BaseModel):
     """更新草稿请求"""
 
@@ -342,7 +385,6 @@ class CreateTestSetRequest(BaseModel):
 
     name: str
     description: str = ""
-    source_type: str = "manual"
 
 
 class UpdateTestSetRequest(BaseModel):

@@ -11,25 +11,19 @@ RetrievalService = RetrievalFacade
 
 # 向后兼容：保持 retrieval_service 单例可用
 _retrieval_service_instance = None
+retrieval_service = None
 
 
-def get_retrieval_service(index_manager, cache_service):
+def get_retrieval_service(index_manager = None, cache_service = None):
     """获取检索服务单例（向后兼容）"""
-    global _retrieval_service_instance
-    if _retrieval_service_instance is None:
-        _retrieval_service_instance = get_retrieval_facade(index_manager, cache_service)
-    return _retrieval_service_instance
-
-
-# 导出单例变量名（延迟初始化，避免循环依赖）
-def _init_retrieval_service():
-    """延迟初始化 retrieval_service"""
     global _retrieval_service_instance, retrieval_service
-    from src.service.cache_service import cache_service
-    from src.service.index_manager_service import IndexManagerService
-    index_mgr = IndexManagerService()
-    _retrieval_service_instance = get_retrieval_facade(index_mgr, cache_service)
-    retrieval_service = _retrieval_service_instance
-
-# 触发初始化
-_init_retrieval_service()
+    if _retrieval_service_instance is None:
+        if not index_manager or not cache_service:
+            # 从DI容器获取依赖
+            from src.core.di_container import injector
+            from src.core.interfaces import IIndexManager, ICacheService
+            index_manager = injector.get(IIndexManager)
+            cache_service = injector.get(ICacheService)
+        _retrieval_service_instance = get_retrieval_facade(index_manager, cache_service)
+        retrieval_service = _retrieval_service_instance
+    return _retrieval_service_instance

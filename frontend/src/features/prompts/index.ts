@@ -1,1 +1,0 @@
-export { PromptManagementPage } from './PromptManagementPage';
