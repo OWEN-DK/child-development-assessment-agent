@@ -4,7 +4,6 @@ from typing import Any, Callable
 
 from src.config import settings
 from src.core.metadata_processor import MetadataProcessor
-from src.schemas import DocumentMetadata, DocumentRecord
 from src.service.document_manager import document_manager
 from src.utils.di import get_task_state_service
 from src.utils.logger import logger
@@ -36,13 +35,15 @@ class ChunkingAndIndexing:
         is_epub = file_path.lower().endswith(".epub")
         is_pdf_with_bookmarks = file_path.lower().endswith(".pdf") and "toc_level" in documents[0].metadata
         loop = asyncio.get_running_loop()
-        pending_doc = DocumentRecord(
-            file_hash=file_hash, file_name=file_name, ref_doc_ids=[file_hash],
-            metadata=DocumentMetadata(title=file_name, total_pages=len(documents)),
-            status="processing", progress=30.0,
-        )
-        # 使用线程池执行同步的文件写入操作，避免阻塞事件循环
-        await loop.run_in_executor(None, document_manager.add_document, pending_doc)
+        pending_doc = {
+            "file_hash": file_hash,
+            "file_name": file_name,
+            "ref_doc_ids": [file_hash],
+            "metadata": {"title": file_name, "total_pages": len(documents)},
+            "status": "processing",
+            "progress": 30.0,
+        }
+        await document_manager.add_document(pending_doc)
         if progress_callback:
             await _safe_call_callback(progress_callback, "chunking", 30.0, f"文件解析完成，正在分块处理")
         await task_state_service.update(
@@ -54,10 +55,13 @@ class ChunkingAndIndexing:
             file_type = "EPUB" if is_epub else "PDF with bookmarks"
             logger.info(f"Using chapter + paragraph based chunking for {file_type} file")
             def chunking_progress(stage: str, progress: float, message: str):
+                nonlocal pending_doc
                 if progress_callback:
                     overall_progress = 30.0 + (progress / 100.0 * 20.0)
-                    pending_doc.progress = overall_progress
-                    document_manager.add_document(pending_doc)
+                    pending_doc["progress"] = overall_progress
+                    asyncio.run_coroutine_threadsafe(
+                        document_manager.add_document(pending_doc), loop
+                    )
                     res = progress_callback(stage, overall_progress, message)
                     if asyncio.iscoroutine(res):
                         asyncio.run_coroutine_threadsafe(res, loop)
@@ -82,11 +86,13 @@ class ChunkingAndIndexing:
         )
 
         def wrapped_progress(stage: str, progress: float, message: str):
+            nonlocal pending_doc
             if progress_callback:
                 overall_progress = 30.0 + (progress * 0.6)
-                pending_doc.progress = overall_progress
-                # 使用线程池执行同步的文件写入操作，避免阻塞事件循环
-                loop.run_in_executor(None, document_manager.add_document, pending_doc)
+                pending_doc["progress"] = overall_progress
+                asyncio.run_coroutine_threadsafe(
+                    document_manager.add_document(pending_doc), loop
+                )
                 res = progress_callback(stage, overall_progress, message)
                 if asyncio.iscoroutine(res):
                     asyncio.run_coroutine_threadsafe(res, loop)
