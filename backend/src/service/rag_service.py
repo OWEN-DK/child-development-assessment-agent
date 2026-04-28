@@ -114,9 +114,9 @@ class RagService:
             file_path, original_filename, progress_callback, task_id
         )
 
-    def delete_document(self, file_name: str) -> bool:
-        """删除文档（原有接口）"""
-        success = self.index_manager.delete_document(file_name)
+    async def delete_document(self, file_name: str) -> bool:
+        """删除文档"""
+        success = await self.index_manager.delete_document(file_name)
         if success:
             self.retrieval_service.reload_retrievers()
         return success

@@ -21,7 +21,7 @@ class IIndexManager(ABC):
         pass
     
     @abstractmethod
-    def delete_document(self, file_name: str) -> bool:
+    async def delete_document(self, file_name: str) -> bool:
         pass
     
     @abstractmethod

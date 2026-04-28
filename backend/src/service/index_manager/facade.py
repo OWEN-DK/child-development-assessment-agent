@@ -24,8 +24,8 @@ class IndexManagerService(IIndexManager):
     def insert_nodes(self, nodes: list[Node], progress_callback: Callable[[str, float, str], None] = None):
         return self.index_operations.insert_nodes(nodes, progress_callback)
 
-    def delete_document(self, file_name: str) -> bool:
-        return self.index_operations.delete_document(file_name)
+    async def delete_document(self, file_name: str) -> bool:
+        return await self.index_operations.delete_document(file_name)
 
     def get_index(self) -> Optional[VectorStoreIndex]:
         return self.storage_manager.get_index()

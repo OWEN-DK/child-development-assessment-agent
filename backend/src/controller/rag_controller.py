@@ -364,7 +364,7 @@ async def get_rag_status():
 async def delete_document(filename: str):
     """删除指定文档及其索引"""
     # 删除文档记录
-    rag_service.delete_document(filename)
+    await rag_service.delete_document(filename)
     
     return APIResponse.success(message=f"Document {filename} deleted.")
 
