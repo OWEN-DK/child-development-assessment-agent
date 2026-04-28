@@ -1,85 +1,54 @@
 /**
- * 前端导出工具函数
- * 支持 CSV 和 JSON 格式导出
+ * 触发浏览器下载 Blob 文件
  */
-
-import { notification } from '@shared/lib/notification';
-import { getTestRun } from '@/api/rag-test';
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
 
 /**
- * 导出测试用例结果为 CSV
+ * 将数据导出为 JSON 文件并触发下载
  *
- * @param runId - 测试运行 ID
- * @param fileName - 导出文件名（不含扩展名）
+ * @param data     - 任意可序列化数据
+ * @param filename - 下载文件名（不含扩展名，自动追加 `.json`）
  */
-export const exportCasesToCSV = async (runId: string, fileName: string = 'test_results'): Promise<void> => {
-  try {
-    const run = await getTestRun(runId);
-    const results = run?.test_results || [];
+export function exportToJSON(data: unknown, filename: string): void {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  downloadBlob(blob, `${filename}.json`);
+}
 
-    if (results.length === 0) {
-      notification.warning('暂无可导出的数据');
-      return;
+/**
+ * 将行数组导出为 CSV 文件并触发下载
+ *
+ * @param rows     - 对象数组，每个对象的 key 作为 CSV 列名
+ * @param filename - 下载文件名（不含扩展名，自动追加 `.csv`）
+ */
+export function exportToCSV(rows: Record<string, unknown>[], filename: string): void {
+  if (rows.length === 0) return;
+
+  const headers = Object.keys(rows[0]);
+  const escape = (val: unknown): string => {
+    const str = val == null ? '' : String(val);
+    // 包含逗号、引号或换行符时需要用引号包裹，并转义内部引号
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
     }
+    return str;
+  };
 
-    // 准备 CSV 数据
-    const headers = ['查询', '状态', 'Hit@1', 'Hit@3', 'Hit@5', '耗时(ms)', '匹配文档数'];
-    const rows = results.map((r: any) => [
-      r.query || '',
-      r.status || '',
-      r.hit_at_1 ? '是' : '否',
-      r.hit_at_3 ? '是' : '否',
-      r.hit_at_5 ? '是' : '否',
-      r.duration_ms || '',
-      Array.isArray(r.matched_doc_ids) ? r.matched_doc_ids.length : 0,
-    ]);
+  const headerLine = headers.join(',');
+  const dataLines = rows.map((row) =>
+    headers.map((h) => escape(row[h])).join(','),
+  );
+  const csv = [headerLine, ...dataLines].join('\n');
 
-    // 生成 CSV 内容
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((row: string[]) => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
-    ].join('\n');
-
-    // 添加 BOM 以支持 Excel 打开 UTF-8
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fileName}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-
-    notification.success(`已导出 ${results.length} 条结果到 ${fileName}.csv`);
-  } catch (error) {
-    notification.error('导出 CSV 失败');
-    console.error('Export CSV error:', error);
-  }
-};
-
-/**
- * 导出报告数据为 JSON
- *
- * @param reportId - 报告 ID
- * @param fileName - 导出文件名（不含扩展名）
- */
-export const exportReportToJSON = async (reportId: string, fileName: string = 'report'): Promise<void> => {
-  try {
-    const reportData = await getTestRun(reportId);
-
-    // 格式化 JSON
-    const jsonStr = JSON.stringify(reportData, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fileName}.json`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-
-    notification.success('报告已导出为 JSON');
-  } catch (error) {
-    notification.error('导出 JSON 失败');
-    console.error('Export JSON error:', error);
-  }
-};
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  downloadBlob(blob, `${filename}.csv`);
+}

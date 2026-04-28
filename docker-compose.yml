@@ -1,0 +1,63 @@
+# ============================================
+# 儿童发展评估系统 - Docker Compose
+#
+# 使用方式：
+#   开发环境：  docker compose up
+#   测试环境：  ENV_FILE=backend/.env.test docker compose up
+#   后台运行：  docker compose up -d
+#   查看日志：  docker compose logs -f backend
+#   重新构建：  docker compose up --build
+#
+# 注意：
+#   旧服务器 (glibc < 2.27, manylinux_2_17) 无法直接 uv sync，
+#   因为 onnxruntime (chromadb 依赖) 没有 Python 3.13 的
+#   manylinux_2_17 wheel。必须通过 Docker 部署。
+#
+#   所有业务配置（端口、数据库、Redis、模型等）均通过 env_file
+#   注入，environment 仅覆盖容器内路径映射和运行时必要参数。
+# ============================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: child-dev-backend
+    restart: unless-stopped
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 4096
+    shm_size: "1g"
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "${APP_PORT:-51002}:51002"
+    env_file: ${ENV_FILE:-backend/.env.test}
+    environment:
+      # 容器内路径映射和运行时必要参数，其余全部由 env_file 提供
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "51002"
+      APP_RELOAD: "False"
+      DATA_DIR: "/app/app_data/data"
+      RAG_STORAGE_DIR: "/app/app_data/storage"
+      RAG_TEMP_UPLOAD_DIR: "/app/app_data/temp_uploads"
+      # 以下变量本应由 Dockerfile ENV 设置，部分环境下镜像 ENV 丢失，此处显式补充
+      PATH: "/app/backend/.venv/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      PYTHONPATH: "/app/backend"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # 限制 ML 库线程数，减少容器内线程创建压力
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    volumes:
+      - ./app_data:/app/app_data
+      - ./logs:/app/backend/logs
+    # 显式指定启动命令，避免依赖镜像 CMD（部分环境下 CMD 可能丢失）
+    command: ["/app/backend/.venv/bin/uvicorn", "src.server:create_app", "--host", "0.0.0.0", "--port", "51002", "--factory"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:51002/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3

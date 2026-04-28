@@ -1,63 +1,65 @@
-import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime
-from sqlalchemy import Enum as SAEnum
-from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (DECIMAL, JSON, Boolean, DateTime, Integer, String, Text,
+                        func)
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
-from src.models.rag_eval.enums import RagEvalTestRunResultStatus
 
 
-class RagEvalTestRunResult(Base):
-    __tablename__ = "rag_eval_test_run_results"
-    __table_args__ = (
-        Index("idx_rag_eval_test_run_result_run_id", "run_id"),
-        Index("idx_rag_eval_test_run_result_run_status", "run_id", "status"),
-        {"comment": "测试运行结果详情表"},
+class TestRunResult(Base):
+    __tablename__ = "test_run_results"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    test_case_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
     )
-
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    # 检索结果
+    retrieved_doc_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="检索到的文档 ID 列表"
     )
-
-    run_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("rag_eval_test_runs.id", ondelete="CASCADE"),
-        nullable=False,
+    relevant_doc_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="相关文档 ID 列表"
     )
-    case_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("rag_eval_test_cases.id", ondelete="CASCADE"),
-        nullable=False,
+    expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="期望知识片段 ID"
     )
-
-    query: Mapped[str] = mapped_column(Text, nullable=False, comment="查询文本快照")
-
-    hit_at_1: Mapped[bool] = mapped_column(Boolean, default=False)
-    hit_at_3: Mapped[bool] = mapped_column(Boolean, default=False)
-    hit_at_5: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    matched_doc_ids: Mapped[list] = mapped_column(
-        JSON, default=list, comment="实际命中的文档ID列表"
+    actual_knowledge_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="实际匹配的知识片段 ID"
     )
-    matched_doc_scores: Mapped[list] = mapped_column(
-        JSON, default=list, comment="命中文档的分数列表"
+    matched_count: Mapped[int] = mapped_column(Integer, default=0)
+    expected_count: Mapped[int] = mapped_column(Integer, default=0)
+    actual_count: Mapped[int] = mapped_column(Integer, default=0)
+    # 检索指标
+    precision: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
+    recall: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
+    f1: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
+    mrr: Mapped[float | None] = mapped_column(DECIMAL(5, 4), default=0)
+    ndcg: Mapped[float | None] = mapped_column(DECIMAL(5, 4))
+    hit_rate_1: Mapped[float | None] = mapped_column(DECIMAL(5, 4), default=0)
+    hit_rate_3: Mapped[float | None] = mapped_column(DECIMAL(5, 4), default=0)
+    hit_rate_5: Mapped[float | None] = mapped_column(DECIMAL(5, 4), default=0)
+    # 生成答案
+    actual_answer: Mapped[str | None] = mapped_column(
+        Text, comment="RAG 生成的实际答案"
     )
-
-    status: Mapped[RagEvalTestRunResultStatus] = mapped_column(
-        SAEnum(
-            RagEvalTestRunResultStatus,
-            values_callable=lambda obj: [e.value for e in obj],
-        ),
-        nullable=False,
+    # 双轨指标
+    l1_metrics_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="单用例 L1 指标"
     )
-    duration_ms: Mapped[int | None] = mapped_column(
-        Integer, comment="单用例执行耗时(毫秒)"
+    l2_metrics_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="单用例 L2 指标"
     )
-
+    diagnosis_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="单用例诊断结果"
+    )
+    # 执行信息
+    passed: Mapped[bool | None] = mapped_column(Boolean, comment="是否通过")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    execution_time_ms: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    test_run: Mapped["RagEvalTestRun"] = relationship(back_populates="run_results")
-    test_case: Mapped["RagEvalTestCase"] = relationship(back_populates="run_results")
+    __table_args__ = {"extend_existing": True}

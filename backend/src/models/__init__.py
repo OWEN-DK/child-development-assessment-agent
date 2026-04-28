@@ -7,12 +7,12 @@ from .monitor import ABTestMetrics, CallLevel, LLMCallLog, LLMCallStatus
 from .prompt_enums import PromptCategory
 from .prompt_metadata import PromptMetadata
 from .prompt_version import PromptVersion
-from .rag_eval.config_change_set_prompt import RagEvalConfigChangeSetPrompt
-from .rag_eval.config_change_set import RagEvalConfigChangeSet
-from .rag_eval.prompt_suggestion import RagEvalPromptSuggestionRecord
-from .test_case import (DifficultyLevel, TestCase, TestCaseDraft,
-                        TestCaseStatus, TestDomain, TestRun, TestRunResult,
-                        TestRunStatus, TestSet, TestSetCase, TestSourceType)
+from .rag_eval import (DifficultyLevel, DocumentStatus as RagDocumentStatus,
+                       EvalConfigChangeSet, EvalConfigVersion, EvalReport,
+                       KnowledgeSnapshot, TestCase, TestCaseDraft,
+                       TestCaseStatus, TestDomain, TestRun, TestRunResult,
+                       TestRunStatus, TestSet, TestSetCase, TestSourceType,
+                       TuningSuggestion)
 from .trace import Trace, TraceStatus
 
 __all__ = [
@@ -25,6 +25,11 @@ __all__ = [
     "TestSetCase",
     "TestRun",
     "TestRunResult",
+    "KnowledgeSnapshot",
+    "EvalReport",
+    "TuningSuggestion",
+    "EvalConfigVersion",
+    "EvalConfigChangeSet",
     "TestDomain",
     "DifficultyLevel",
     "TestCaseStatus",
@@ -41,9 +46,6 @@ __all__ = [
     "PromptCategory",
     "PromptMetadata",
     "PromptVersion",
-    "RagEvalConfigChangeSetPrompt",
-    "RagEvalConfigChangeSet",
-    "RagEvalPromptSuggestionRecord",
     "Trace",
     "TraceStatus",
 ]

@@ -228,11 +228,12 @@ class PromptStorage:
             INTENSITY_INFERENCE_PROMPT, METADATA_EXTRACTION_PROMPT,
             QUERY_REWRITE_PROMPT, RAG_QUERY_TEMPLATE, REPORTING_SYSTEM_PROMPT,
             SCORING_SYSTEM_PROMPT, SYNONYM_EXPANSION_PROMPT,
-            TEST_CASE_DRAFT_GENERATION_PROMPT, VALIDATION_SYSTEM_PROMPT)
+            TEST_CASE_DRAFT_GENERATION_PROMPT, TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT, VALIDATION_SYSTEM_PROMPT)
         fallbacks = {
             "rag_query_rewrite": QUERY_REWRITE_PROMPT, "synonym_expansion": SYNONYM_EXPANSION_PROMPT,
             "rag_query_template": RAG_QUERY_TEMPLATE,
             "metadata_extraction": METADATA_EXTRACTION_PROMPT, "test_case_generation": TEST_CASE_DRAFT_GENERATION_PROMPT,
+            "test_case_generation_chunk_grounded": TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT,
             "validation": VALIDATION_SYSTEM_PROMPT, "intensity_inference": INTENSITY_INFERENCE_PROMPT,
             "category_inference": CATEGORY_INFERENCE_PROMPT, "child_assessment": ASSESSMENT_SYSTEM_PROMPT,
             "assessment_system": ASSESSMENT_SYSTEM_PROMPT, "scoring": SCORING_SYSTEM_PROMPT,

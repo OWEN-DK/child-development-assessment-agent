@@ -16,6 +16,7 @@ from src.core.prompts_fallback import (
     SCORING_SYSTEM_PROMPT,
     SYNONYM_EXPANSION_PROMPT,
     TEST_CASE_DRAFT_GENERATION_PROMPT,
+    TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT,
     VALIDATION_SYSTEM_PROMPT,
 )
 from src.utils.logger import logger
@@ -66,6 +67,15 @@ DEFAULT_PROMPTS = [
         "category": "test_case_generation",
         "variables": ["count", "text", "domains", "age_range_min", "age_range_max"],
         "tags": ["rag_eval", "test_case"],
+    },
+    {
+        "key": "test_case_generation_chunk_grounded",
+        "content": TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT,
+        "name_zh": "逐块测试用例生成",
+        "purpose": "从单个文档块中生成忠实于原文的 RAG 测试用例",
+        "category": "test_case_generation",
+        "variables": ["chunk_id", "chunk_content", "chunk_page", "chunk_topics", "domain", "age_stage_label", "age_min_months", "age_max_months"],
+        "tags": ["rag_eval", "test_case", "chunk"],
     },
     {
         "key": "validation",

@@ -2,7 +2,6 @@ import time
 from typing import Any, List, Optional
 
 from src.config import settings
-from src.core.di_container import injector
 from src.core.interfaces import (ICacheService, IDocumentIngestionService,
                                  IIndexManager, IRetrievalService)
 from src.service.monitoring_service import monitoring_service
@@ -15,6 +14,7 @@ class RagService:
     """
 
     def __init__(self, injector_instance=None):
+        from src.core.di_container import injector
         self.injector = injector_instance or injector
         self.index_manager = self.injector.get(IIndexManager)
         self.cache_service = self.injector.get(ICacheService)
@@ -138,9 +138,35 @@ class RagService:
         return self.index_manager.get_chunk_detail(chunk_id)
 
 
-# 全局RAG服务实例
-rag_service = RagService()
+import threading
+
+# 全局RAG服务实例（延迟初始化，避免循环导入）
+_instance: "RagService | None" = None
+_lock = threading.Lock()
+
+
+def get_rag_service() -> "RagService":
+    global _instance
+    if _instance is None:
+        with _lock:
+            if _instance is None:
+                _instance = RagService()
+    return _instance
+
+
+# 向后兼容：模块级属性访问时延迟初始化
+class _LazyRagService:
+    """代理对象，首次访问属性时才初始化真正的 RagService"""
+
+    def __getattr__(self, name):
+        return getattr(get_rag_service(), name)
+
+    def __bool__(self):
+        return True
+
+
+rag_service = _LazyRagService()
 
 
 # 对外暴露接口
-__all__ = ["RagService", "rag_service"]
+__all__ = ["RagService", "rag_service", "get_rag_service"]

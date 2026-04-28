@@ -4,7 +4,7 @@ import { API_BASE_URL } from '@shared/lib/constants';
 export interface UseSSEOptions {
   url: string;
   enabled?: boolean;
-  onMessage?: (event: string, data: any) => void;
+  onMessage?: (event: string, data: unknown) => void;
   onError?: (error: Event) => void;
   onOpen?: () => void;
   reconnectAttempts?: number;

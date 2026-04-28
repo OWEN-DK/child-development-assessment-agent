@@ -75,9 +75,10 @@
    - 系统全局配置页面通过独立路由 `/system-config` 访问。
 3. **依赖管理**: 后端依赖只允许在 `pyproject.toml` 中声明，使用 `uv add`。前端使用 `package.json`。
 4. **代码风格**: Python 遵循 PEP 8，使用强类型注解；前端使用 TS 严格模式。**所有代码注释必须全中文**（包括函数说明、行内注释、TODO标记等）。
-5. **实体类集中管理（强制）**: 
+5. **实体类集中管理（强制）**:
    - **绝对禁止**在 `service/`、`controller/`、`core/` 中定义 `class xxx(BaseModel)`。
    - 所有 Pydantic 实体类必须统一放置在 `backend/src/schemas/` 目录下，按业务模块组织（如 `schemas/assessment.py`、`schemas/rag.py`）。
+   - 对于实体数量较多的复杂模块（如 RAG 评估重构），允许使用子目录模式（如 `schemas/rag_eval/draft.py`、`schemas/rag_eval/test_case.py`），但必须在 `schemas/rag_eval/__init__.py` 中统一导出。
 6. **类职责拆分（强制）**: 
    - 单类不超过 **500 行**（含空行和注释），违反则必须拆分。
    - 使用门面模式（Facade）对外提供统一 API，内部协调子服务。

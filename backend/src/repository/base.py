@@ -133,6 +133,7 @@ class BaseRepository(Generic[ModelType]):
 
     async def count_by_filter(self, **filters) -> int:
         """根据过滤条件统计记录数"""
+        from sqlalchemy import func
         async with self.db_session_factory() as session:
             query = select(func.count()).select_from(self.model)
             for field, value in filters.items():
@@ -142,5 +143,13 @@ class BaseRepository(Generic[ModelType]):
                     )
                 query = query.where(getattr(self.model, field) == value)
 
+            result = await session.execute(query)
+            return result.scalar_one()
+
+    async def count_all(self) -> int:
+        """统计所有记录数"""
+        from sqlalchemy import func
+        async with self.db_session_factory() as session:
+            query = select(func.count()).select_from(self.model)
             result = await session.execute(query)
             return result.scalar_one()

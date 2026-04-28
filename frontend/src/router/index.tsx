@@ -1,4 +1,4 @@
-import { createBrowserRouter, Outlet } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
 import App from '../app/App';
@@ -8,12 +8,17 @@ import { KnowledgeSearchPage } from '../features/knowledge';
 import { LLMMonitoringDashboard } from '../features/monitoring';
 import BookChunksPage from '../pages/BookChunksPage';
 import { SystemConfigPage } from '../pages/SystemConfigPage';
-import RagEvalMainPage from '../features/rag-eval/pages/RagEvalMainPage';
+import {
+  RagEvalMainPage,
+  DraftPage,
+  TestCasePage,
+  TestSetPage,
+  RunPage,
+  ReportPage,
+  TuningPage,
+} from '@features/rag-eval/pages';
 
-// 懒加载 RAG 评估页面
-const TestSetDetailPage = lazy(() => import('@/features/rag-eval/pages/TestSetDetailPage'));
-const RunDetailPage = lazy(() => import('@/features/rag-eval/pages/RunDetailPage'));
-const ReportPage = lazy(() => import('@/features/rag-eval/pages/ReportPage'));
+// 懒加载提示词管理页面
 const PromptListPage = lazy(() => import('@/features/rag-eval/pages/PromptListPage'));
 const PromptEditPage = lazy(() => import('@/features/rag-eval/pages/PromptEditPage'));
 const PromptVersionComparisonPage = lazy(() => import('@/features/rag-eval/pages/PromptVersionComparisonPage'));
@@ -45,24 +50,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'rag-eval',
-        element: <RagEvalLayout />,
+        element: <RagEvalMainPage />,
         children: [
-          {
-            index: true,
-            element: <RagEvalMainPage />,
-          },
-          {
-            path: 'test-sets/:id',
-            element: <TestSetDetailPage />,
-          },
-          {
-            path: 'runs/:id',
-            element: <RunDetailPage />,
-          },
-          {
-            path: 'reports/:id',
-            element: <ReportPage />,
-          },
+          { index: true, element: <Navigate to="drafts" replace /> },
+          { path: 'drafts', element: <DraftPage /> },
+          { path: 'cases', element: <TestCasePage /> },
+          { path: 'sets', element: <TestSetPage /> },
+          { path: 'runs', element: <RunPage /> },
+          { path: 'reports', element: <ReportPage /> },
+          { path: 'tuning', element: <TuningPage /> },
         ],
       },
       {

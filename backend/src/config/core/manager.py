@@ -48,9 +48,9 @@ class ConfigManager:
         if self._version_repo is None:
             from src.core.database import async_session_factory
             from src.repository import (ConfigAuditLogRepository,
-                                        ConfigVersionRepository)
+                                        SystemConfigVersionRepository)
 
-            self._version_repo = ConfigVersionRepository(async_session_factory)
+            self._version_repo = SystemConfigVersionRepository(async_session_factory)
             self._audit_log_repo = ConfigAuditLogRepository(async_session_factory)
         return self._version_repo, self._audit_log_repo
 

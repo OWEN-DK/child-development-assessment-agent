@@ -11,9 +11,6 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.core.database import db_session_factory
-from src.repository.test_case_repository import TestCaseDraftRepository
-from src.service.rag_report_service import rag_report_service
 from src.utils.logger import logger
 
 scheduler = AsyncIOScheduler()
@@ -22,44 +19,28 @@ _scheduler_ever_started = False
 
 async def cleanup_expired_reports():
     """清理过期报告（保留 30 天）"""
+    from src.core.di_container import injector
+    from src.service.rag_eval.report.facade import ReportEngineFacade
+    
     logger.info("开始执行过期报告清理任务...")
     try:
-        await rag_report_service.cleanup_expired_reports(retention_days=30)
-        logger.info("过期报告清理任务完成")
+        facade = injector.get(ReportEngineFacade)
+        cleaned_count = await facade.cleanup_expired_reports(retention_days=30)
+        logger.info(f"过期报告清理任务完成，共删除 {cleaned_count} 个报告")
     except Exception as e:
         logger.error(f"过期报告清理任务失败: {e}")
 
 
 async def cleanup_orphaned_drafts():
     """清理 7 天未审核的草稿"""
+    from src.core.di_container import injector
+    from src.service.rag_eval.draft.facade import DraftEngineFacade
+    
     logger.info("开始执行孤儿草稿清理任务...")
     try:
-        draft_repo = TestCaseDraftRepository(db_session_factory)
-        cutoff = datetime.now() - timedelta(days=7)
-
-        # 查询 7 天前的草稿
-        async with db_session_factory() as session:
-            from sqlalchemy import select
-
-            from src.schemas import TestCaseDraft, TestCaseStatus
-
-            stmt = select(TestCaseDraft).where(
-                TestCaseDraft.status == TestCaseStatus.DRAFT,
-                TestCaseDraft.created_at < cutoff,
-            )
-            result = await session.execute(stmt)
-            old_drafts = result.scalars().all()
-
-            cleaned_count = 0
-            for draft in old_drafts:
-                try:
-                    await draft_repo.delete(draft.id)
-                    cleaned_count += 1
-                except Exception as e:
-                    logger.error(f"清理草稿 {draft.id} 失败: {e}")
-
-            await session.commit()
-            logger.info(f"孤儿草稿清理完成，共删除 {cleaned_count} 个草稿")
+        facade = injector.get(DraftEngineFacade)
+        cleaned_count = await facade.cleanup_orphaned_drafts(retention_days=7)
+        logger.info(f"孤儿草稿清理完成，共删除 {cleaned_count} 个草稿")
     except Exception as e:
         logger.error(f"孤儿草稿清理任务失败: {e}")
 

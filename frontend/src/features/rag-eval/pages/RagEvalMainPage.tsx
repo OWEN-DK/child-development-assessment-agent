@@ -1,78 +1,42 @@
-/**
- * RAG 评估主布局页
- * 路由: /rag-eval
- * Tab 聚合式布局，URL 与 Tab 状态同步
- *
- * 工作流约束：
- * 草稿管理 → 测试用例 → 测试集管理 → 运行历史 → 评估报告
- * 禁止绕过：测试集不能直接创建用例，所有数据必须先经过草稿审核
- */
-
-import { useEffect, useState } from 'react';
 import { Tabs } from 'antd';
-import { useSearchParams } from 'react-router-dom';
-import DraftManagementPage from './DraftManagementPage';
-import TestCaseManagementPage from './TestCaseManagementPage';
-import TestSetListPage from './TestSetListPage';
-import RunListPage from './RunListPage';
-import ReportListPage from './ReportListPage';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import {
+  FileTextOutlined,
+  AuditOutlined,
+  FolderOpenOutlined,
+  PlayCircleOutlined,
+  BarChartOutlined,
+  ToolOutlined,
+} from '@ant-design/icons';
 
-type TabKey = 'drafts' | 'cases' | 'test-sets' | 'runs' | 'reports';
-
-const TAB_ITEMS: { key: TabKey; label: string }[] = [
-  { key: 'drafts', label: '草稿管理' },
-  { key: 'cases', label: '测试用例' },
-  { key: 'test-sets', label: '测试集管理' },
-  { key: 'runs', label: '运行历史' },
-  { key: 'reports', label: '评估报告' },
+const tabItems = [
+  { key: 'drafts', label: '草稿管理', icon: <FileTextOutlined /> },
+  { key: 'cases', label: '测试用例', icon: <AuditOutlined /> },
+  { key: 'sets', label: '测试集', icon: <FolderOpenOutlined /> },
+  { key: 'runs', label: '运行', icon: <PlayCircleOutlined /> },
+  { key: 'reports', label: '报告', icon: <BarChartOutlined /> },
+  { key: 'tuning', label: '调优', icon: <ToolOutlined /> },
 ];
 
-export default function RagEvalMainPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabKey>('drafts');
+function RagEvalMainPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && ['drafts', 'cases', 'test-sets', 'runs', 'reports'].includes(tab)) {
-      setActiveTab(tab as TabKey);
-    }
-  }, [searchParams]);
-
-  const handleTabChange = (key: string) => {
-    setActiveTab(key as TabKey);
-    setSearchParams({ tab: key });
-  };
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'drafts':
-        return <DraftManagementPage />;
-      case 'cases':
-        return <TestCaseManagementPage />;
-      case 'test-sets':
-        return <TestSetListPage />;
-      case 'runs':
-        return <RunListPage />;
-      case 'reports':
-        return <ReportListPage />;
-      default:
-        return <DraftManagementPage />;
-    }
-  };
+  const activeKey = tabItems
+    .map((t) => t.key)
+    .find((key) => location.pathname.includes(`/rag-eval/${key}`)) || 'drafts';
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       <Tabs
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={TAB_ITEMS}
-        destroyInactiveTabPane
-        size="large"
-        type="card"
+        activeKey={activeKey}
+        onChange={(key) => navigate(`/rag-eval/${key}`)}
+        items={tabItems}
+        style={{ marginBottom: 16 }}
       />
-      <div style={{ marginTop: 16 }}>
-        {renderTabContent()}
-      </div>
+      <Outlet />
     </div>
   );
-}
+};
+
+export default RagEvalMainPage;

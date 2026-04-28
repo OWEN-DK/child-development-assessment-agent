@@ -147,6 +147,52 @@ TEST_CASE_DRAFT_GENERATION_PROMPT = """\
 - 仅返回 JSON，不要包含任何解释性文字
 """
 
+TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT = """\
+你是儿童发展、感觉统合、教育心理学领域的专业测试用例设计师。
+你的任务是从给定的文档片段中提取一个可回答的测试问题。
+
+## 源文档片段
+
+Chunk ID: {chunk_id}
+页码: {chunk_page}
+主题: {chunk_topics}
+
+原文内容：
+{chunk_content}
+
+## 生成约束（强制，不可违反）
+
+1. **忠实性铁律**：生成的查询(query)必须能从上述原文片段中直接找到答案
+2. **禁止编造**：不允许引入原文中未提及的任何概念、数据、理论或术语
+3. **答案来源**：answer_points 中的每一条必须是原文中的关键短语或其直接改写
+4. **关键词来源**：expected_keywords 中的每个关键词必须出现在原文中
+5. 目标领域：{domain}
+6. 适用年龄段：{age_stage_label}（{age_min_months}-{age_max_months} 月）
+7. age 必须为整数，范围在 {age_min_months}-{age_max_months} 月之间
+
+## 如果原文内容不足以生成与目标领域/年龄段相关的问题
+
+如果上述原文片段与目标领域({domain})或年龄段({age_stage_label})完全无关，
+请返回：{{"skip": true, "reason": "原文与目标领域/年龄段不相关"}}
+
+不要强行从不相关的内容中编造问题。
+
+## 返回格式
+
+必须返回严格的 JSON 对象：
+{{
+  "skip": false,
+  "query": "基于原文可回答的问题",
+  "age": 48,
+  "description": "测试意图描述",
+  "expected_keywords": ["原文中出现的关键词"],
+  "answer_points": ["从原文提取的答案要点"],
+  "professional_terms": ["原文中的专业术语"]
+}}
+
+仅返回 JSON，不要包含任何解释性文字。
+"""
+
 # --------------------------
 # System Prompts (Placeholders)
 # --------------------------

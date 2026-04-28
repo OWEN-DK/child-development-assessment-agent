@@ -42,5 +42,8 @@ class IndexManagerService(IIndexManager):
     def get_chunk_detail(self, chunk_id: str) -> Optional[dict]:
         return self.index_operations.get_chunk_detail(chunk_id)
 
+    def get_all_chunks_by_file_hash(self, file_hash: str) -> List[dict]:
+        return self.index_operations.get_all_chunks_by_file_hash(file_hash)
+
     def __del__(self):
         self.storage_manager.shutdown()

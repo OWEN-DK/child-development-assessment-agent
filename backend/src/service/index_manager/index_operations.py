@@ -174,3 +174,37 @@ class IndexOperations:
             except Exception as e:
                 logger.error(f"Failed to get chunk detail from vector store: {e}")
                 return None
+
+    @staticmethod
+    def _safe_page_label(page_label: str) -> int:
+        """安全转换 page_label 为 int，非数字值返回 0"""
+        try:
+            return int(page_label)
+        except (ValueError, TypeError):
+            return 0
+
+    def get_all_chunks_by_file_hash(self, file_hash: str) -> List[dict]:
+        """直接按 file_hash 读取文档的所有 chunks（非检索，不分页）"""
+        if not self.storage_manager.index or not hasattr(self.storage_manager.index, "_vector_store"):
+            return []
+        vector_store = self.storage_manager.index._vector_store
+        all_chunks = []
+        try:
+            if hasattr(vector_store, '_collection') and vector_store._collection:
+                collection = vector_store._collection
+                results = collection.get(where={"file_hash": file_hash}, include=["metadatas", "documents"])
+                if results and results['ids']:
+                    for i, (doc_id, doc_text, metadata) in enumerate(zip(results['ids'], results['documents'], results['metadatas'])):
+                        metadata = self._parse_metadata_json_strings(metadata)
+                        start_idx = metadata.get('start_char_idx')
+                        end_idx = metadata.get('end_char_idx')
+                        if start_idx is None or end_idx is None:
+                            start_idx = i * 1000
+                            end_idx = start_idx + len(doc_text)
+                        all_chunks.append({"id": doc_id, "content": doc_text, "metadata": metadata, "start_char_idx": start_idx, "end_char_idx": end_idx, "score": None})
+        except Exception as e:
+            logger.error(f"Failed to get all chunks from vector store: {e}")
+            return []
+        # 按 page_label 排序
+        all_chunks.sort(key=lambda x: self._safe_page_label(x["metadata"].get("page_label", "0")))
+        return all_chunks

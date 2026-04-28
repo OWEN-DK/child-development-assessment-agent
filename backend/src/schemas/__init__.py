@@ -72,25 +72,24 @@ from src.schemas.query import QueryClassification, QueryType
 # RAG 模块
 from src.schemas.rag import (DocumentMetadata, DocumentRecord, DocumentStore,
                              SynonymExpansionResult)
-# 测试模块
-from src.schemas.test_case import AddCasesToSetRequest  # 枚举; 核心模型; 请求 DTO
-from src.schemas.test_case import (BatchDeleteRequest, BatchImportRequest,
-                                   ChapterInfo, CreateSnapshotRequest,
-                                   CreateTestCaseRequest, CreateTestSetRequest,
-                                   DifficultyLevel, DocumentStatus,
-                                   DraftStatus, GenerateDraftsRequest,
-                                   GenerationParams, ImportDraftsRequest,
-                                   KnowledgeSnapshot, QualityReport,
-                                   ReportExportFormat, RunTestsRequest,
-                                   SourceDocument, TestCase, TestCaseDraft,
-                                   TestDomain, TestResult, TestResultItem,
-                                   TestRun, TestRunStatus, TestSet,
-                                   TestSourceType, CreateDraftRequest,
-                                   UpdateDraftRequest,
-                                   UpdateTestCaseRequest, UpdateTestSetRequest)
-# 调参模块
-from src.schemas.tuning import (HistoryReference, LLMDiagnosis, LLMFinding,
-                                TuningSuggestion, TuningSuggestionResponse)
+# RAG Eval 模块（v2 重构）
+from src.schemas.rag_eval.diagnosis import DiagnosisResult, LayerIssue, LayerResult
+from src.schemas.rag_eval.draft import (BookMetadata, DraftCreate, DraftGenerationConfig,
+                                        DraftList, DraftRead, DraftReview, DraftUpdate)
+from src.schemas.rag_eval.metrics import (Layer1Metrics, Layer2Metrics, Layer3Metrics,
+                                          MetricInput, MetricOutput, MetricScore, RunMetrics)
+from src.schemas.rag_eval.report import (BadCaseEntry, DiagnosisSection, EvalReportData,
+                                         EvalReportRead, MetricCard, OverallSummary,
+                                         ScoringDashboard, TrendData, TuningEntry)
+from src.schemas.rag_eval.snapshot import SnapshotCreate, SnapshotRead
+from src.schemas.rag_eval.source_document import SourceDocumentRead, SourceDocumentUpload
+from src.schemas.rag_eval.test_case import (TestCaseCreate, TestCaseImportData, TestCaseImportItem,
+                                            TestCaseList, TestCaseRead, TestCaseUpdate)
+from src.schemas.rag_eval.test_run import (RetrievalMetrics, RunComparison, TestRunCreate,
+                                           TestRunList, TestRunRead, TestRunResultItem)
+from src.schemas.rag_eval.test_set import TestSetCreate, TestSetExport, TestSetRead, TestSetUpdate
+from src.schemas.rag_eval.tuning import (ConfigChangeSetRead, ConfigVersionRead, ConflictPair,
+                                          TuningSuggestion)
 
 __all__ = [
     # 通用
@@ -122,38 +121,57 @@ __all__ = [
     "DocumentRecord",
     "DocumentStore",
     "SynonymExpansionResult",
-    # 测试
-    "DraftStatus",
-    "DocumentStatus",
-    "TestRunStatus",
-    "TestDomain",
-    "DifficultyLevel",
-    "TestSourceType",
-    "ReportExportFormat",
-    "ChapterInfo",
-    "QualityReport",
-    "SourceDocument",
-    "GenerationParams",
-    "TestCaseDraft",
-    "TestSet",
-    "TestCase",
-    "TestResultItem",
-    "TestResult",
-    "TestRun",
-    "KnowledgeSnapshot",
-    "CreateTestCaseRequest",
-    "UpdateTestCaseRequest",
-    "CreateSnapshotRequest",
-    "BatchImportRequest",
-    "BatchDeleteRequest",
-    "RunTestsRequest",
-    "GenerateDraftsRequest",
-    "CreateDraftRequest",
-    "UpdateDraftRequest",
-    "ImportDraftsRequest",
-    "CreateTestSetRequest",
-    "UpdateTestSetRequest",
-    "AddCasesToSetRequest",
+    # RAG Eval v2
+    "DraftCreate",
+    "DraftRead",
+    "DraftUpdate",
+    "DraftReview",
+    "DraftList",
+    "DraftGenerationConfig",
+    "BookMetadata",
+    "TestCaseCreate",
+    "TestCaseRead",
+    "TestCaseUpdate",
+    "TestCaseList",
+    "TestCaseImportItem",
+    "TestCaseImportData",
+    "TestSetCreate",
+    "TestSetRead",
+    "TestSetUpdate",
+    "TestSetExport",
+    "TestRunCreate",
+    "TestRunRead",
+    "TestRunList",
+    "TestRunResultItem",
+    "RunComparison",
+    "RetrievalMetrics",
+    "MetricScore",
+    "MetricInput",
+    "MetricOutput",
+    "Layer1Metrics",
+    "Layer2Metrics",
+    "Layer3Metrics",
+    "RunMetrics",
+    "LayerIssue",
+    "LayerResult",
+    "DiagnosisResult",
+    "OverallSummary",
+    "MetricCard",
+    "ScoringDashboard",
+    "DiagnosisSection",
+    "BadCaseEntry",
+    "TuningEntry",
+    "EvalReportData",
+    "EvalReportRead",
+    "TrendData",
+    "SnapshotCreate",
+    "SnapshotRead",
+    "SourceDocumentRead",
+    "SourceDocumentUpload",
+    "TuningSuggestion",
+    "ConflictPair",
+    "ConfigVersionRead",
+    "ConfigChangeSetRead",
     # 配置
     "ConfigSaveRequest",
     "ConfigRollbackRequest",
@@ -227,12 +245,7 @@ __all__ = [
     "LLMMessage",
     "LLMResponse",
     "LLMRequest",
-    # 调参
-    "TuningSuggestion",
-    "HistoryReference",
-    "LLMFinding",
-    "LLMDiagnosis",
-    "TuningSuggestionResponse",
+    # 调参 (removed - migrated to RAG Eval v2)
     # 认证
     "User",
     # 查询路由

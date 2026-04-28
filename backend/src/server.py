@@ -2,17 +2,14 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from prometheus_client import make_asgi_app
 
 from src.config import settings, validate_required_env_vars
-from src.controller import (config_controller, export_controller,
-                            monitoring_controller, rag_controller,
-                            rag_test_controller, rollback_controller,
-                            task_controller, trend_controller,
-                            tuning_controller)
+from src.controller import (config_controller, monitoring_controller,
+                            rag_controller, task_controller)
 from src.core.config.cache import ConfigCache
 from src.core.llm.log_collector import LLMLogCollector
 from src.core.redis_client import RedisClient
@@ -136,10 +133,6 @@ def create_app() -> FastAPI:
         Path(settings.rag_storage_dir) / "index",
         Path(settings.rag_storage_dir) / "snapshots",
         Path(settings.rag_storage_dir) / "source_documents",
-        Path(settings.rag_storage_dir) / "test_case_drafts",
-        Path(settings.rag_storage_dir) / "test_sets",
-        Path(settings.rag_storage_dir) / "test_cases_history",
-        Path(settings.rag_storage_dir) / "test_runs",
         Path(settings.data_dir).parent / "cache",
     ]
 
@@ -173,7 +166,7 @@ def create_app() -> FastAPI:
     # 注册TRACE_ID中间件（优先级最高，第一个执行）
     from src.middleware.trace_middleware import TraceMiddleware
     app.add_middleware(TraceMiddleware)
-    
+
     # 注册响应包装中间件
     app.add_middleware(ResponseWrapperMiddleware)
 
@@ -187,8 +180,6 @@ def create_app() -> FastAPI:
     )
     app.include_router(task_controller.router)
     app.include_router(rag_controller.router)
-    app.include_router(rag_test_controller.router)
-    app.include_router(rag_test_controller.api_router)  # Phase 2: SSE 工作流
     app.include_router(config_controller.router)
 
     # 配置健康诊断
@@ -203,48 +194,19 @@ def create_app() -> FastAPI:
 
     app.include_router(monitoring_controller.router)
 
-    # Phase 7: 提示词管理（三层编辑模式）
+    # 提示词管理（三层编辑模式）
     from src.controller.prompt_management_controller import PromptController
 
     PromptController().register_routes(app)
 
-    # Phase 6: 趋势、导出、回滚
-    app.include_router(trend_controller.router)
-    app.include_router(export_controller.router)
-    app.include_router(rollback_controller.router)
+    # Phase 7: RAG Eval controllers
+    from src.core.di_container import injector
+    from src.controller.rag_eval.registry import RagEvalControllerRegistry
 
-    # Phase 10: 调优建议 API
-    from src.controller import tuning_suggestion_controller
-
-    app.include_router(tuning_suggestion_controller.router)
-
-    # Phase 10: 报告查询 API
-    from src.controller import report_controller
-
-    app.include_router(report_controller.router)
-
-    # Phase 8: 审计日志 API
-    from src.controller import audit_log_controller
-
-    app.include_router(audit_log_controller.router)
-
-    # Phase 8: 意图标注 API
-    from src.controller import intent_annotation_controller
-
-    app.include_router(intent_annotation_controller.router)
-
-    from src.core.tuning import (ConflictDetector, HistoryAnalyzer,
-                                 LLMDiagnoser, RuleEngine,
-                                 TuningSuggestionEngine)
-
-    tuning_engine = TuningSuggestionEngine(
-        rule_engine=RuleEngine(),
-        history_analyzer=HistoryAnalyzer(),
-        llm_diagnoser=LLMDiagnoser(),
-        conflict_detector=ConflictDetector(),
-    )
-    controller = tuning_controller.TuningController(tuning_engine)
-    controller.register_routes(app)
+    rag_eval_registry = injector.get(RagEvalControllerRegistry)
+    rag_eval_router = APIRouter(prefix="/api/v1/rag/eval", tags=["RAG评估"])
+    rag_eval_registry.register_all(rag_eval_router)
+    app.include_router(rag_eval_router)
 
     metrics_app = make_asgi_app()
     app.mount("/metrics", metrics_app)

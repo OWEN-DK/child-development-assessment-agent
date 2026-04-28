@@ -8,13 +8,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
-
-if TYPE_CHECKING:
-    from src.models.rag_eval.config_change_set_prompt import RagEvalConfigChangeSetPrompt
-    from src.models.rag_eval.prompt_suggestion import RagEvalPromptSuggestionRecord
 
 
 class PromptVersion(Base):
@@ -55,25 +51,3 @@ class PromptVersion(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[str | None] = mapped_column(String(36), comment="创建人用户 ID")
-
-    change_set_prompts: Mapped[list["RagEvalConfigChangeSetPrompt"]] = relationship(
-        back_populates="prompt_version"
-    )
-    prompt_suggestions_current: Mapped[list["RagEvalPromptSuggestionRecord"]] = (
-        relationship(
-            back_populates="current_prompt_version",
-            foreign_keys="RagEvalPromptSuggestionRecord.current_version_id",
-        )
-    )
-    prompt_suggestions_suggested: Mapped[list["RagEvalPromptSuggestionRecord"]] = (
-        relationship(
-            back_populates="suggested_prompt_version",
-            foreign_keys="RagEvalPromptSuggestionRecord.suggested_version_id",
-        )
-    )
-    prompt_suggestions_applied: Mapped[list["RagEvalPromptSuggestionRecord"]] = (
-        relationship(
-            back_populates="applied_prompt_version",
-            foreign_keys="RagEvalPromptSuggestionRecord.applied_version_id",
-        )
-    )

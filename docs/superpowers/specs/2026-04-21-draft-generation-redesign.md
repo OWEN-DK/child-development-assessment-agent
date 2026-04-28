@@ -49,6 +49,35 @@ content_to_use = full_content[:4000] if len(full_content) > 4000 else full_conte
 7. **不匹配的组合跳过而非报错**——文档可能只覆盖部分年龄段，跳过无内容的组合，继续生成有内容的
 8. **忠实性是底线**——问题的答案必须可在源 chunk 原文中找到依据，不允许编造
 
+### 1.3 前置依赖：Chunk Metadata 年龄字段
+
+**关键假设**：chunk metadata 中包含 `target_age_min` 和 `target_age_max` 字段。
+
+**现状确认**：当前 `get_document_chunks()` 返回的 metadata 仅包含 `page_label`、`topics`、`brain_regions`、`start_char_idx`、`end_char_idx`。**如果文档切分管线未写入年龄字段，需在实施本方案前补充**。
+
+**兜底策略**（实施时必须实现）：
+```python
+def _get_chunk_age_range(self, chunk: dict) -> tuple[int | None, int | None]:
+    """获取 chunk 的年龄范围，无则返回 (None, None)"""
+    age_min = chunk['metadata'].get('target_age_min')
+    age_max = chunk['metadata'].get('target_age_max')
+    
+    # 兜底：如果 metadata 无年龄字段，尝试从 topics 推断
+    if age_min is None or age_max is None:
+        topics = chunk['metadata'].get('topics', [])
+        age_min, age_max = self._infer_age_from_topics(topics)
+    
+    return age_min, age_max
+
+def _infer_age_from_topics(self, topics: list[str]) -> tuple[int | None, int | None]:
+    """从 topics 推断年龄段（可选，根据业务规则实现）"""
+    # 示例：如果 topics 包含 "0-3岁感统训练"，返回 (0, 36)
+    # 如果无法推断，返回 (None, None) → 归入通用组
+    return None, None
+```
+
+**如果文档切分管线确实未写入年龄字段**：所有 chunks 将归入"通用"组，方案退化为无年龄段分组，但仍保留逐 chunk 生成和忠实性校验的核心优势。
+
 ---
 
 ## 2. 业内通用方案调研
@@ -133,22 +162,24 @@ Evidently AI 的合成数据生成：
 │  │ 5. 跳过无 chunks 的组合，全部不匹配才抛异常                  │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                              ↓                                    │
-│  Phase 2: 逐 Chunk QA 生成（核心！）                              │
+│  Phase 2: 逐 Chunk QA 生成（核心！并发执行）                      │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ 对每个采样的 chunk:                                          │ │
-│  │   1. 构建单 chunk prompt（原文 + 来源标注）                 │ │
-│  │   2. LLM 从该 chunk 提取 1 个 QA 对                        │ │
-│  │   3. 强制约束：问题必须可由该 chunk 原文直接回答            │ │
-│  │   4. 强制约束：答案必须引用原文关键短语                     │ │
-│  │   5. 不相关 chunk → LLM 返回 skip                          │ │
-│  │   6. 返回 DraftData + source_chunk_id 绑定                  │ │
+│  │ 对每个有效组合（并发度 5，asyncio.gather）：                 │ │
+│  │   对每个采样的 chunk:                                        │ │
+│  │     1. 构建单 chunk prompt（原文 + 来源标注）               │ │
+│  │     2. LLM 从该 chunk 提取 1 个 QA 对                      │ │
+│  │     3. 强制约束：问题必须可由该 chunk 原文直接回答          │ │
+│  │     4. 强制约束：答案必须引用原文关键短语                   │ │
+│  │     5. 不相关 chunk → LLM 返回 skip                         │ │
+│  │     6. 返回 DraftData + source_chunk_id 绑定                │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                              ↓                                    │
 │  Phase 3: 质量校验 + 去重 + 入库                                  │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ 1. 忠实性校验：keywords/answer_points 回溯 chunk 原文       │ │
+│  │ 1. 忠实性校验：关键词字符串匹配 + 句子级 embedding 相似度   │ │
 │  │ 2. 混合去重：字符串快速初筛 + embedding 精排灰色区间        │ │
 │  │ 3. 来源标注入库（source_chunk_id, source_page, source_topic）│ │
+│  │ 4. embedding_cache 全局共享（Phase 2 & 3 复用）             │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                   │
 │  全程不涉及任何检索/搜索操作                                      │
@@ -164,7 +195,7 @@ Evidently AI 的合成数据生成：
 | `_generate_batch(text=content_to_use)` | `_generate_qa_from_chunk(chunk=chunk)` | **重写** |
 | 无来源绑定 | source_chunk_id + source_page + source_topic | **新增** |
 | 纯 SequenceMatcher 去重 | 混合去重（字符串初筛 + embedding 精排） | **升级** |
-| DraftData 在两个文件中重复定义 | 统一到 `schemas/test_case.py` | **去重** |
+| DraftData 在两个文件中重复定义 | 统一到 `service/rag_test/types.py` | **去重** |
 | 无忠实性校验 | keywords/answer_points 回溯 chunk 原文验证 | **新增** |
 | LLM 无法跳过不相关 chunk | skip 机制（LLM 可返回 `{"skip": true}`） | **新增** |
 | `TEST_CASE_DRAFT_GENERATION_PROMPT` | 新 prompt: `test_case_generation_chunk_grounded` | **重写** |
@@ -260,23 +291,54 @@ def _safe_page_label(page_label: str) -> int:
         return 0
 
 def _uniform_sample_chunks(self, chunks: List[dict], max_chunks: int = 15) -> List[dict]:
-    """按页码均匀采样，保证首尾覆盖"""
+    """按页码均匀采样，保证首尾覆盖
+    
+    采样策略：
+    - 强制包含前 10% 和后 10% 的 chunks（保证首尾覆盖）
+    - 中间部分等间距采样
+    - 返回值不超过 max_chunks
+    """
     if len(chunks) <= max_chunks:
         return chunks
 
-    sorted_chunks = sorted(chunks, key=lambda c: self._safe_page_label(c['metadata'].get('page_label', '0')))
+    sorted_chunks = sorted(
+        chunks, 
+        key=lambda c: self._safe_page_label(c['metadata'].get('page_label', '0'))
+    )
 
-    head_count = max(1, len(sorted_chunks) // 10)
-    head = sorted_chunks[:head_count]
-    tail = sorted_chunks[-head_count:]
-    middle = sorted_chunks[head_count:-head_count]
+    # 首尾各取 10%，至少 1 个
+    head_tail_count = max(1, len(sorted_chunks) // 10)
+    
+    # 确保 head + tail 不超过 max_chunks 的一半
+    head_tail_count = min(head_tail_count, max_chunks // 2)
+    
+    head = sorted_chunks[:head_tail_count]
+    tail = sorted_chunks[-head_tail_count:]
+    middle = sorted_chunks[head_tail_count:-head_tail_count]
 
+    # 中间部分采样
     middle_count = max_chunks - len(head) - len(tail)
-    step = max(1, len(middle) // middle_count)
-    sampled_middle = middle[::step][:middle_count]
+    if middle_count > 0 and middle:
+        step = max(1, len(middle) // middle_count)
+        sampled_middle = middle[::step][:middle_count]
+    else:
+        sampled_middle = []
 
-    return head + sampled_middle + tail
+    result = head + sampled_middle + tail
+    
+    # 确保不超过 max_chunks（边界情况保护）
+    return result[:max_chunks]
 ```
+
+**边界情况测试**：
+
+| chunks 总数 | max_chunks | head | tail | middle | 最终返回 |
+|------------|-----------|------|------|--------|---------|
+| 10 | 15 | - | - | - | 10 (≤ max, 直接返回) |
+| 16 | 15 | 1 | 1 | 13 | 15 (1+13+1) |
+| 50 | 15 | 5 | 5 | 5 | 15 (5+5+5) |
+| 100 | 15 | 5 | 5 | 5 | 15 (5+5+5) |
+| 20 | 15 | 2 | 2 | 11 | 15 (2+11+2) |
 
 ---
 
@@ -288,7 +350,11 @@ def _uniform_sample_chunks(self, chunks: List[dict], max_chunks: int = 15) -> Li
 
 **新方案**：逐 chunk 独立生成 → 每个 chunk 生成 1 个 QA → 问题必须可由该 chunk 直接回答 → 不相关的 chunk 可跳过
 
-### 5.2 生成流程
+### 5.2 生成流程（并发执行）
+
+**问题**：串行逐 chunk 生成会导致严重性能问题（15 chunks × 6 combos × 10s = 15 分钟），无法满足"单组合 < 60 秒"的验收标准。
+
+**解决方案**：同一组合内的 chunk 生成是独立的，使用 `asyncio.gather()` 并发执行，通过 `asyncio.Semaphore` 控制并发度。
 
 ```python
 async def _generate_drafts_for_combination(
@@ -301,26 +367,86 @@ async def _generate_drafts_for_combination(
     model: str,
     temperature: float,
     max_retries: int,
-) -> List[DraftData]:
-    """对采样的 chunks 逐个生成草稿"""
+    embedding_cache: dict,  # 全局共享缓存，由 generate_drafts_matrix 创建
+    progress_callback: Optional[Callable] = None,
+    current_combo_index: int = 0,
+    total_combinations: int = 1,
+) -> Dict[str, Any]:
+    """对采样的 chunks 并发生成草稿
+    
+    Args:
+        embedding_cache: 全局共享 embedding 缓存（Phase 2 & 3 复用）
+    
+    Returns:
+        {
+            "drafts": List[DraftData],
+            "skipped_chunks": int,
+            "faithfulness_failed": int,
+        }
+    """
+    # 控制并发度，避免同时过多 LLM 请求
+    semaphore = asyncio.Semaphore(5)  # 最多 5 个并发
+    
+    async def _process_chunk(chunk: dict) -> Optional[DraftData]:
+        async with semaphore:
+            draft = await self._generate_qa_from_chunk(
+                chunk=chunk,
+                domain=domain,
+                age_stage_label=age_stage_label,
+                age_min_months=age_min_months,
+                age_max_months=age_max_months,
+                model=model,
+                temperature=temperature,
+                max_retries=max_retries,
+                embedding_cache=embedding_cache,
+            )
+            
+            # 推送 chunk 级进度
+            if progress_callback:
+                await progress_callback(
+                    current_combo_index, total_combinations,
+                    json.dumps({
+                        "event": "draft_chunk_progress",
+                        "current_combination": current_combo_index + 1,
+                        "total_combinations": total_combinations,
+                        "chunk_id": chunk.get('id', ''),
+                        "domain": domain,
+                        "age_stage": age_stage_label,
+                        "draft_generated": draft is not None,
+                    })
+                )
+            
+            return draft
+    
+    # 并发执行所有 chunk
+    tasks = [_process_chunk(chunk) for chunk in sampled_chunks]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # 收集结果
     all_drafts = []
-
-    for chunk in sampled_chunks:
-        draft = await self._generate_qa_from_chunk(
-            chunk=chunk,
-            domain=domain,
-            age_stage_label=age_stage_label,
-            age_min_months=age_min_months,
-            age_max_months=age_max_months,
-            model=model,
-            temperature=temperature,
-            max_retries=max_retries,
-        )
-        if draft is not None:
-            all_drafts.append(draft)
-
-    return all_drafts
+    skipped_chunks = 0
+    faithfulness_failed = 0
+    
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"Chunk 生成异常: {result}")
+            faithfulness_failed += 1
+        elif result is None:
+            skipped_chunks += 1
+        else:
+            all_drafts.append(result)
+    
+    return {
+        "drafts": all_drafts,
+        "skipped_chunks": skipped_chunks,
+        "faithfulness_failed": faithfulness_failed,
+    }
 ```
+
+**性能预估**：
+- 单组合 15 chunks，并发度 5 → 分 3 批，每批约 10 秒 → 单组合约 30 秒
+- 6 个组合串行 → 总耗时约 3 分钟（远低于原方案的 15 分钟）
+- 满足"单组合 < 60 秒"的验收标准
 
 ```python
 async def _generate_qa_from_chunk(
@@ -333,6 +459,7 @@ async def _generate_qa_from_chunk(
     model: str,
     temperature: float,
     max_retries: int,
+    embedding_cache: Optional[dict] = None,
 ) -> Optional[DraftData]:
     """从单个 chunk 提取 1 个 QA 对，保证问题可由该 chunk 直接回答"""
 
@@ -341,44 +468,51 @@ async def _generate_qa_from_chunk(
     page_label = chunk['metadata'].get('page_label', '')
     topics = chunk['metadata'].get('topics', [])
 
-    prompt = await prompt_manager.get_prompt(
-        "test_case_generation_chunk_grounded",
-        variables={
-            "chunk_content": chunk_content,
-            "chunk_page": page_label,
-            "chunk_topics": ", ".join(topics) if topics else "未知",
-            "domain": domain,
-            "age_stage_label": age_stage_label,
-            "age_min_months": age_min_months,
-            "age_max_months": age_max_months,
-        },
-    )
+    # LLM 调用 + 解析，最多重试 2 次
+    for attempt in range(max_retries + 1):
+        prompt = await prompt_manager.get_prompt(
+            "test_case_generation_chunk_grounded",
+            variables={
+                "chunk_id": chunk_id,
+                "chunk_content": chunk_content,
+                "chunk_page": page_label,
+                "chunk_topics": ", ".join(topics) if topics else "未知",
+                "domain": domain,
+                "age_stage_label": age_stage_label,
+                "age_min_months": age_min_months,
+                "age_max_months": age_max_months,
+            },
+        )
 
-    # LLM 调用
-    llm = LLMServiceFactoryCompat.create(
-        framework=LLMFramework.LLAMAINDEX,
-        model_name=model,
-        scenario="test_case_generation",
-        temperature=temperature,
-    )
-    messages = [
-        LLMMessage(role="system", content="你是专业的儿童发展测试用例草稿生成专家。"),
-        LLMMessage(role="user", content=prompt),
-    ]
-    response = await llm.chat(LLMRequest(
-        messages=messages,
-        model_name=model,
-        temperature=temperature,
-        max_tokens=2048,
-        scenario="test_case_generation",
-        prompt_key="test_case_generation_chunk_grounded",
-    ))
-    response_text = response.content.strip()
+        llm = LLMServiceFactoryCompat.create(
+            framework=LLMFramework.LLAMAINDEX,
+            model_name=model,
+            scenario="test_case_generation",
+            temperature=temperature + (attempt * 0.1),  # 重试时略微增加随机性
+        )
+        messages = [
+            LLMMessage(role="system", content="你是专业的儿童发展测试用例草稿生成专家。"),
+            LLMMessage(role="user", content=prompt),
+        ]
+        response = await llm.chat(LLMRequest(
+            messages=messages,
+            model_name=model,
+            temperature=temperature + (attempt * 0.1),
+            max_tokens=2048,
+            scenario="test_case_generation",
+            prompt_key="test_case_generation_chunk_grounded",
+        ))
+        response_text = response.content.strip()
 
-    # 解析 LLM 输出
-    parsed = await self._parse_single_chunk_response(response_text, max_retries)
+        parsed = await self._parse_single_chunk_response(response_text)
+        if parsed is not None:
+            break  # 解析成功
+
+        if attempt < max_retries:
+            logger.warning(f"Chunk {chunk_id} 解析失败，重试 {attempt + 1}/{max_retries}")
+
     if parsed is None:
-        logger.warning(f"Chunk {chunk_id} LLM 输出解析失败")
+        logger.warning(f"Chunk {chunk_id} LLM 输出解析失败（{max_retries + 1} 次尝试后）")
         return None
 
     # 如果 LLM 返回 skip → 跳过该 chunk
@@ -386,10 +520,19 @@ async def _generate_qa_from_chunk(
         logger.info(f"Chunk {chunk_id} 被跳过: {parsed.get('reason', '')}")
         return None
 
+    # 校验 age 范围
+    age = int(parsed['age'])
+    if not (age_min_months <= age <= age_max_months):
+        logger.warning(
+            f"Chunk {chunk_id} age={age} 超出范围 [{age_min_months}, {age_max_months}]，"
+            f"修正为 {age_min_months}"
+        )
+        age = age_min_months
+
     # 绑定来源信息
     draft = DraftData(
         query=parsed['query'],
-        age=parsed['age'],
+        age=age,
         domain=domain,
         age_stage_label=age_stage_label,
         description=parsed['description'],
@@ -402,8 +545,10 @@ async def _generate_qa_from_chunk(
         source_content_snippet=chunk_content[:200],
     )
 
-    # 忠实性校验
-    is_faithful, reason = self._verify_faithfulness(draft, chunk_content)
+    # 忠实性校验（使用全局 embedding 缓存）
+    is_faithful, reason = await self._verify_faithfulness(
+        draft, chunk_content, embedding_cache
+    )
     if not is_faithful:
         logger.warning(f"Chunk {chunk_id} 忠实性校验失败: {reason}")
         return None
@@ -416,43 +561,59 @@ async def _generate_qa_from_chunk(
 新方案 LLM 返回单个 JSON 对象（非列表），解析逻辑与旧 `_parse_llm_response` 不同：
 
 ```python
-async def _parse_single_chunk_response(self, llm_output: str, max_retries: int = 2) -> Optional[dict]:
-    """解析单 chunk LLM 输出（单个 JSON 对象，非 drafts 列表）"""
+async def _parse_single_chunk_response(self, llm_output: str) -> Optional[dict]:
+    """解析单 chunk LLM 输出（单个 JSON 对象，非 drafts 列表）
+    
+    注意：本方法不做重试。重试由调用方 _generate_qa_from_chunk 控制，
+    重试时应重新调用 LLM 而非重复解析同一输出。
+    """
     import json_repair
 
-    for attempt in range(max_retries + 1):
+    try:
+        json_match = re.search(r"```json\s*(.*?)\s*```", llm_output, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            start = llm_output.find("{")
+            end = llm_output.rfind("}")
+            if start != -1 and end != -1:
+                json_str = llm_output[start:end + 1]
+            else:
+                json_str = llm_output
+
         try:
-            json_match = re.search(r"```json\s*(.*?)\s*```", llm_output, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                start = llm_output.find("{")
-                end = llm_output.rfind("}")
-                if start != -1 and end != -1:
-                    json_str = llm_output[start:end + 1]
-                else:
-                    json_str = llm_output
+            data = json.loads(json_str)
+        except json.JSONDecodeError:
+            data = json_repair.loads(json_str)
 
-            try:
-                data = json.loads(json_str)
-            except json.JSONDecodeError:
-                data = json_repair.loads(json_str)
+        if not isinstance(data, dict):
+            raise ValueError("LLM 输出未解析为 JSON 对象")
 
-            if not isinstance(data, dict):
-                raise ValueError("LLM 输出未解析为 JSON 对象")
+        return data
 
-            return data
-
-        except Exception as e:
-            if attempt < max_retries:
-                logger.warning(f"单 chunk 解析尝试 {attempt + 1} 失败: {e}")
-                continue
-            else:
-                logger.error(f"单 chunk LLM 输出解析失败（{max_retries} 次重试后）: {e}")
-                return None
+    except Exception as e:
+        logger.error(f"单 chunk LLM 输出解析失败: {e}")
+        return None
 ```
 
-**skip 字段优先级**：解析成功后先检查 `skip` 字段。如果 JSON 格式损坏导致解析失败，直接返回 `None`（视为解析失败，非 skip）。
+**调用方重试逻辑**（在 `_generate_qa_from_chunk` 中）：
+
+```python
+# LLM 调用 + 解析，最多重试 2 次
+for attempt in range(max_retries + 1):
+    response = await llm.chat(...)
+    response_text = response.content.strip()
+    parsed = await self._parse_single_chunk_response(response_text)
+    
+    if parsed is not None:
+        break  # 解析成功，跳出重试循环
+    
+    if attempt < max_retries:
+        logger.warning(f"Chunk {chunk_id} 解析失败，重试 {attempt + 1}/{max_retries}")
+        # 重试时重新调用 LLM（temperature 可略微调高增加随机性）
+```
+
+**skip 字段优先级**：解析成功后先检查 `skip` 字段。如果 JSON 格式损坏导致解析失败，返回 `None`（视为解析失败，非 skip）。
 
 ### 5.5 Prompt 设计
 
@@ -464,6 +625,7 @@ async def _parse_single_chunk_response(self, llm_output: str, max_retries: int =
 
 ## 源文档片段
 
+Chunk ID: {chunk_id}
 页码: {chunk_page}
 主题: {chunk_topics}
 
@@ -506,10 +668,11 @@ async def _parse_single_chunk_response(self, llm_output: str, max_retries: int =
 **关键设计点**：
 
 1. **单 chunk 输入**：prompt 只包含一个 chunk 的原文，LLM 无法编造其他内容
-2. **`skip` 机制**：chunk 与 domain/age 不相关时，LLM 可以选择跳过而非硬编
-3. **答案可追溯**：每个 answer_point 都可以回溯到 chunk 原文
-4. **关键词约束**：expected_keywords 必须出现在原文中
-5. **删除旧的 `batch_configs`/`source_chunk_index`**：逐 chunk 生成不再需要批次配置和来源索引
+2. **`chunk_id` 标注**：便于调试、日志追踪和问题定位
+3. **`skip` 机制**：chunk 与 domain/age 不相关时，LLM 可以选择跳过而非硬编
+4. **答案可追溯**：每个 answer_point 都可以回溯到 chunk 原文
+5. **关键词约束**：expected_keywords 必须出现在原文中
+6. **删除旧的 `batch_configs`/`source_chunk_index`**：逐 chunk 生成不再需要批次配置和来源索引
 
 ---
 
@@ -517,29 +680,116 @@ async def _parse_single_chunk_response(self, llm_output: str, max_retries: int =
 
 ### 6.1 忠实性校验
 
-生成后做字符串匹配验证——检查 `answer_points` 和 `expected_keywords` 是否出现在源 chunk 原文中：
+**问题**：LLM 生成的 answer_points 通常是改写/概括而非原文摘录，字符串 substring 匹配会误杀合理草稿。同时，短句（answer_point）与长段（chunk_content）直接做 embedding 对比，因长度差异导致分数天然偏低。
+
+**解决方案**：采用两层校验——字符串快速初筛 + 句子级 embedding 语义相似度精排。
 
 ```python
-def _verify_faithfulness(self, draft: DraftData, source_chunk_content: str) -> tuple[bool, str]:
-    """验证草稿内容是否忠实于源 chunk"""
+async def _verify_faithfulness(
+    self,
+    draft: DraftData,
+    source_chunk_content: str,
+    embedding_cache: Optional[dict] = None,
+) -> tuple[bool, str]:
+    """验证草稿内容是否忠实于源 chunk（两层校验）"""
+    
+    # === 第一层：字符串快速初筛 ===
     content_lower = source_chunk_content.lower()
-
+    
+    # 关键词必须出现在原文中（关键词通常是原文术语，不应被改写）
     if draft.expected_keywords:
         keyword_hits = sum(1 for kw in draft.expected_keywords if kw.lower() in content_lower)
         keyword_rate = keyword_hits / len(draft.expected_keywords)
-        if keyword_rate < 0.6:
-            return False, f"关键词命中率 {keyword_rate:.0%} 低于 60%"
-
+        if keyword_rate < 0.5:  # 降低至 50%
+            return False, f"关键词命中率 {keyword_rate:.0%} 低于 50%"
+    
+    # === 第二层：句子级 embedding 语义相似度精排 ===
+    # answer_points 允许改写，用语义相似度判断
+    # 关键改进：将 chunk 拆分为句子，每个 answer_point 与每个句子对比，取最高分
     if draft.answer_points:
-        point_hits = sum(
-            1 for pt in draft.answer_points
-            if pt.lower() in content_lower or pt.lower()[:max(8, len(pt) // 2)] in content_lower
-        )
-        point_rate = point_hits / len(draft.answer_points)
-        if point_rate < 0.5:
-            return False, f"答案要点命中率 {point_rate:.0%} 低于 50%"
-
+        sentences = self._split_into_sentences(source_chunk_content)
+        
+        # 预计算所有句子的 embedding
+        sentence_embeddings = []
+        for sent in sentences:
+            sent_emb = await self._get_embedding_with_cache(sent, embedding_cache)
+            sentence_embeddings.append(sent_emb)
+        
+        faithful_count = 0
+        for point in draft.answer_points:
+            point_embedding = await self._get_embedding_with_cache(point, embedding_cache)
+            
+            # 与每个句子对比，取最高相似度
+            max_sim = 0.0
+            for sent_emb in sentence_embeddings:
+                sim = self._cosine_similarity(point_embedding, sent_emb)
+                if sim > max_sim:
+                    max_sim = sim
+            
+            if max_sim >= 0.65:  # 句子级语义相似度阈值
+                faithful_count += 1
+        
+        point_rate = faithful_count / len(draft.answer_points)
+        if point_rate < 0.5:  # 50% 的 answer_points 需语义相关
+            return False, f"答案要点语义命中率 {point_rate:.0%} 低于 50%"
+    
     return True, ""
+
+@staticmethod
+def _split_into_sentences(text: str) -> List[str]:
+    """将文本拆分为句子列表"""
+    import re
+    # 按中文句号、感叹号、问号、分号拆分
+    sentences = re.split(r'[。！？；\n]+', text)
+    # 过滤空句和过短句（< 4 字）
+    return [s.strip() for s in sentences if len(s.strip()) >= 4]
+```
+
+**策略说明**：
+
+| 校验层 | 检查对象 | 方法 | 阈值 | 理由 |
+|--------|----------|------|------|------|
+| 第一层 | expected_keywords | 字符串匹配 | ≥ 50% | 关键词通常是原文术语，不应被改写 |
+| 第二层 | answer_points | 句子级 embedding 相似度 | ≥ 0.65 | 短句与短句对比，分数更可靠 |
+
+**为什么拆句对比**：
+- `answer_point` 通常是 5-15 字的短句
+- `chunk_content` 通常是 200-500 字的长段
+- 直接对比：embedding 对长度敏感，短句与长段的 cosine 相似度天然偏低（0.4-0.6）
+- 拆句对比：短句与短句对比，分数分布更合理（0.6-0.9），0.65 阈值更可靠
+
+**成本控制**：一个 chunk 约 10-20 个句子，每个 answer_point 对比 10-20 次（纯计算，无 API 调用）。句子 embedding 只调用一次，缓存复用。
+
+**辅助方法定义**：
+
+```python
+async def _get_embedding_with_cache(
+    self, text: str, cache: Optional[dict] = None
+) -> list[float]:
+    """获取 embedding，支持缓存"""
+    import hashlib
+    from llama_index.core import Settings
+    
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    
+    if cache and text_hash in cache:
+        return cache[text_hash]
+    
+    embed_model = Settings.embed_model
+    embedding = await embed_model.aget_text_embedding(text)
+    
+    if cache is not None:
+        cache[text_hash] = embedding
+    
+    return embedding
+
+@staticmethod
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """计算余弦相似度"""
+    import numpy as np
+    a_arr = np.array(a)
+    b_arr = np.array(b)
+    return float(np.dot(a_arr, b_arr) / (np.linalg.norm(a_arr) * np.linalg.norm(b_arr)))
 ```
 
 未通过忠实性校验的草稿：**丢弃并记录日志**，不进入入库环节。
@@ -550,17 +800,37 @@ def _verify_faithfulness(self, draft: DraftData, source_chunk_content: str) -> t
 
 采用业内通用的**混合策略**：字符串快速初筛 + embedding 精排灰色区间。
 
+**关键改进**：`embedding_cache` 由主流程创建并全局共享，忠实性校验和去重复用同一份缓存。
+
 ```python
 async def _hybrid_deduplicate(
     self,
     new_drafts: List[DraftData],
     existing_drafts: List[TestCaseDraft],
     threshold: float = 0.85,
+    embedding_cache: Optional[dict] = None,
 ) -> List[DraftData]:
-    """混合去重：字符串快速初筛 + embedding 精排灰色区间"""
+    """混合去重：字符串快速初筛 + embedding 精排灰色区间
+    
+    Args:
+        embedding_cache: 全局共享缓存（由 generate_drafts_matrix 创建）
+    """
+    if embedding_cache is None:
+        embedding_cache = {}  # 兜底：如果没有传入则创建新的
+        
     filtered = []
+    
+    # 预计算所有现有草稿的 embedding（仅灰色区间需要）
+    existing_embeddings = {}
+    for existing in existing_drafts:
+        existing_embeddings[existing.id] = await self._get_embedding_with_cache(
+            existing.query, embedding_cache
+        )
+    
     for draft in new_drafts:
         is_dup = False
+        draft_embedding = None  # 延迟计算，仅灰色区间需要
+        
         for existing in existing_drafts:
             str_sim = SequenceMatcher(None, draft.query, existing.query).ratio()
 
@@ -568,9 +838,20 @@ async def _hybrid_deduplicate(
                 is_dup = True
                 break
             elif str_sim > 0.5:
-                cosine_sim = await self._compute_cosine_similarity(
-                    draft.query, existing.query
-                )
+                # 灰色区间：计算语义相似度
+                if draft_embedding is None:
+                    draft_embedding = await self._get_embedding_with_cache(
+                        draft.query, embedding_cache
+                    )
+                
+                existing_emb = existing_embeddings.get(existing.id)
+                if existing_emb is None:
+                    existing_emb = await self._get_embedding_with_cache(
+                        existing.query, embedding_cache
+                    )
+                    existing_embeddings[existing.id] = existing_emb
+                
+                cosine_sim = self._cosine_similarity(draft_embedding, existing_emb)
                 if cosine_sim > threshold:
                     is_dup = True
                     break
@@ -589,23 +870,11 @@ async def _hybrid_deduplicate(
 | 0.5 - 0.85 | 调用 embedding 精排 | 灰色区间，需要语义判断 |
 | < 0.5 | 直接不重 | 明显不同的文本，跳过 |
 
-**成本控制**：每组合 3-10 条草稿，大部分对比不会落入灰色区间，实际 embedding 调用量极少。
-
-```python
-async def _compute_cosine_similarity(self, text_a: str, text_b: str) -> float:
-    """计算两条文本的余弦相似度"""
-    import numpy as np
-    from src.config.core.init import init_embedding_model
-    from llama_index.core import Settings
-
-    embed_model = Settings.embed_model
-    emb_a = await embed_model.aget_text_embedding(text_a)
-    emb_b = await embed_model.aget_text_embedding(text_b)
-
-    a = np.array(emb_a)
-    b = np.array(emb_b)
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-```
+**成本控制**：
+- 每组合 3-10 条草稿，大部分对比不会落入灰色区间
+- 使用全局 `embedding_cache` 避免重复 embed 相同 query
+- 延迟计算：只有落入灰色区间的 draft 才计算 embedding
+- 忠实性校验和去重共享同一份缓存，最大化复用
 
 ### 6.3 来源标注入库
 
@@ -700,6 +969,146 @@ async def _save_drafts_idempotent(self, drafts: List[DraftData], doc_id: str, mo
         await session.commit()
 ```
 
+### 6.4 主流程串联（新增）
+
+`generate_drafts_matrix()` 的核心流水线代码：
+
+```python
+async def generate_drafts_matrix(
+    self,
+    source_document_id: str,
+    params: GenerationParams,
+    progress_callback: Optional[Callable] = None,
+    cancellation_event: Optional[asyncio.Event] = None,
+    task_id: Optional[str] = None,
+    task_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """多维度矩阵草稿生成（三阶段流水线）"""
+    start_time = time.time()
+    
+    # 0. 获取分布式锁
+    if not await self._acquire_lock(source_document_id):
+        raise ValueError("该文档正在生成草稿，请稍后重试")
+    
+    try:
+        # 1. 获取文档
+        doc = await self._get_source_document(source_document_id)
+        
+        # 2. 创建全局 embedding_cache（Phase 2 & 3 共享）
+        embedding_cache = {}
+        
+        # 3. Phase 1: Chunk 选取
+        all_chunks = await self._get_all_chunks_by_file_hash(doc.file_hash)
+        age_groups = self._group_chunks_by_age(all_chunks, params.age_stages)
+        validation = self._validate_and_report(age_groups, params.target_domains)
+        
+        valid_combos = validation["valid_combos"]
+        total_combinations = len(valid_combos)
+        
+        # 推送开始事件
+        if progress_callback:
+            await progress_callback(0, total_combinations, json.dumps({
+                "event": "draft_generation_started",
+                "total_combinations": total_combinations,
+                "total_sampled_chunks": sum(
+                    min(len(c["chunks"]), 15) for c in valid_combos
+                ),
+                "mode": params.mode,
+            }))
+        
+        # 4. Phase 2 & 3: 逐组合生成 → 去重 → 入库
+        all_generated = 0
+        all_skipped = 0
+        all_faithfulness_failed = 0
+        all_parse_failed = 0
+        all_deduplicated = 0
+        
+        for i, combo in enumerate(valid_combos):
+            # 4.1 均匀采样
+            sampled = self._uniform_sample_chunks(combo["chunks"])
+            
+            # 4.2 Phase 2: 并发生成
+            result = await self._generate_drafts_for_combination(
+                sampled_chunks=sampled,
+                domain=combo["domain"],
+                age_stage_label=combo["age_stage"],
+                age_min_months=combo.get("age_min_months", 0),
+                age_max_months=combo.get("age_max_months", 216),
+                model=params.llm_model,
+                temperature=params.temperature,
+                max_retries=2,
+                embedding_cache=embedding_cache,  # 传入全局缓存
+                progress_callback=progress_callback,
+                current_combo_index=i,
+                total_combinations=total_combinations,
+            )
+            
+            new_drafts = result["drafts"]
+            all_skipped += result["skipped_chunks"]
+            all_faithfulness_failed += result["faithfulness_failed"]
+            
+            # 4.3 Phase 3: 去重
+            existing = await self._get_existing_drafts(
+                source_document_id, combo["domain"], combo["age_stage"]
+            )
+            deduped = await self._hybrid_deduplicate(
+                new_drafts, existing, 
+                embedding_cache=embedding_cache  # 复用全局缓存
+            )
+            all_deduplicated += len(new_drafts) - len(deduped)
+            
+            # 4.4 重新编号 draft_index
+            for idx, draft in enumerate(deduped):
+                draft.draft_index = idx
+            
+            # 4.5 入库
+            await self._save_drafts_idempotent(
+                deduped, source_document_id, params.mode
+            )
+            all_generated += len(deduped)
+            
+            # 推送组合完成事件
+            if progress_callback:
+                await progress_callback(i + 1, total_combinations, json.dumps({
+                    "event": "draft_combination_progress",
+                    "current_combination": i + 1,
+                    "total_combinations": total_combinations,
+                    "domain": combo["domain"],
+                    "age_stage": combo["age_stage"],
+                    "generated": all_generated,
+                    "skipped_chunks": result["skipped_chunks"],
+                    "faithfulness_failed": result["faithfulness_failed"],
+                    "deduplicated": len(new_drafts) - len(deduped),
+                }))
+        
+        # 5. 推送完成事件
+        duration = time.time() - start_time
+        if progress_callback:
+            await progress_callback(total_combinations, total_combinations, json.dumps({
+                "event": "draft_generation_completed",
+                "total": all_generated,
+                "total_skipped_chunks": all_skipped,
+                "total_faithfulness_failed": all_faithfulness_failed,
+                "total_parse_failed": all_parse_failed,
+                "total_deduplicated": all_deduplicated,
+                "warnings": validation.get("warnings", []),
+                "duration": self._format_duration(duration),
+            }))
+        
+        return {
+            "total_combinations": total_combinations,
+            "total_generated": all_generated,
+            "total_skipped": all_skipped,
+            "total_faithfulness_failed": all_faithfulness_failed,
+            "total_deduplicated": all_deduplicated,
+            "duration_seconds": duration,
+            "warnings": validation.get("warnings", []),
+        }
+        
+    finally:
+        await self._release_lock(source_document_id)
+```
+
 ---
 
 ## 7. 完整数据流
@@ -714,7 +1123,7 @@ async def _save_drafts_idempotent(self, drafts: List[DraftData], doc_id: str, mo
   │   ├─ 1. 从 SourceDocument 获取 file_hash
   │   ├─ 2. 直接按 file_hash 读取所有 chunks（非检索！）
   │   ├─ 3. 按年龄段分组 chunks
-  │   │     - 遍历所有 chunks，按 target_age_min/max 归类
+  │   │     - 遍历所有 chunks，按 target_age_min/max 归类（使用兜底方法）
   │   │     - 一个 chunk 可属于多个年龄段
   │   │     - 无 age 的归入"通用"组，加入每个年龄段
   │   ├─ 4. 验证与用户选择的匹配度
@@ -723,26 +1132,30 @@ async def _save_drafts_idempotent(self, drafts: List[DraftData], doc_id: str, mo
   │   │     - 全部不匹配 → 抛出异常
   │   └─ 5. 对每个有效组合，分别均匀采样 chunks
   │
-  ├─ Phase 2: 逐 Chunk QA 生成
+  ├─ 创建全局 embedding_cache（Phase 2 & 3 共享）
+  │
+  ├─ Phase 2: 逐 Chunk QA 生成（并发！）
   │   │
-  │   ├─ 对每个有效组合:
+  │   ├─ 对每个有效组合（并发度 5，asyncio.gather）:
   │   │   │
-  │   │   └─ 对该组合的每个采样 chunk:
-  │   │       ├─ 构建单 chunk prompt（原文 + 来源标注）
-  │   │       ├─ LLM 生成 QA（可返回 skip）
+  │   │   └─ 对该组合的每个采样 chunk（并发）:
+  │   │       ├─ 构建单 chunk prompt（原文 + chunk_id + 来源标注）
+  │   │       ├─ LLM 生成 QA（可返回 skip，失败可重试）
+  │   │       ├─ 校验 age 范围（超出则修正为 age_min）
   │   │       ├─ 绑定 source_chunk_id
-  │   │       ├─ 忠实性校验（keywords/answer_points 回溯 chunk 原文）
+  │   │       ├─ 忠实性校验（关键词匹配 + 句子级语义相似度）
   │   │       └─ 校验失败 → 丢弃，记录日志
   │   │
   │   └─ 收集所有有效草稿
   │
   ├─ Phase 3: 去重 + 入库
   │   ├─ 1. 混合去重（字符串初筛 + embedding 精排灰色区间）
-  │   ├─ 2. 重新编号 draft_index
+  │   ├─ 2. 重新编号 draft_index（从 0 开始连续）
   │   └─ 3. 幂等入库（含来源标注字段）
   │
   └─ 返回生成结果
-      { total_combinations, total_generated, total_skipped, total_faithfulness_failed, duration_seconds }
+      { total_combinations, total_generated, total_skipped, total_faithfulness_failed,
+        total_parse_failed, duration_seconds, warnings }
 
 后续：测试运行阶段
   │
@@ -758,6 +1171,8 @@ async def _save_drafts_idempotent(self, drafts: List[DraftData], doc_id: str, mo
 
 ```
 DraftService.generate_drafts_matrix()
+  │
+  ├─ 创建全局 embedding_cache（Phase 2 & 3 共享）
   │
   ├─ 从 SourceDocument 获取 file_hash
   │
@@ -775,23 +1190,30 @@ DraftService.generate_drafts_matrix()
   │     │
   │     ├─ 检查每个 domain × age_stage 组合是否有 chunks
   │     ├─ 检查 topics 是否匹配
-  │     └─ 返回 valid_combos 和 skipped_combos
+  │     └─ 返回 valid_combos, skipped_combos, warnings
   │
   ├─ 对每个有效组合调用 _uniform_sample_chunks(chunks) [新增]
   │
   ├─ 对每个有效组合调用 _generate_drafts_for_combination() [新增]
   │     │
-  │     └─ 对每个采样 chunk 调用 _generate_qa_from_chunk() [新增]
+  │     └─ 并发调用 _generate_qa_from_chunk() [新增]
   │           │
-  │           ├─ 构建单 chunk prompt
-  │           ├─ LLM 生成 QA
-  │           ├─ skip → 跳过
+  │           ├─ 构建单 chunk prompt（含 chunk_id）
+  │           ├─ LLM 生成 QA（可返回 skip，失败可重试）
+  │           ├─ 校验 age 范围（超出则修正为 age_min）
+  │           ├─ skip → 跳过，计数 +1
   │           ├─ 绑定 source_chunk_id
-  │           └─ _verify_faithfulness() [新增] → 校验失败则丢弃
+  │           └─ _verify_faithfulness() [升级] → 校验失败则丢弃，计数 +1
+  │     │
+  │     └─ 返回 { drafts, skipped_chunks, faithfulness_failed }
   │
   ├─ 调用 DraftDeduplicationService.deduplicate_drafts() [升级]
   │     │
   │     └─ 混合去重：字符串快速初筛 + embedding 精排灰色区间
+  │
+  ├─ 重新编号 draft_index（从 0 开始连续）[新增]
+  │     for idx, draft in enumerate(deduped_drafts):
+  │         draft.draft_index = idx
   │
   └─ 调用 _save_drafts_idempotent() [修改]
         │
@@ -813,14 +1235,31 @@ def _get_stage_range(self, stage_label: str) -> tuple[int, int]:
             return stage["age_min_months"], stage["age_max_months"]
     return 0, 216
 
+def _get_chunk_age_range(self, chunk: dict) -> tuple[int | None, int | None]:
+    """获取 chunk 的年龄范围，无则返回 (None, None)"""
+    age_min = chunk['metadata'].get('target_age_min')
+    age_max = chunk['metadata'].get('target_age_max')
+    
+    # 兜底：如果 metadata 无年龄字段，尝试从 topics 推断
+    if age_min is None or age_max is None:
+        topics = chunk['metadata'].get('topics', [])
+        age_min, age_max = self._infer_age_from_topics(topics)
+    
+    return age_min, age_max
+
+def _infer_age_from_topics(self, topics: list[str]) -> tuple[int | None, int | None]:
+    """从 topics 推断年龄段（可选，根据业务规则实现）"""
+    # 示例：如果 topics 包含 "0-3岁感统训练"，返回 (0, 36)
+    # 如果无法推断，返回 (None, None) → 归入通用组
+    return None, None
+
 def _group_chunks_by_age(self, chunks: List[dict], target_age_stages: List[str]) -> Dict[str, List[dict]]:
     """将 chunks 按年龄段分组，无年龄段的归入通用组"""
     age_groups = {stage: [] for stage in target_age_stages}
     universal_chunks = []
 
     for chunk in chunks:
-        chunk_min = chunk['metadata'].get('target_age_min')
-        chunk_max = chunk['metadata'].get('target_age_max')
+        chunk_min, chunk_max = self._get_chunk_age_range(chunk)
 
         if chunk_min is None or chunk_max is None:
             universal_chunks.append(chunk)
@@ -844,6 +1283,7 @@ def _validate_and_report(self, age_groups: Dict[str, List[dict]], target_domains
     """验证并报告各年龄段的匹配情况"""
     valid_combos = []
     skipped_combos = []
+    warnings = []  # 新增：收集警告信息
 
     for age_stage, chunks in age_groups.items():
         if not chunks:
@@ -855,8 +1295,22 @@ def _validate_and_report(self, age_groups: Dict[str, List[dict]], target_domains
             continue
 
         all_topics = self._collect_topics(chunks)
+        has_topics_metadata = any(
+            c['metadata'].get('topics') for c in chunks
+        )
+        
         if not all_topics:
-            matched_domains = target_domains
+            if has_topics_metadata:
+                # 有 topics 字段但全部为空列表 → 真的不匹配
+                matched_domains = []
+            else:
+                # chunks 无 topics 元数据 → 跳过领域验证，但记录警告
+                matched_domains = target_domains
+                warnings.append({
+                    "age_stage": age_stage,
+                    "warning": "文档 chunks 无 topics 元数据，跳过领域验证",
+                    "affected_domains": target_domains,
+                })
         else:
             matched_domains = [d for d in target_domains if d in all_topics]
 
@@ -883,9 +1337,15 @@ def _validate_and_report(self, age_groups: Dict[str, List[dict]], target_domains
 
     return {
         "valid_combos": valid_combos,
-        "skipped_combos": skipped_combos
+        "skipped_combos": skipped_combos,
+        "warnings": warnings,  # 新增：返回警告
     }
 ```
+
+**关键改进**：
+- 区分"有 topics 但为空"和"无 topics 元数据"两种情况
+- 无 topics 元数据时跳过领域验证，但记录警告返回给调用方
+- 警告信息通过 SSE 事件推送给前端，让用户知情
 
 ### 8.3 错误策略
 
@@ -922,7 +1382,7 @@ def _validate_and_report(self, age_groups: Dict[str, List[dict]], target_domains
 class DraftData:
     """草稿数据载体（统一定义，禁止在其他文件重复）"""
     query: str = ""
-    age: float = 0
+    age: int = 0  # 统一为 int（月龄），与 prompt 约束和验收标准一致
     domain: str = ""
     age_stage_label: str = ""
     draft_index: int = 0
@@ -939,6 +1399,12 @@ class DraftData:
     source_content_snippet: str = ""
 ```
 
+**类型统一说明**：
+- `DraftData.age`：`int`（月龄，如 48 表示 48 个月）
+- ORM `TestCaseDraft.age`：`DECIMAL(4,1)`（兼容历史数据，新数据写入时 `int` 自动转换）
+- Pydantic `TestCaseDraft.age`：`float`（API 响应层，前端展示时取整）
+- 在 `_save_drafts_idempotent()` 中无需额外转换，Python `int` 可自动适配 `DECIMAL`
+
 ---
 
 ## 10. 配置项
@@ -948,13 +1414,15 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
 ('draft_generation.chunk_sampling_strategy', 'uniform', 'draft', '采样策略: uniform=均匀采样'),
 ('draft_generation.max_chunks_per_combination', '15', 'draft', '每个组合最大采样 chunk 数'),
 ('draft_generation.coverage_head_tail_ratio', '0.1', 'draft', '首尾强制覆盖比例'),
-('draft_generation.faithfulness_keyword_threshold', '0.6', 'draft', '忠实性校验-关键词命中率阈值'),
+('draft_generation.faithfulness_keyword_threshold', '0.5', 'draft', '忠实性校验-关键词命中率阈值'),
 ('draft_generation.faithfulness_answer_point_threshold', '0.5', 'draft', '忠实性校验-答案要点命中率阈值'),
+('draft_generation.faithfulness_sentence_similarity_threshold', '0.65', 'draft', '忠实性校验-句子级语义相似度阈值'),
 ('draft_generation.semantic_dedup_threshold', '0.85', 'draft', '语义去重阈值'),
 ('draft_generation.dedup_string_high_threshold', '0.85', 'draft', '字符串相似度高阈值（直接判重）'),
 ('draft_generation.dedup_string_low_threshold', '0.5', 'draft', '字符串相似度低阈值（直接不重）'),
 ('draft_generation.skip_unmatched_combos', 'true', 'draft', '是否跳过不匹配的组合（而非报错）'),
-('draft_generation.min_chunks_for_generation', '5', 'draft', '最少 chunks 数量，低于此值拒绝生成');
+('draft_generation.min_chunks_for_generation', '5', 'draft', '最少 chunks 数量，低于此值拒绝生成'),
+('draft_generation.concurrency_limit', '5', 'draft', '并发 chunk 生成数（Semaphore 大小）');
 ```
 
 ---
@@ -988,10 +1456,10 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
 
 ### 11.3 阶段 3: 去重升级 + 入库 (优先级: 中)
 
-- [ ] 新增 `_hybrid_deduplicate()` 方法
-- [ ] 新增 `_compute_cosine_similarity()` 方法
+- [ ] 新增 `_hybrid_deduplicate()` 方法（支持全局 embedding_cache）
 - [ ] 修改 `_save_drafts_idempotent()` 保存来源字段
 - [ ] 修改 `DraftDeduplicationService` 引用统一的 DraftData
+- [ ] 去重后重新编号 draft_index（从 0 开始连续）
 
 ### 11.4 阶段 4: 测试与优化 (优先级: 中)
 
@@ -1021,9 +1489,9 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
 ### 12.2 忠实性验收
 
 - [ ] 生成的草稿与文档内容相关度 > 80%
-- [ ] 每个 answer_point 可回溯到源 chunk 原文
-- [ ] 每个 expected_keyword 出现在源 chunk 原文中
-- [ ] 忠实性校验命中率：关键词 ≥ 60%，答案要点 ≥ 50%
+- [ ] 每个 answer_point 可回溯到源 chunk 原文的某个句子（语义相似度 ≥ 0.65）
+- [ ] 每个 expected_keyword 出现在源 chunk 原文中（字符串匹配）
+- [ ] 忠实性校验命中率：关键词 ≥ 50%，答案要点 ≥ 50%
 - [ ] 不存在编造的概念、数据或术语
 
 ### 12.3 质量验收
@@ -1052,10 +1520,13 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
 | 用户选的年龄段文档无覆盖 | 该组合跳过 | 记录警告，继续其他年龄段 |
 | 文档过短（chunks < 5） | 覆盖度不足 | 拒绝生成，提示"文档内容不足以生成多样化草稿" |
 | LLM 返回 skip 导致草稿不足 | 某组合草稿数为 0 | 记录警告，该组合跳过 |
-| 忠实性校验误杀 | 丢弃了合理的草稿 | 阈值可调，初期放宽（关键词 60%、答案 50%） |
+| 忠实性校验误杀 | 丢弃了合理的草稿 | 阈值可调，初期放宽（关键词 50%、答案要点 50%、句子级相似度 0.65） |
 | 混合去重误杀 | 草稿数量不足 | 阈值可调（0.85），保留字符串去重作为后备 |
 | Chroma 索引不可用 | 无法读取 chunks | 检查索引状态，该文档生成失败 |
-| 逐 chunk 生成 LLM 调用次数增加 | 成本和耗时上升 | 每个 chunk 只生成 1 个 QA；可并发调用 |
+| **并发 LLM API 限流** | 部分请求被 429 拒绝 | Semaphore 控制并发度（默认 5），支持配置调整 |
+| **并发内存占用过高** | 大量 embedding 缓存占用内存 | embedding_cache 按组合生命周期管理，组合结束后释放 |
+| **并发顺序导致 SSE 事件乱序** | 前端进度显示不准确 | draft_chunk_progress 不依赖顺序，前端通过计数统计 |
+| **Semaphore 并发度不合适** | 过低浪费资源，过高触发限流 | 通过配置项 `draft_generation.concurrency_limit` 可调 |
 
 ---
 
@@ -1137,14 +1608,18 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
   "event": "draft_chunk_progress",
   "current_combination": 2,
   "total_combinations": 6,
-  "current_chunk": 5,
-  "total_chunks_in_combo": 15,
+  "chunk_id": "abc-123-def",
   "domain": "感觉统合",
   "age_stage": "3-6岁",
-  "chunk_skipped": false,
-  "faithfulness_failed": false
+  "draft_generated": true
 }
 ```
+
+**字段说明**：
+- `chunk_id`：当前处理的 chunk 唯一标识
+- `draft_generated`：`true` 表示成功生成草稿，`false` 表示 skip/校验失败/解析失败
+
+> 注：由于并发执行，`current_chunk`/`total_chunks_in_combo` 不适用。前端可通过统计 `draft_chunk_progress` 事件数量自行计算进度。
 
 ### 16.3 组合完成事件
 
@@ -1171,9 +1646,24 @@ INSERT INTO system_configs (config_key, config_value, category, description) VAL
   "total_skipped_chunks": 8,
   "total_faithfulness_failed": 3,
   "total_deduplicated": 4,
+  "total_parse_failed": 2,
+  "warnings": [
+    {
+      "age_stage": "0-3岁",
+      "warning": "文档 chunks 无 topics 元数据，跳过领域验证",
+      "affected_domains": ["感觉统合", "粗大动作"]
+    }
+  ],
   "duration": "2m30s"
 }
 ```
+
+**新增字段说明**：
+- `total_skipped_chunks`：LLM 返回 skip 的 chunk 数量
+- `total_faithfulness_failed`：忠实性校验失败的 chunk 数量
+- `total_deduplicated`：去重移除的草稿数量
+- `total_parse_failed`：LLM 输出解析失败的 chunk 数量
+- `warnings`：生成过程中的警告列表（如无 topics 元数据）
 
 ### 16.5 与旧格式的兼容性
 

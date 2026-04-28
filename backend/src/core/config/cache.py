@@ -11,7 +11,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import async_session_factory
-from src.models.rag_eval.config_version import RagEvalConfigVersion
+from src.models.rag_eval.config import EvalConfigVersion
 from src.utils.logger import logger
 
 
@@ -100,8 +100,8 @@ class ConfigCache:
             try:
                 async with async_session_factory() as session:
                     stmt = (
-                        select(RagEvalConfigVersion)
-                        .order_by(desc(RagEvalConfigVersion.created_at))
+                        select(EvalConfigVersion)
+                        .order_by(desc(EvalConfigVersion.created_at))
                         .limit(1)
                     )
                     result = await session.execute(stmt)

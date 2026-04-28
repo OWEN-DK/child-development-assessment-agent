@@ -112,90 +112,95 @@ CREATE TABLE `document_records` (
                                     KEY `idx_doc_records_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档导入记录表';
 
+-- ============================================================
+-- RAG评估 v2 统一数据模型（6-12）
+-- 废止旧 Legacy 7张表 + RagEval 16张表，统一为11张核心表
+-- 使用 varchar(64) ID，统一命名无 rag_eval_ 前缀
+-- ============================================================
+
 -- ----------------------------
 -- 6. 知识快照表
 -- ----------------------------
 DROP TABLE IF EXISTS `knowledge_snapshots`;
 
 CREATE TABLE `knowledge_snapshots` (
-                                       `id` varchar(64) NOT NULL COMMENT '快照ID (UUID)',
-                                       `name` varchar(255) NOT NULL COMMENT '快照名称',
-                                       `description` text DEFAULT NULL COMMENT '快照描述',
-                                       `vector_store_path` varchar(512) NOT NULL COMMENT '向量存储路径',
-                                       `document_count` int NOT NULL DEFAULT 0 COMMENT '文档数量',
-                                       `chunk_count` int NOT NULL DEFAULT 0 COMMENT '分块数量',
-                                       `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                       PRIMARY KEY (`id`),
-                                       KEY `idx_knowledge_snapshots_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识快照表';
+    `id` VARCHAR(64) PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `description` TEXT,
+    `vector_store_path` VARCHAR(512) NOT NULL COMMENT '向量库存储路径',
+    `document_count` INT NOT NULL DEFAULT 0,
+    `chunk_count` INT NOT NULL DEFAULT 0,
+    `config_version_id` VARCHAR(64) COMMENT '配置版本 ID',
+    `config_snapshot` JSON COMMENT '配置快照 JSON',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_config_version_id` (`config_version_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
--- 7. 测试用例表
--- ----------------------------
-
-DROP TABLE IF EXISTS `test_cases`;
-
-CREATE TABLE `test_cases` (
-                              `id` varchar(64) NOT NULL COMMENT '用例ID (UUID)',
-                              `query` text NOT NULL COMMENT '查询内容',
-                              `age` decimal(4,1) NOT NULL COMMENT '适用年龄 (月)',
-                              `domain` enum('gross_motor','fine_motor','language','cognitive','social_emotional','sensory_integration') NOT NULL COMMENT '发展领域',
-                              `description` text DEFAULT NULL COMMENT '用例描述',
-                              `expected_knowledge_count` int NOT NULL DEFAULT 0 COMMENT '期望知识数量',
-                              `answer_points_summary` text DEFAULT NULL COMMENT '答案要点摘要',
-                              `min_age_requirement` decimal(4,1) DEFAULT NULL COMMENT '最小年龄要求',
-                              `max_age_requirement` decimal(4,1) DEFAULT NULL COMMENT '最大年龄要求',
-                              `difficulty_level` enum('easy','medium','hard') DEFAULT NULL COMMENT '难度等级',
-                              `expected_knowledge_ids` json DEFAULT NULL COMMENT '期望知识ID列表',
-                              `expected_keywords` json DEFAULT NULL COMMENT '期望关键词列表',
-                              `professional_terms` json DEFAULT NULL COMMENT '专业术语列表',
-                              `relevance_scores` json DEFAULT NULL COMMENT '相关性分数',
-                              `source_document_id` varchar(64) DEFAULT NULL COMMENT '源文档ID',
-                              `version` int NOT NULL DEFAULT 1 COMMENT '版本号',
-                              `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                              `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                              PRIMARY KEY (`id`),
-                              KEY `idx_test_cases_domain` (`domain`),
-                              KEY `idx_test_cases_age` (`age`),
-                              KEY `idx_test_cases_difficulty` (`difficulty_level`),
-                              KEY `idx_test_cases_age_range` (`min_age_requirement`, `max_age_requirement`),
-                              KEY `idx_test_cases_source_doc` (`source_document_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试用例表';
-
--- ----------------------------
--- 8. 测试用例草稿表
+-- 7. 测试用例草稿表
 -- ----------------------------
 DROP TABLE IF EXISTS `test_case_drafts`;
 
 CREATE TABLE `test_case_drafts` (
-                                    `id` varchar(64) NOT NULL COMMENT '草稿ID (UUID)',
-                                    `source_document_id` varchar(64) NOT NULL COMMENT '源文档ID',
-                                    `query` text NOT NULL COMMENT '查询内容',
-                                    `age` decimal(4,1) NOT NULL COMMENT '适用年龄 (月)',
-                                    `domain` enum('gross_motor','fine_motor','language','cognitive','social_emotional','sensory_integration') NOT NULL COMMENT '发展领域',
-                                    `age_stage_label` varchar(20) NOT NULL DEFAULT '' COMMENT '年龄段标签（如 3-6岁）',
-                                    `draft_index` int NOT NULL DEFAULT 0 COMMENT '组合内草稿索引',
-                                    `batch_id` varchar(64) DEFAULT NULL COMMENT '生成批次 ID',
-                                    `version` int NOT NULL DEFAULT 1 COMMENT '乐观锁版本号',
-                                    `description` text DEFAULT NULL COMMENT '草稿描述',
-                                    `generation_batch_id` varchar(64) DEFAULT NULL COMMENT '生成批次ID',
-                                    `expected_knowledge_ids` json DEFAULT NULL COMMENT '期望知识ID列表',
-                                    `expected_keywords` json DEFAULT NULL COMMENT '期望关键词列表',
-                                    `answer_points` json DEFAULT NULL COMMENT '答案要点',
-                                    `professional_terms` json DEFAULT NULL COMMENT '专业术语列表',
-                                    `age_requirement` json DEFAULT NULL COMMENT '年龄要求',
-                                    `generation_params` json DEFAULT NULL COMMENT '生成参数',
-                                    `status` enum('draft','reviewed','rejected','imported') NOT NULL DEFAULT 'draft' COMMENT '草稿状态',
-                                    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                    `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                                    PRIMARY KEY (`id`),
-                                    KEY `idx_drafts_source_doc` (`source_document_id`),
-                                    KEY `idx_drafts_domain_status` (`domain`, `status`),
-                                    KEY `idx_drafts_created_at` (`created_at`),
-                                    KEY `idx_generation_batch` (`generation_batch_id`),
-                                    KEY `idx_batch_id` (`batch_id`),
-                                    KEY `idx_draft_combination` (`source_document_id`, `domain`, `age_stage_label`, `draft_index`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试用例草稿表';
+    `id` VARCHAR(64) PRIMARY KEY,
+    `source_document_id` VARCHAR(64) COMMENT '来源文档 ID',
+    `query` TEXT NOT NULL COMMENT '测试问题',
+    `age` DECIMAL(4,1) NOT NULL COMMENT '年龄（岁，如 1.5）',
+    `age_stage_label` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '年龄段标签(0-6m/1-2y等)',
+    `domain` VARCHAR(32) NOT NULL COMMENT 'gross_motor/fine_motor/language/cognitive/social_emotional/sensory_integration',
+    `description` TEXT COMMENT '期望答案描述',
+    `expected_knowledge_ids` JSON COMMENT '期望检索的知识片段 ID 列表',
+    `expected_keywords` JSON COMMENT '期望关键词列表',
+    `answer_points` JSON COMMENT '答案要点列表',
+    `professional_terms` JSON COMMENT '专业术语列表',
+    `difficulty_level` VARCHAR(16) COMMENT 'easy/medium/hard',
+    `faithfulness_score` DECIMAL(5,4) COMMENT '忠实度评分(0-1)',
+    `source_chunk_id` VARCHAR(64) COMMENT '来源分块 ID',
+    `source_page` INT COMMENT '来源页码',
+    `source_content_snippet` TEXT COMMENT '来源内容片段',
+    `generation_params` JSON COMMENT '生成参数快照',
+    `batch_id` VARCHAR(64) COMMENT '生成批次 ID',
+    `draft_index` INT DEFAULT 0 COMMENT '批次内序号',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'draft' COMMENT 'draft/reviewed/rejected/imported',
+    `version` INT NOT NULL DEFAULT 1,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_source_document_id` (`source_document_id`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_domain` (`domain`),
+    INDEX `idx_batch_id` (`batch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------
+-- 8. 测试用例表
+-- ----------------------------
+DROP TABLE IF EXISTS `test_cases`;
+
+CREATE TABLE `test_cases` (
+    `id` VARCHAR(64) PRIMARY KEY,
+    `query` TEXT NOT NULL COMMENT '测试问题',
+    `age` DECIMAL(4,1) NOT NULL COMMENT '年龄（岁）',
+    `age_stage_label` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '年龄段标签',
+    `domain` VARCHAR(32) NOT NULL COMMENT '测试领域',
+    `description` TEXT COMMENT '期望答案描述',
+    `expected_knowledge_ids` JSON COMMENT '期望检索的知识片段 ID 列表',
+    `expected_keywords` JSON COMMENT '期望关键词列表',
+    `answer_points_summary` TEXT COMMENT '答案要点摘要',
+    `min_age_requirement` DECIMAL(4,1) COMMENT '最小年龄要求',
+    `max_age_requirement` DECIMAL(4,1) COMMENT '最大年龄要求',
+    `difficulty_level` VARCHAR(16) COMMENT 'easy/medium/hard',
+    `professional_terms` JSON COMMENT '专业术语列表',
+    `relevance_scores` JSON COMMENT '相关度评分',
+    `source` VARCHAR(16) NOT NULL DEFAULT 'manual' COMMENT 'manual/draft/import',
+    `source_draft_id` VARCHAR(64) COMMENT '来源草稿 ID',
+    `source_document_id` VARCHAR(64) COMMENT '来源文档 ID',
+    `version` INT NOT NULL DEFAULT 1,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_domain` (`domain`),
+    INDEX `idx_age_stage_label` (`age_stage_label`),
+    INDEX `idx_source` (`source`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
 -- 9. 测试集表
@@ -203,16 +208,13 @@ CREATE TABLE `test_case_drafts` (
 DROP TABLE IF EXISTS `test_sets`;
 
 CREATE TABLE `test_sets` (
-                             `id` varchar(64) NOT NULL COMMENT '测试集ID (UUID)',
-                             `name` varchar(255) NOT NULL COMMENT '测试集名称',
-                             `description` text DEFAULT NULL COMMENT '测试集描述',
-                             `source_type` enum('manual','json_import','book_generated','mixed') NOT NULL COMMENT '来源类型',
-                             `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                             `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                             PRIMARY KEY (`id`),
-                             KEY `idx_test_sets_name` (`name`),
-                             KEY `idx_test_sets_source_type` (`source_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试集表';
+    `id` VARCHAR(64) PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `description` TEXT,
+    `source_type` VARCHAR(16) NOT NULL DEFAULT 'manual' COMMENT 'manual/json_import/book_generated/mixed',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
 -- 10. 测试集关联用例表
@@ -220,15 +222,13 @@ CREATE TABLE `test_sets` (
 DROP TABLE IF EXISTS `test_set_cases`;
 
 CREATE TABLE `test_set_cases` (
-                                  `id` int NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-                                  `test_set_id` varchar(64) NOT NULL COMMENT '测试集ID',
-                                  `test_case_id` varchar(64) NOT NULL COMMENT '测试用例ID',
-                                  `added_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
-                                  PRIMARY KEY (`id`),
-                                  KEY `idx_test_set_cases_set_id` (`test_set_id`),
-                                  KEY `idx_test_set_cases_case_id` (`test_case_id`),
-                                  UNIQUE KEY `uk_test_set_cases` (`test_set_id`, `test_case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试集关联用例表';
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `test_set_id` VARCHAR(64) NOT NULL,
+    `test_case_id` VARCHAR(64) NOT NULL,
+    `added_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_set_case` (`test_set_id`, `test_case_id`),
+    INDEX `idx_test_case_id` (`test_case_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
 -- 11. 测试执行记录表
@@ -236,35 +236,35 @@ CREATE TABLE `test_set_cases` (
 DROP TABLE IF EXISTS `test_runs`;
 
 CREATE TABLE `test_runs` (
-                             `id` varchar(64) NOT NULL COMMENT '执行ID (UUID)',
-                             `name` varchar(255) NOT NULL COMMENT '执行名称',
-                             `description` text DEFAULT NULL COMMENT '执行描述',
-                             `overall_precision` decimal(5,4) DEFAULT NULL COMMENT '整体精确率',
-                             `overall_recall` decimal(5,4) DEFAULT NULL COMMENT '整体召回率',
-                             `overall_f1` decimal(5,4) DEFAULT NULL COMMENT '整体F1分数',
-                             `overall_mrr` decimal(5,4) DEFAULT NULL COMMENT '整体MRR',
-                             `overall_ndcg` decimal(5,4) DEFAULT NULL COMMENT '整体NDCG',
-                             `total_test_cases` int NOT NULL COMMENT '总用例数',
-                             `passed_test_cases` int NOT NULL COMMENT '通过用例数',
-                             `test_set_ids` json NOT NULL COMMENT '测试集ID列表',
-                             `custom_case_ids` json DEFAULT NULL COMMENT '自定义用例ID列表',
-                             `report_export_format` enum('markdown','pdf','json') DEFAULT 'markdown' COMMENT '报告导出格式',
-                             `report_storage_path` varchar(512) DEFAULT NULL COMMENT '报告存储路径',
-                             `status` enum('pending','running','completed','failed','cancelled') NOT NULL COMMENT '执行状态',
-                             `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                             `started_at` datetime DEFAULT NULL COMMENT '开始时间',
-                             `completed_at` datetime DEFAULT NULL COMMENT '完成时间',
-                             `created_by` int DEFAULT NULL COMMENT '创建人用户ID',
-                             `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                             `snapshot_id` varchar(64) DEFAULT NULL COMMENT '知识快照ID',
-                             `config_version_id` varchar(64) DEFAULT NULL COMMENT '配置版本ID',
-                             `config_snapshot` json DEFAULT NULL COMMENT '配置快照',
-                             `previous_config_version_id` varchar(64) DEFAULT NULL COMMENT '上一配置版本ID',
-                             PRIMARY KEY (`id`),
-                             KEY `idx_test_runs_status` (`status`),
-                             KEY `idx_test_runs_created_at` (`created_at`),
-                             KEY `idx_test_runs_config_version` (`config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试执行记录表';
+    `id` VARCHAR(64) PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `description` TEXT,
+    `test_set_ids` JSON NOT NULL COMMENT '关联的测试集 ID 列表',
+    `custom_case_ids` JSON COMMENT '额外用例 ID 列表',
+    `snapshot_id` VARCHAR(64) COMMENT '知识库快照 ID',
+    `config_version_id` VARCHAR(64) COMMENT '配置版本 ID',
+    `config_snapshot` JSON COMMENT '配置快照',
+    `previous_config_version_id` VARCHAR(64) COMMENT '前一配置版本 ID',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/completed/failed/cancelled',
+    `total_test_cases` INT NOT NULL DEFAULT 0,
+    `passed_test_cases` INT NOT NULL DEFAULT 0,
+    `overall_precision` DECIMAL(5,4) COMMENT '整体精确率',
+    `overall_recall` DECIMAL(5,4) COMMENT '整体召回率',
+    `overall_f1` DECIMAL(5,4) COMMENT '整体F1',
+    `overall_mrr` DECIMAL(5,4) COMMENT '整体MRR',
+    `overall_ndcg` DECIMAL(5,4) COMMENT '整体NDCG',
+    `l1_metrics_json` JSON COMMENT 'L1 检索质量指标',
+    `l2_metrics_json` JSON COMMENT 'L2 生成质量指标',
+    `l3_metrics_json` JSON COMMENT 'L3 系统质量指标',
+    `overall_score` DECIMAL(5,4) COMMENT '加权综合得分',
+    `diagnosis_json` JSON COMMENT '六层诊断结果',
+    `started_at` DATETIME,
+    `completed_at` DATETIME,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_status` (`status`),
+    INDEX `idx_snapshot_id` (`snapshot_id`),
+    INDEX `idx_config_version_id` (`config_version_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
 -- 12. 测试执行结果表
@@ -272,36 +272,36 @@ CREATE TABLE `test_runs` (
 DROP TABLE IF EXISTS `test_run_results`;
 
 CREATE TABLE `test_run_results` (
-                                    `id` int NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-                                    `run_id` varchar(64) NOT NULL COMMENT '执行ID',
-                                    `test_case_id` varchar(64) NOT NULL COMMENT '测试用例ID',
-                                    `query` text NOT NULL COMMENT '查询内容',
-                                    `precision` decimal(5,4) DEFAULT NULL COMMENT '精确率',
-                                    `recall` decimal(5,4) DEFAULT NULL COMMENT '召回率',
-                                    `f1` decimal(5,4) DEFAULT NULL COMMENT 'F1分数',
-                                    `mrr` decimal(10,4) NOT NULL DEFAULT 0.0000 COMMENT '平均倒数排名',
-                                    `ndcg` decimal(10,4) DEFAULT NULL COMMENT '归一化折损累计增益',
-                                    `hit_rate_1` decimal(10,4) NOT NULL DEFAULT 0.0000 COMMENT '命中率@1',
-                                    `hit_rate_3` decimal(10,4) NOT NULL DEFAULT 0.0000 COMMENT '命中率@3',
-                                    `hit_rate_5` decimal(10,4) NOT NULL DEFAULT 0.0000 COMMENT '命中率@5',
-                                    `passed` tinyint(1) DEFAULT NULL COMMENT '是否通过',
-                                    `matched_count` int NOT NULL DEFAULT 0 COMMENT '匹配数量',
-                                    `expected_count` int NOT NULL DEFAULT 0 COMMENT '期望数量',
-                                    `actual_count` int NOT NULL DEFAULT 0 COMMENT '实际数量',
-                                    `expected_knowledge_ids` json DEFAULT NULL COMMENT '期望知识ID列表',
-                                    `actual_knowledge_ids` json DEFAULT NULL COMMENT '实际知识ID列表',
-                                    `retrieved_doc_ids` json NOT NULL COMMENT '检索到的文档ID列表',
-                                    `relevant_doc_ids` json NOT NULL COMMENT '相关文档ID列表',
-                                    `error_message` text DEFAULT NULL COMMENT '错误信息',
-                                    `execution_time_ms` int DEFAULT NULL COMMENT '执行时间 (毫秒)',
-                                    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                    PRIMARY KEY (`id`),
-                                    KEY `idx_run_results_run_id` (`run_id`),
-                                    KEY `idx_run_results_case_id` (`test_case_id`),
-                                    KEY `idx_run_results_passed` (`passed`),
-                                    KEY `idx_run_results_matched_count` (`matched_count`),
-                                    KEY `idx_run_results_execution_time` (`execution_time_ms`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试执行结果表';
+    `id` VARCHAR(64) PRIMARY KEY,
+    `run_id` VARCHAR(64) NOT NULL,
+    `test_case_id` VARCHAR(64) NOT NULL,
+    `query` TEXT NOT NULL,
+    `retrieved_doc_ids` JSON COMMENT '检索到的文档 ID 列表',
+    `relevant_doc_ids` JSON COMMENT '相关文档 ID 列表',
+    `expected_knowledge_ids` JSON COMMENT '期望知识片段 ID',
+    `actual_knowledge_ids` JSON COMMENT '实际匹配的知识片段 ID',
+    `matched_count` INT DEFAULT 0,
+    `expected_count` INT DEFAULT 0,
+    `actual_count` INT DEFAULT 0,
+    `precision` DECIMAL(5,4),
+    `recall` DECIMAL(5,4),
+    `f1` DECIMAL(5,4),
+    `mrr` DECIMAL(5,4) DEFAULT 0,
+    `ndcg` DECIMAL(5,4),
+    `hit_rate_1` DECIMAL(5,4) DEFAULT 0,
+    `hit_rate_3` DECIMAL(5,4) DEFAULT 0,
+    `hit_rate_5` DECIMAL(5,4) DEFAULT 0,
+    `actual_answer` TEXT COMMENT 'RAG 生成的实际答案',
+    `l1_metrics_json` JSON COMMENT '单用例 L1 指标',
+    `l2_metrics_json` JSON COMMENT '单用例 L2 指标',
+    `diagnosis_json` JSON COMMENT '单用例诊断结果',
+    `passed` TINYINT(1) COMMENT '是否通过',
+    `error_message` TEXT,
+    `execution_time_ms` INT,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_run_id` (`run_id`),
+    INDEX `idx_test_case_id` (`test_case_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
 -- 13. A/B测试指标表
@@ -443,391 +443,128 @@ CREATE TABLE `prompt_ab_tests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='提示词A/B测试表';
 
 -- ============================================================
--- RAG 评估系统新增表 (Phase 1: 数据模型创建)
--- 18 张 rag_eval_* 表，统一使用 varchar(36) UUID 主键
--- 不使用外键约束，由应用层保证数据一致性
+-- RAG评估 v2 新表（13-16）
+-- 统一命名，无 rag_eval_ 前缀，varchar(64) ID
 -- ============================================================
 
 -- ----------------------------
--- 17. RAG评估测试集表
+-- 13. 评估报告表
 -- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_sets`;
+DROP TABLE IF EXISTS `eval_reports`;
 
-CREATE TABLE `rag_eval_test_sets` (
-                                      `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                      `name` varchar(255) NOT NULL COMMENT '测试集名称',
-                                      `description` text DEFAULT NULL COMMENT '测试集描述',
-                                      `source_type` enum('book_generated','json_imported','manual') NOT NULL COMMENT '来源类型',
-                                      `source_document_id` varchar(36) DEFAULT NULL COMMENT '关联的源文档ID',
-                                      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                                      PRIMARY KEY (`id`),
-                                      KEY `idx_rag_eval_test_set_created_at` (`created_at`),
-                                      KEY `idx_rag_eval_test_set_source_doc` (`source_document_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RAG评估测试集表';
-
--- ----------------------------
--- 18. RAG配置版本表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_config_versions`;
-
-CREATE TABLE `rag_eval_config_versions` (
-                                            `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                            `version_number` int NOT NULL COMMENT '自增序号，系统自动维护',
-                                            `version_label` varchar(32) NOT NULL COMMENT '展示用语义版本号，如 v2.3',
-                                            `config_snapshot` json NOT NULL COMMENT '完整配置快照',
-                                            `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                            `created_by` varchar(36) DEFAULT NULL COMMENT '创建人用户ID',
-                                            `change_summary` text DEFAULT NULL COMMENT '变更摘要',
-                                            PRIMARY KEY (`id`),
-                                            KEY `idx_rag_eval_config_version_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RAG配置版本表';
+CREATE TABLE `eval_reports` (
+    `id` VARCHAR(64) PRIMARY KEY,
+    `run_id` VARCHAR(64) NOT NULL,
+    `test_set_id` VARCHAR(64) COMMENT '主测试集 ID',
+    `config_version_id` VARCHAR(64) COMMENT '配置版本 ID',
+    `overall_score` DECIMAL(5,4) COMMENT '三层加权综合得分',
+    `l1_score` DECIMAL(5,4) COMMENT 'L1 层得分',
+    `l2_score` DECIMAL(5,4) COMMENT 'L2 层得分',
+    `l3_score` DECIMAL(5,4) COMMENT 'L3 层得分',
+    `precision` DECIMAL(5,4),
+    `recall` DECIMAL(5,4),
+    `f1` DECIMAL(5,4),
+    `mrr` DECIMAL(5,4),
+    `ndcg` DECIMAL(5,4),
+    `metrics_json` JSON NOT NULL COMMENT '三层指标 RunMetrics JSON',
+    `diagnosis_json` JSON COMMENT '六层诊断结果 JSON',
+    `bad_cases_json` JSON COMMENT '坏案列表 JSON',
+    `suggestions_json` JSON COMMENT '调优建议列表 JSON',
+    `markdown_content` LONGTEXT COMMENT 'Markdown 报告内容',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'processing' COMMENT 'processing/completed/superseded',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_run_id` (`run_id`),
+    INDEX `idx_test_set_id` (`test_set_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
--- 20. 测试用例草稿表
+-- 14. 调优建议表
 -- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_case_drafts`;
+DROP TABLE IF EXISTS `tuning_suggestions`;
 
-CREATE TABLE `rag_eval_test_case_drafts` (
-                                             `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                             `source_document_id` varchar(36) NOT NULL COMMENT '源文档ID',
-                                             `query` text NOT NULL COMMENT '测试查询内容',
-                                             `age_months` int DEFAULT NULL COMMENT '适用儿童月龄',
-                                             `domain` enum('gross_motor','fine_motor','language','cognitive','social_emotional','sensory_integration') NOT NULL COMMENT '发展领域',
-                                             `expected_key_points` json DEFAULT NULL COMMENT '期望知识点列表',
-                                             `status` enum('draft','reviewed','rejected','imported') NOT NULL DEFAULT 'draft' COMMENT '草稿状态',
-                                             `reviewed_by` varchar(36) DEFAULT NULL COMMENT '审核人ID',
-                                             `reviewed_at` datetime DEFAULT NULL COMMENT '审核时间',
-                                             `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                             PRIMARY KEY (`id`),
-                                             KEY `idx_rag_eval_test_case_draft_doc_status` (`source_document_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试用例草稿表';
-
--- ----------------------------
--- 22. RAG评估测试用例表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_cases`;
-
-CREATE TABLE `rag_eval_test_cases` (
-                                       `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                       `query` text NOT NULL COMMENT '测试查询内容',
-                                       `age_months` int DEFAULT NULL COMMENT '适用儿童月龄',
-                                       `domain` enum('gross_motor','fine_motor','language','cognitive','social_emotional','sensory_integration') NOT NULL COMMENT '发展领域',
-                                       `expected_document_ids` json DEFAULT NULL COMMENT '期望命中的文档ID列表',
-                                       `expected_key_points` json DEFAULT NULL COMMENT '期望知识点列表',
-                                       `source_draft_id` varchar(36) DEFAULT NULL COMMENT '来源草稿ID',
-                                       `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                       PRIMARY KEY (`id`),
-                                       KEY `idx_rag_eval_test_case_domain_age` (`domain`, `age_months`),
-                                       KEY `idx_rag_eval_test_case_source_draft` (`source_draft_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RAG评估测试用例表';
+CREATE TABLE `tuning_suggestions` (
+    `id` VARCHAR(64) PRIMARY KEY,
+    `run_id` VARCHAR(64) NOT NULL,
+    `report_id` VARCHAR(64) COMMENT '关联报告 ID',
+    `category` VARCHAR(32) NOT NULL COMMENT 'retrieval/generation/configuration/cost/prompt',
+    `severity` VARCHAR(16) NOT NULL COMMENT 'critical/warning/info',
+    `title` VARCHAR(255) NOT NULL,
+    `description` TEXT NOT NULL,
+    `current_value` JSON COMMENT '当前值',
+    `suggested_value` JSON COMMENT '建议值',
+    `expected_impact` TEXT COMMENT '预期影响',
+    `source` VARCHAR(16) NOT NULL DEFAULT 'rule_engine' COMMENT 'rule_engine/llm/diagnosis',
+    `priority` INT DEFAULT 0 COMMENT '优先级（数值越高越优先）',
+    `safe_range` JSON COMMENT '安全范围',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/adopted/rejected/ignored',
+    `conflict_with` VARCHAR(64) COMMENT '冲突的建议 ID',
+    `applied_config_version_id` VARCHAR(64) COMMENT '采纳后生成的配置版本 ID',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_run_id` (`run_id`),
+    INDEX `idx_report_id` (`report_id`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
--- 23. 测试集-测试用例关联表
+-- 15. RAG评估配置版本表
 -- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_set_cases`;
+DROP TABLE IF EXISTS `eval_config_versions`;
 
-CREATE TABLE `rag_eval_test_set_cases` (
-                                           `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                           `test_set_id` varchar(36) NOT NULL COMMENT '测试集ID',
-                                           `case_id` varchar(36) NOT NULL COMMENT '测试用例ID',
-                                           `added_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
-                                           `added_by` varchar(36) DEFAULT NULL COMMENT '添加用例的用户ID',
-                                           PRIMARY KEY (`id`),
-                                           UNIQUE KEY `uk_rag_eval_test_set_case` (`test_set_id`, `case_id`),
-                                           KEY `idx_rag_eval_test_set_case_test_set` (`test_set_id`),
-                                           KEY `idx_rag_eval_test_set_case_case` (`case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试集-测试用例关联表';
+CREATE TABLE `eval_config_versions` (
+    `id` VARCHAR(64) PRIMARY KEY,
+    `version_number` INT NOT NULL DEFAULT 1,
+    `version_label` VARCHAR(100) COMMENT '版本标签',
+    `config_snapshot` JSON NOT NULL COMMENT '完整配置快照',
+    `change_summary` TEXT COMMENT '变更摘要',
+    `created_by` VARCHAR(64) COMMENT '创建者',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
--- 24. RAG评估测试运行记录表
+-- 16. RAG评估配置变更集表
 -- ----------------------------
+DROP TABLE IF EXISTS `eval_config_change_sets`;
 
-DROP TABLE IF EXISTS `rag_eval_test_runs`;
-CREATE TABLE `rag_eval_test_runs` (
-                                      `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                      `name` varchar(255) NOT NULL COMMENT '运行名称',
-                                      `status` enum('pending','running','completed','failed','cancelled') NOT NULL DEFAULT 'pending' COMMENT '运行状态',
-                                      `test_set_id` varchar(36) NOT NULL COMMENT '测试集ID',
-                                      `config_version_id` varchar(36) DEFAULT NULL COMMENT '配置版本ID',
-                                      `created_by` varchar(36) DEFAULT NULL COMMENT '触发运行的用户ID',
-                                      `overall_precision` float DEFAULT NULL COMMENT '汇总精确率',
-                                      `overall_recall` float DEFAULT NULL COMMENT '汇总召回率',
-                                      `overall_f1` float DEFAULT NULL COMMENT '汇总F1',
-                                      `overall_mrr` float DEFAULT NULL COMMENT '汇总MRR',
-                                      `overall_ndcg` float DEFAULT NULL COMMENT '汇总NDCG',
-                                      `total_test_cases` int NOT NULL DEFAULT 0 COMMENT '总测试用例数',
-                                      `passed_test_cases` int NOT NULL DEFAULT 0 COMMENT '通过测试用例数',
-                                      `failed_at_case_id` varchar(36) DEFAULT NULL COMMENT '失败时的用例ID',
-                                      `ab_test_id` varchar(36) DEFAULT NULL COMMENT 'A/B测试组ID',
-                                      `ab_test_side` enum('A','B') DEFAULT NULL COMMENT 'A或B',
-                                      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                      `completed_at` datetime DEFAULT NULL COMMENT '完成时间',
-                                      PRIMARY KEY (`id`),
-                                      KEY `idx_rag_eval_test_run_testset_status_created` (`test_set_id`, `status`, `created_at`),
-                                      KEY `idx_rag_eval_test_run_config_version` (`config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RAG评估测试运行记录表';
+CREATE TABLE `eval_config_change_sets` (
+    `id` VARCHAR(64) PRIMARY KEY,
+    `change_set_label` VARCHAR(255) NOT NULL COMMENT '变更集标签',
+    `config_version_id` VARCHAR(64) NOT NULL COMMENT '目标配置版本',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'committed' COMMENT 'committed/rolled_back',
+    `rollback_reason` TEXT,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `rolled_back_at` DATETIME,
+    INDEX `idx_config_version_id` (`config_version_id`),
+    INDEX `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
--- 25. 测试运行结果详情表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_run_results`;
-
-CREATE TABLE `rag_eval_test_run_results` (
-                                             `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                             `run_id` varchar(36) NOT NULL COMMENT '测试运行ID',
-                                             `case_id` varchar(36) NOT NULL COMMENT '测试用例ID',
-                                             `query` text NOT NULL COMMENT '查询文本快照',
-                                             `hit_at_1` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Top1是否命中',
-                                             `hit_at_3` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Top3是否命中',
-                                             `hit_at_5` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Top5是否命中',
-                                             `matched_doc_ids` json DEFAULT NULL COMMENT '实际命中的文档ID列表',
-                                             `matched_doc_scores` json DEFAULT NULL COMMENT '命中文档的分数列表',
-                                             `status` enum('passed','failed') NOT NULL COMMENT '执行状态',
-                                             `duration_ms` int DEFAULT NULL COMMENT '单用例执行耗时(毫秒)',
-                                             `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                             PRIMARY KEY (`id`),
-                                             KEY `idx_rag_eval_test_run_result_run_id` (`run_id`),
-                                             KEY `idx_rag_eval_test_run_result_run_status` (`run_id`, `status`),
-                                             KEY `idx_rag_eval_test_run_result_case_id` (`case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试运行结果详情表';
-
--- ----------------------------
--- 26. 测试用例意图标注表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_intent_annotations`;
-
-CREATE TABLE `rag_eval_intent_annotations` (
-                                               `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                               `case_id` varchar(36) NOT NULL COMMENT '关联的测试用例ID',
-                                               `intent_type` varchar(64) NOT NULL COMMENT '标注的意图类型',
-                                               `annotated_by` varchar(36) DEFAULT NULL COMMENT '标注人ID',
-                                               `annotated_at` datetime DEFAULT NULL COMMENT '标注时间',
-                                               PRIMARY KEY (`id`),
-                                               UNIQUE KEY `uk_rag_eval_intent_annotation_case` (`case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试用例意图标注表';
-
--- ----------------------------
--- 27. 配置变更集表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_config_change_sets`;
-
-CREATE TABLE `rag_eval_config_change_sets` (
-                                               `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                               `change_set_label` varchar(32) NOT NULL COMMENT '展示用标签，格式 CS-20260416-001',
-                                               `config_version_id` varchar(36) DEFAULT NULL COMMENT '发布后生成的配置版本ID',
-                                               `status` enum('committed','rolled_back') NOT NULL DEFAULT 'committed' COMMENT '变更集状态',
-                                               `rollback_reason` varchar(500) DEFAULT NULL COMMENT '回滚原因',
-                                               `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                               PRIMARY KEY (`id`),
-                                               KEY `idx_rag_eval_config_change_set_status` (`status`),
-                                               KEY `idx_rag_eval_config_change_set_config_version` (`config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='配置变更集表';
-
--- ----------------------------
--- 28. 变更集-提示词版本关联表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_config_change_set_prompts`;
-
-CREATE TABLE `rag_eval_config_change_set_prompts` (
-                                                      `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                                      `change_set_id` varchar(36) NOT NULL COMMENT '变更集ID',
-                                                      `prompt_version_id` varchar(36) NOT NULL COMMENT '提示词版本ID',
-                                                      PRIMARY KEY (`id`),
-                                                      UNIQUE KEY `uk_rag_eval_change_set_prompt` (`change_set_id`, `prompt_version_id`),
-                                                      KEY `idx_rag_eval_change_set_prompt_version` (`prompt_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='变更集-提示词版本关联表';
-
--- ----------------------------
--- 29. 测试评估报告表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_test_reports`;
-
-CREATE TABLE `rag_eval_test_reports` (
-                                         `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                         `run_id` varchar(36) DEFAULT NULL COMMENT '测试运行ID（常规报告关联TestRun；A/B对比报告为NULL）',
-                                         `test_set_id` varchar(36) NOT NULL COMMENT '测试集ID',
-                                         `config_version_id` varchar(36) DEFAULT NULL COMMENT '配置版本ID',
-                                         `status` enum('processing','completed','superseded') NOT NULL DEFAULT 'processing' COMMENT '报告状态',
-                                         `prompt_version_snapshot` json DEFAULT NULL COMMENT '提示词版本快照',
-                                         `overall_score` float DEFAULT NULL COMMENT '综合得分',
-                                         `precision` float DEFAULT NULL COMMENT '精确率',
-                                         `recall` float DEFAULT NULL COMMENT '召回率',
-                                         `f1` float DEFAULT NULL COMMENT 'F1',
-                                         `mrr` float DEFAULT NULL COMMENT 'MRR',
-                                         `ndcg` float DEFAULT NULL COMMENT 'NDCG',
-                                         `validation_results` json DEFAULT NULL COMMENT '6层校验结果',
-                                         `tuning_suggestion_summary` json DEFAULT NULL COMMENT '调优建议摘要',
-                                         `created_by` varchar(36) DEFAULT NULL COMMENT '生成报告的用户ID',
-                                         `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                         PRIMARY KEY (`id`),
-                                         KEY `idx_rag_eval_test_report_testset_created` (`test_set_id`, `created_at`),
-                                         KEY `idx_rag_eval_test_report_run_id` (`run_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试评估报告表';
-
--- ----------------------------
--- 30. Trace 跟踪表
+-- 17. Trace 跟踪表（保留）
 -- ----------------------------
 DROP TABLE IF EXISTS `traces`;
 
 CREATE TABLE `traces` (
-                          `trace_id` varchar(64) NOT NULL COMMENT 'Trace ID (UUID)',
-                          `name` varchar(255) NOT NULL COMMENT 'Trace 名称',
-                          `user_id` varchar(64) DEFAULT NULL COMMENT '用户ID',
-                          `session_id` varchar(64) DEFAULT NULL COMMENT '会话ID',
-                          `metadata` json DEFAULT NULL COMMENT '元数据',
-                          `start_time` datetime NOT NULL COMMENT '开始时间',
-                          `end_time` datetime DEFAULT NULL COMMENT '结束时间',
-                          `total_duration_ms` int NOT NULL DEFAULT 0 COMMENT '总耗时（毫秒）',
-                          `total_tokens` int NOT NULL DEFAULT 0 COMMENT '总Token数',
-                          `total_cost` decimal(10,4) NOT NULL DEFAULT 0.0000 COMMENT '总成本',
-                          `status` enum('success','failed','partial') NOT NULL COMMENT '执行状态',
-                          `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                          PRIMARY KEY (`trace_id`),
-                          KEY `idx_user_id` (`user_id`),
-                          KEY `idx_created_at` (`created_at`),
-                          KEY `idx_trace_status` (`status`, `created_at`)
+    `trace_id` VARCHAR(64) NOT NULL COMMENT 'Trace ID (UUID)',
+    `name` VARCHAR(255) NOT NULL COMMENT 'Trace 名称',
+    `user_id` VARCHAR(64) DEFAULT NULL COMMENT '用户ID',
+    `session_id` VARCHAR(64) DEFAULT NULL COMMENT '会话ID',
+    `metadata` JSON DEFAULT NULL COMMENT '元数据',
+    `start_time` DATETIME NOT NULL COMMENT '开始时间',
+    `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+    `total_duration_ms` INT NOT NULL DEFAULT 0 COMMENT '总耗时（毫秒）',
+    `total_tokens` INT NOT NULL DEFAULT 0 COMMENT '总Token数',
+    `total_cost` DECIMAL(10,4) NOT NULL DEFAULT 0.0000 COMMENT '总成本',
+    `status` ENUM('success','failed','partial') NOT NULL COMMENT '执行状态',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`trace_id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_created_at` (`created_at`),
+    KEY `idx_trace_status` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trace 跟踪表';
-
-SET FOREIGN_KEY_CHECKS = 1;
-                                         KEY `idx_rag_eval_test_report_config_version` (`config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='测试评估报告表';
-
--- ----------------------------
--- 30. 参数调优建议记录表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_tuning_suggestion_records`;
-
-CREATE TABLE `rag_eval_tuning_suggestion_records` (
-                                                      `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                                      `report_id` varchar(36) NOT NULL COMMENT '测试报告ID',
-                                                      `param_name` varchar(128) NOT NULL COMMENT '参数名称',
-                                                      `current_value` json DEFAULT NULL COMMENT '当前参数值',
-                                                      `suggested_value` json DEFAULT NULL COMMENT '建议参数值',
-                                                      `action` varchar(36) DEFAULT NULL COMMENT '建议动作',
-                                                      `reason` text DEFAULT NULL COMMENT '调优理由',
-                                                      `expected_effect` json DEFAULT NULL COMMENT '预期效果',
-                                                      `priority` varchar(32) DEFAULT NULL COMMENT '优先级',
-                                                      `source` enum('rule_engine','history','llm') DEFAULT NULL COMMENT '来源',
-                                                      `safe_range` json DEFAULT NULL COMMENT '安全范围',
-                                                      `applied` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已采纳',
-                                                      `applied_config_version_id` varchar(36) DEFAULT NULL COMMENT '采纳后应用到的配置版本ID',
-                                                      PRIMARY KEY (`id`),
-                                                      KEY `idx_rag_eval_tuning_suggestion_report_applied` (`report_id`, `applied`),
-                                                      KEY `idx_rag_eval_tuning_applied_config` (`applied_config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='参数调优建议记录表';
-
--- ----------------------------
--- 31. 提示词调优建议记录表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_prompt_suggestion_records`;
-
-CREATE TABLE `rag_eval_prompt_suggestion_records` (
-                                                      `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                                      `report_id` varchar(36) NOT NULL COMMENT '测试报告ID',
-                                                      `prompt_key` varchar(128) NOT NULL COMMENT '提示词key',
-                                                      `current_version_id` varchar(36) DEFAULT NULL COMMENT '当前提示词版本ID',
-                                                      `suggested_version_id` varchar(36) DEFAULT NULL COMMENT '建议的提示词版本ID',
-                                                      `reason` text DEFAULT NULL COMMENT '调优理由',
-                                                      `expected_effect` json DEFAULT NULL COMMENT '预期效果',
-                                                      `priority` varchar(32) DEFAULT NULL COMMENT '优先级',
-                                                      `source` enum('rule_engine','history','llm') DEFAULT NULL COMMENT '来源',
-                                                      `suggestion_type` enum('add_constraint','rewrite','parameter_tweak') DEFAULT NULL COMMENT '建议类型',
-                                                      `applied` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已采纳',
-                                                      `applied_version_id` varchar(36) DEFAULT NULL COMMENT '采纳后的提示词版本ID',
-                                                      PRIMARY KEY (`id`),
-                                                      KEY `idx_rag_eval_prompt_suggestion_report_applied` (`report_id`, `applied`),
-                                                      KEY `idx_rag_eval_ps_current_version` (`current_version_id`),
-                                                      KEY `idx_rag_eval_ps_suggested_version` (`suggested_version_id`),
-                                                      KEY `idx_rag_eval_ps_applied_version` (`applied_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='提示词调优建议记录表';
-
--- ----------------------------
--- 32. 忽略的调优建议记录表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_ignored_suggestions`;
-
-CREATE TABLE `rag_eval_ignored_suggestions` (
-                                                `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                                `test_set_id` varchar(36) NOT NULL COMMENT '绑定测试集',
-                                                `report_id` varchar(36) DEFAULT NULL COMMENT 'report级别时填写',
-                                                `param_name` varchar(255) NOT NULL COMMENT '参数名或prompt_key',
-                                                `suggestion_type` enum('config','prompt') NOT NULL COMMENT '忽略建议类型',
-                                                `ignore_scope` enum('report','test_set') NOT NULL COMMENT '忽略范围',
-                                                `ignored_by` varchar(36) DEFAULT NULL COMMENT '操作用户',
-                                                `ignored_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '忽略时间',
-                                                `ignore_reason` varchar(500) DEFAULT NULL COMMENT '忽略原因',
-                                                `restored` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已恢复',
-                                                `restored_at` datetime DEFAULT NULL COMMENT '恢复时间',
-                                                PRIMARY KEY (`id`),
-                                                KEY `idx_rag_eval_ignored_suggestion_testset_scope_restored` (`test_set_id`, `ignore_scope`, `restored`),
-                                                KEY `idx_rag_eval_ignored_suggestion_report` (`report_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='忽略的调优建议记录表';
-
--- ----------------------------
--- 33. 查询意图自动分类日志表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_query_intent_logs`;
-
-CREATE TABLE `rag_eval_query_intent_logs` (
-                                              `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                              `run_id` varchar(36) NOT NULL COMMENT '测试运行ID',
-                                              `case_id` varchar(36) DEFAULT NULL COMMENT '测试用例ID',
-                                              `query` text NOT NULL COMMENT '查询文本',
-                                              `predicted_intent` varchar(64) NOT NULL COMMENT 'LLM自动分类的意图',
-                                              `confidence` float DEFAULT NULL COMMENT '置信度(0.0-1.0)',
-                                              `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                              PRIMARY KEY (`id`),
-                                              KEY `idx_rag_eval_query_intent_log_run` (`run_id`),
-                                              KEY `idx_rag_eval_query_intent_log_case` (`case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='查询意图自动分类日志表';
-
--- ----------------------------
--- 34. 同义查询对表
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_synonym_query_pairs`;
-
-CREATE TABLE `rag_eval_synonym_query_pairs` (
-                                                `id` varchar(36) NOT NULL COMMENT '主键UUID',
-                                                `query_a` text NOT NULL COMMENT '查询A',
-                                                `query_b` text NOT NULL COMMENT '查询B',
-                                                `domain` varchar(64) NOT NULL COMMENT '发展领域',
-                                                `created_by` varchar(36) DEFAULT NULL COMMENT '创建者',
-                                                `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                                                `source` enum('builtin','auto_extracted','manual') NOT NULL COMMENT '同义词来源',
-                                                `active` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
-                                                PRIMARY KEY (`id`),
-                                                KEY `idx_rag_eval_synonym_domain_active` (`domain`, `active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='同义查询对表';
-
--- ----------------------------
--- 审计日志表（阶段8新增）
--- ----------------------------
-DROP TABLE IF EXISTS `rag_eval_audit_logs`;
-
-CREATE TABLE `rag_eval_audit_logs` (
-    `id` varchar(36) NOT NULL COMMENT '日志 ID (UUID)',
-    `operator` varchar(100) NOT NULL COMMENT '操作人',
-    `action` varchar(50) NOT NULL COMMENT '操作类型: create/update/delete/rollback/apply',
-    `target_type` varchar(50) NOT NULL COMMENT '目标类型: config/prompt/test_set/test_case',
-    `target_id` varchar(36) NOT NULL COMMENT '目标 ID',
-    `before_value` json DEFAULT NULL COMMENT '变更前值',
-    `after_value` json NOT NULL COMMENT '变更后值',
-    `diff_summary` text DEFAULT NULL COMMENT '变更摘要',
-    `ip_address` varchar(45) DEFAULT NULL COMMENT '操作 IP',
-    `user_agent` varchar(500) DEFAULT NULL COMMENT '用户代理',
-    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_rag_eval_audit_log_operator` (`operator`),
-    KEY `idx_rag_eval_audit_log_action` (`action`),
-    KEY `idx_rag_eval_audit_log_target_type` (`target_type`),
-    KEY `idx_rag_eval_audit_log_target_id` (`target_id`),
-    KEY `idx_rag_eval_audit_log_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
 
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ----------------------------
 -- 初始化完成
 -- ----------------------------
-SELECT '数据库初始化完成，共创建34张业务表（原有15张 + RAG评估19张）' AS result;
+SELECT '数据库初始化完成，共创建21张业务表（基础10张 + RAG评估v2 11张）' AS result;

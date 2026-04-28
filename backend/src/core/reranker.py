@@ -8,24 +8,25 @@ from src.utils.logger import logger
 
 try:
     from sentence_transformers import CrossEncoder
+    _CROSS_ENCODER_AVAILABLE = True
 except ImportError:
     CrossEncoder = None
-    logger.warning(
-        "sentence-transformers not installed. CrossEncoderReranker will be unavailable. "
-        "Install with: pip install sentence-transformers"
-    )
+    _CROSS_ENCODER_AVAILABLE = False
 
 
 class CrossEncoderReranker:
     """Cross-Encoder 重排序器
-
+    
     使用预训练的 Cross-Encoder 模型对粗检索结果进行重排序，
     捕捉 query 和 document 之间的细微语义差异，提升检索质量。
-
+    
     业界标准实践：
     - 粗检索（50-100 个候选）→ Cross-Encoder 重排序 → 精检索（5-10 个结果）
     - 基准测试：Hybrid RAG + Reranking 的 MRR 从 0.410 提升到 0.486（+18.5%）
     """
+    
+    # 类级别标志，确保只打印一次缺少依赖的警告
+    _warning_logged = False
 
     def __init__(
         self,
@@ -46,11 +47,12 @@ class CrossEncoderReranker:
         self._model_loading_attempted = False
         self._warmed_model = None
 
-        if CrossEncoder is None:
-            logger.error(
-                "CrossEncoder not available. Please install sentence-transformers."
+        if not _CROSS_ENCODER_AVAILABLE and not CrossEncoderReranker._warning_logged:
+            logger.warning(
+                "sentence-transformers not installed. CrossEncoderReranker will be unavailable. "
+                "Install with: pip install sentence-transformers"
             )
-            return
+            CrossEncoderReranker._warning_logged = True
 
     def set_warmed_model(self, model) -> None:
         """设置预热后的模型"""

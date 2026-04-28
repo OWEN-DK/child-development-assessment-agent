@@ -1,57 +1,70 @@
-import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import JSON, DateTime
-from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Integer, String, Text,
+                        func)
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
-from src.schemas import TestDomain
+from src.models.rag_eval.enums import DifficultyLevel, TestDomain
 
 
-class RagEvalTestCase(Base):
-    __tablename__ = "rag_eval_test_cases"
-    __table_args__ = (
-        Index("idx_rag_eval_test_case_domain_age", "domain", "age_months"),
-        {"comment": "RAG评估测试用例表"},
+class TestCase(Base):
+    __tablename__ = "test_cases"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False, comment="测试问题")
+    age: Mapped[float] = mapped_column(
+        DECIMAL(4, 1), nullable=False, comment="年龄（岁）"
     )
-
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    age_stage_label: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="", comment="年龄段标签"
     )
-
-    query: Mapped[str] = mapped_column(Text, nullable=False)
-    age_months: Mapped[int | None] = mapped_column(Integer)
     domain: Mapped[TestDomain] = mapped_column(
-        SAEnum(TestDomain, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(TestDomain, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
+        index=True,
+        comment="测试领域",
     )
-
-    expected_document_ids: Mapped[list] = mapped_column(
-        JSON, default=list, comment="期望命中的文档ID列表"
+    description: Mapped[str | None] = mapped_column(Text, comment="期望答案描述")
+    expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="期望检索的知识片段 ID 列表"
     )
-    expected_key_points: Mapped[list] = mapped_column(
-        JSON, default=list, comment="期望知识点列表"
+    expected_keywords: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="期望关键词列表"
     )
-
+    answer_points_summary: Mapped[str | None] = mapped_column(
+        Text, comment="答案要点摘要"
+    )
+    min_age_requirement: Mapped[float | None] = mapped_column(
+        DECIMAL(4, 1), comment="最小年龄要求"
+    )
+    max_age_requirement: Mapped[float | None] = mapped_column(
+        DECIMAL(4, 1), comment="最大年龄要求"
+    )
+    difficulty_level: Mapped[DifficultyLevel | None] = mapped_column(
+        Enum(DifficultyLevel, values_callable=lambda obj: [e.value for e in obj]),
+        comment="easy/medium/hard",
+    )
+    professional_terms: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="专业术语列表"
+    )
+    relevance_scores: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="相关度评分"
+    )
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="manual", index=True, comment="manual/draft/import"
+    )
     source_draft_id: Mapped[str | None] = mapped_column(
-        String(36),
-        ForeignKey("rag_eval_test_case_drafts.id", ondelete="SET NULL"),
-        comment="来源草稿ID",
+        String(64), comment="来源草稿 ID"
     )
-
+    source_document_id: Mapped[str | None] = mapped_column(
+        String(64), comment="来源文档 ID"
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
-    test_sets: Mapped[list["RagEvalTestSetCase"]] = relationship(
-        back_populates="test_case", cascade="all, delete-orphan"
-    )
-    run_results: Mapped[list["RagEvalTestRunResult"]] = relationship(
-        back_populates="test_case", cascade="all, delete-orphan"
-    )
-    intent_annotations: Mapped[list["RagEvalIntentAnnotation"]] = relationship(
-        back_populates="test_case", cascade="all, delete-orphan"
-    )
-    source_draft: Mapped["RagEvalTestCaseDraft | None"] = relationship(
-        back_populates="imported_test_cases"
-    )
+    __table_args__ = {"extend_existing": True}

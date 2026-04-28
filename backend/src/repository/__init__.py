@@ -1,28 +1,36 @@
 from .base import BaseRepository
-from .config_repository import (ConfigAuditLogRepository,
-                                ConfigVersionRepository)
+from .config_repository import ConfigAuditLogRepository
+from .config_repository import ConfigVersionRepository as SystemConfigVersionRepository
 from .document_repository import (DocumentRecordRepository,
                                   SourceDocumentRepository)
 from .monitor_repository import ABTestMetricRepository, LLMCallLogRepository
-from .test_case_repository import (TestCaseDraftRepository, TestCaseRepository,
-                                   TestRunRepository, TestRunResultRepository,
-                                   TestSetCaseRepository, TestSetRepository)
+from .rag_eval import (ConfigChangeSetRepository, ConfigVersionRepository,
+                       DraftRepository, ReportRepository,
+                       SnapshotRepository, TestCaseRepository,
+                       TestRunRepository, TestRunResultRepository,
+                       TestSetCaseRepository, TestSetRepository,
+                       TuningSuggestionRepository)
 
 __all__ = [
     "BaseRepository",
-    # Config
-    "ConfigVersionRepository",
+    # Config (system)
+    "SystemConfigVersionRepository",
     "ConfigAuditLogRepository",
     # Document
     "SourceDocumentRepository",
     "DocumentRecordRepository",
-    # Test Case
+    # RAG Eval
+    "DraftRepository",
     "TestCaseRepository",
-    "TestCaseDraftRepository",
     "TestSetRepository",
     "TestSetCaseRepository",
     "TestRunRepository",
     "TestRunResultRepository",
+    "SnapshotRepository",
+    "ReportRepository",
+    "TuningSuggestionRepository",
+    "ConfigVersionRepository",
+    "ConfigChangeSetRepository",
     # Monitor
     "LLMCallLogRepository",
     "ABTestMetricRepository",
