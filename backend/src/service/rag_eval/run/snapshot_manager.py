@@ -35,18 +35,16 @@ class SnapshotManager:
     ) -> SnapshotRead:
         """创建快照
 
-        1. 确定索引工作目录和 document_store 路径
-        2. 复制到快照存储路径
+        1. 复制索引目录到快照存储路径
+        2. 从数据库查询文档数量
         3. 持久化到 knowledge_snapshots 表
         """
         snapshot_id = generate_id()
         snapshot_dir = self._get_snapshot_dir(snapshot_id)
         snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-        # 获取当前向量库路径
         work_dir = self._get_work_dir()
         index_src = work_dir / "index"
-        docstore_src = work_dir / "document_store.json"
 
         document_count = 0
         chunk_count = 0
@@ -55,14 +53,10 @@ class SnapshotManager:
             shutil.copytree(index_src, snapshot_dir / "index", dirs_exist_ok=True)
             chunk_count = self._count_index_entries(snapshot_dir / "index")
 
-        if docstore_src.exists():
-            shutil.copy2(docstore_src, snapshot_dir / "document_store.json")
-            try:
-                import json
-                doc_data = json.loads(docstore_src.read_text())
-                document_count = len(doc_data.get("docstore/data", {})) if isinstance(doc_data, dict) else 0
-            except Exception:
-                pass
+        from src.repository.document_repository import DocumentRecordRepository
+        from src.core.database import async_session_factory
+        doc_repo = DocumentRecordRepository(async_session_factory)
+        document_count = await doc_repo.count_indexed()
 
         snapshot_name = name or f"snapshot_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
@@ -109,27 +103,19 @@ class SnapshotManager:
         try:
             # 备份当前索引
             index_path = work_dir / "index"
-            docstore_path = work_dir / "document_store.json"
             backup_dir.mkdir(parents=True, exist_ok=True)
 
             if index_path.exists():
                 shutil.copytree(index_path, backup_dir / "index", dirs_exist_ok=True)
-            if docstore_path.exists():
-                shutil.copy2(docstore_path, backup_dir / "document_store.json")
 
             # 清理工作目录
             if index_path.exists():
                 shutil.rmtree(index_path)
-            if docstore_path.exists():
-                docstore_path.unlink()
 
             # 恢复快照
             snap_index = snapshot_path / "index"
-            snap_docstore = snapshot_path / "document_store.json"
             if snap_index.exists():
                 shutil.copytree(snap_index, index_path, dirs_exist_ok=True)
-            if snap_docstore.exists():
-                shutil.copy2(snap_docstore, docstore_path)
 
             logger.info(f"快照[{snapshot_id}] 恢复成功")
         except Exception as e:
@@ -139,8 +125,6 @@ class SnapshotManager:
                 if index_path.exists():
                     shutil.rmtree(index_path)
                 shutil.copytree(backup_dir / "index", index_path, dirs_exist_ok=True)
-                if (backup_dir / "document_store.json").exists():
-                    shutil.copy2(backup_dir / "document_store.json", docstore_path)
             raise AppException(
                 status_code=500,
                 code=13010,
