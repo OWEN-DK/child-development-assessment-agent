@@ -347,16 +347,19 @@ async def get_upload_task_status(task_id: str):
 @router.get("/status")
 async def get_rag_status():
     """获取 RAG 服务状态"""
-    from src.service.document_manager import document_manager
+    from src.repository.document_repository import SourceDocumentRepository
+    from src.core.database import async_session_factory
 
-    # 索引就绪需要同时满足：索引存在且至少有一个已索引文档
-    has_documents = len(document_manager.list_documents()) > 0
+    repo = SourceDocumentRepository(async_session_factory)
+    all_docs = await repo.get_all(limit=1000)
+    document_count = len(all_docs)
+    has_documents = document_count > 0
     index_ready = rag_service.index_manager.is_index_available() and has_documents
 
     return APIResponse.success(data={
         "index_ready": index_ready,
         "storage_dir": os.path.abspath(settings.rag_storage_dir),
-        "document_count": len(document_manager.list_documents()),
+        "document_count": document_count,
     })
 
 
@@ -372,22 +375,19 @@ async def delete_document(filename: str):
 @router.get("/documents")
 async def list_documents():
     """列出所有已索引文档"""
-    from src.service.document_manager import document_manager
+    from src.repository.document_repository import SourceDocumentRepository
+    from src.core.database import async_session_factory
 
-    docs = document_manager.list_documents()
-
-    # 映射到前端期望的格式
+    repo = SourceDocumentRepository(async_session_factory)
+    orms = await repo.get_all(limit=1000)
     results = []
-    for doc in docs:
-        results.append(
-            {
-                "file_hash": doc.file_hash,
-                "file_name": doc.file_name,
-                "uploaded_at": doc.upload_date,
-                "total_pages": doc.metadata.total_pages if doc.metadata else 0,
-            }
-        )
-
+    for o in orms:
+        results.append({
+            "file_hash": o.file_hash,
+            "file_name": o.title,
+            "uploaded_at": o.created_at,
+            "total_pages": o.page_count or 0,
+        })
     return APIResponse.success(data={"documents": results})
 
 
