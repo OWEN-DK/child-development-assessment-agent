@@ -10,7 +10,6 @@ from llama_index.core.schema import Node
 
 from src.config import settings
 from src.core.vector_store_factory import VectorStoreFactory
-from src.service.document_manager import document_manager
 from src.utils.logger import logger
 
 STORAGE_DIR = settings.rag_storage_dir
