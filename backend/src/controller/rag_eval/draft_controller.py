@@ -39,23 +39,20 @@ class DraftController:
         page: int = Query(1, ge=1),
         page_size: int = Query(20, ge=1, le=100),
     ):
-        """列出源文档（从 DocumentManager 获取已索引的知识库文档）"""
-        from src.service.document_manager import document_manager
-        all_docs = document_manager.list_documents()
-        indexed_docs = [d for d in all_docs if d.status == "indexed"]
-        total = len(indexed_docs)
+        """列出源文档（从 source_documents 表查询就绪文档）"""
         skip = (page - 1) * page_size
-        page_docs = indexed_docs[skip:skip + page_size]
+        orms = await self._doc_repo.get_indexed(skip=skip, limit=page_size)
+        total = await self._doc_repo.count_indexed()
         items = []
-        for d in page_docs:
+        for o in orms:
             items.append({
-                "id": d.file_hash,
-                "name": d.file_name,
-                "file_hash": d.file_hash,
-                "status": d.status,
-                "page_count": d.metadata.total_pages if d.metadata else None,
-                "created_at": d.upload_date.isoformat() if d.upload_date else None,
-                "updated_at": d.upload_date.isoformat() if d.upload_date else None,
+                "id": o.id,
+                "name": o.title,
+                "file_hash": o.file_hash,
+                "status": o.status.value if hasattr(o.status, "value") else str(o.status),
+                "page_count": o.page_count,
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+                "updated_at": o.updated_at.isoformat() if o.updated_at else None,
             })
         return APIResponse.success({"items": items, "total": total, "page": page, "page_size": page_size})
 
