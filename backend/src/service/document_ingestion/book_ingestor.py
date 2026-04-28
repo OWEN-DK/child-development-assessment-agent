@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
 from src.config import settings
-from src.schemas import DocumentMetadata, DocumentRecord
 from src.schemas.task import TaskState, TaskStatus
 from src.service.document_ingestion.chunking_indexing import (
     ChunkingAndIndexing, _safe_call_callback
@@ -33,7 +32,7 @@ class BookIngestor:
         file_name = original_filename if original_filename else os.path.basename(file_path)
         file_hash = self.parser.calculate_file_hash(file_path)
         if not force_restart:
-            if document_manager.exists(file_hash):
+            if await document_manager.exists(file_hash):
                 logger.warning(f"Document {file_path} already exists (hash: {file_hash}). Skipping ingestion.")
                 return file_hash
         task_state_service = get_task_state_service()
@@ -165,10 +164,19 @@ class BookIngestor:
             if progress_callback:
                 await _safe_call_callback(progress_callback, "processing", 98.0, "正在完成最终操作")
 
-            doc_record = DocumentRecord(file_hash=file_hash, file_name=file_name, ref_doc_ids=[file_hash], metadata=DocumentMetadata(title=file_name, total_pages=actual_total_pages if actual_total_pages is not None else doc_count, chapter_count=chapter_count), status="indexed", progress=100.0)
-            # 使用线程池执行同步的文件写入操作，避免阻塞事件循环
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, document_manager.add_document, doc_record)
+            doc_record = {
+                "file_hash": file_hash,
+                "file_name": file_name,
+                "ref_doc_ids": [file_hash],
+                "metadata": {
+                    "title": file_name,
+                    "total_pages": actual_total_pages if actual_total_pages is not None else doc_count,
+                    "chapter_count": chapter_count,
+                },
+                "status": "indexed",
+                "progress": 100.0,
+            }
+            await document_manager.add_document(doc_record)
             if settings.pageindex_enabled:
                 asyncio.create_task(self.pageindex_wrapper.index_document(file_path, file_hash))
             logger.info(f"Successfully ingested {file_path}")
@@ -180,16 +188,21 @@ class BookIngestor:
             )
         except TaskCancelledException:
             logger.info(f"Task cancelled for {file_name}. Cleaning up...")
-            if document_manager.exists(file_hash):
-                document_manager.delete_document(file_hash)
+            if await document_manager.exists(file_hash):
+                await document_manager.delete_document(file_hash)
             raise
         except Exception as e:
             logger.error(f"Failed to ingest book: {e}", exc_info=True)
             try:
-                failed_doc = DocumentRecord(file_hash=file_hash, file_name=file_name, ref_doc_ids=[file_hash], metadata=DocumentMetadata(title=file_name, total_pages=0), status="failed", progress=0.0)
-                # 使用线程池执行同步的文件写入操作，避免阻塞事件循环
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, document_manager.add_document, failed_doc)
+                failed_doc = {
+                    "file_hash": file_hash,
+                    "file_name": file_name,
+                    "ref_doc_ids": [file_hash],
+                    "metadata": {"title": file_name, "total_pages": 0},
+                    "status": "failed",
+                    "progress": 0.0,
+                }
+                await document_manager.add_document(failed_doc)
             except:
                 pass
             raise
