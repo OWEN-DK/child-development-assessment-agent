@@ -25,8 +25,10 @@ class DocumentMetadata(BaseModel):
 class DocumentRecord(BaseModel):
     """文档记录"""
 
+    id: str = ""
     file_hash: str
     file_name: str
+    file_type: str = ""
     upload_date: datetime = Field(default_factory=datetime.now)
     ref_doc_ids: List[str] = Field(default_factory=list)
     metadata: DocumentMetadata
