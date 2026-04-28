@@ -57,7 +57,7 @@ class ResultProcessor:
 
         return False
 
-    def _process_search_results(
+    async def _process_search_results(
         self,
         nodes,
         original_query: str,
@@ -225,9 +225,9 @@ class ResultProcessor:
             file_hash = metadata.get("file_hash")
             source_book = metadata.get("file_name", "Unknown Source")
             if file_hash:
-                doc = document_manager.get_document(file_hash)
+                doc = await document_manager.get_document(file_hash)
                 if doc:
-                    source_book = doc.file_name
+                    source_book = doc["file_name"]
 
             # 处理页码显示
             page_label = metadata.get("page_label")

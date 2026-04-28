@@ -104,8 +104,8 @@ class RetrievalFacade:
     def _convert_to_knowledge_items(self, nodes, user_age: int = None):
         return self.knowledge_retriever._convert_to_knowledge_items(nodes, user_age)
 
-    def _process_search_results(self, nodes, original_query: str, expanded_query: str, bm25_nodes: list = None):
-        return self.result_processor._process_search_results(
+    async def _process_search_results(self, nodes, original_query: str, expanded_query: str, bm25_nodes: list = None):
+        return await self.result_processor._process_search_results(
             nodes, original_query, expanded_query, bm25_nodes,
             bm25_retriever=self.retriever_manager.bm25_retriever,
             vector_retriever=self.retriever_manager.vector_retriever,
@@ -236,7 +236,7 @@ class RetrievalFacade:
                 logger.info(f"Top raw score: {nodes[0].score or 0.0:.3f}")
 
             # 处理和过滤结果
-            processed_results = self.result_processor._process_search_results(
+            processed_results = await self.result_processor._process_search_results(
                 nodes,
                 query,
                 expanded_query,
