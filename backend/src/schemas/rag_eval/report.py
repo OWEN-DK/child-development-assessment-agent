@@ -59,8 +59,8 @@ class BadCaseEntry(BaseModel):
 
     case_id: str
     query: str
-    domain: str
-    age: float
+    domain: Optional[str] = None
+    age: Optional[float] = None
     expected_keywords: list[str]
     actual_answer: Optional[str] = None
     precision: Optional[float] = None
