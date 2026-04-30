@@ -39,7 +39,7 @@ class CaseService:
 
     async def create(self, data: TestCaseCreate) -> TestCaseRead:
         """创建测试用例，自动计算 age_stage_label，source='manual'"""
-        age_stage_label = calculate_age_stage_label(data.age)
+        age_stage_label = calculate_age_stage_label(data.age) if data.age is not None else ""
         obj_data = data.model_dump()
         obj_data["id"] = generate_id()
         obj_data["age_stage_label"] = age_stage_label
@@ -60,8 +60,11 @@ class CaseService:
         if not orm_obj:
             raise TestCaseNotFoundException(case_id)
         update_data = data.model_dump(exclude_none=True)
-        if "age" in update_data and update_data["age"] is not None:
-            update_data["age_stage_label"] = calculate_age_stage_label(update_data["age"])
+        if "age" in update_data:
+            if update_data["age"] is not None:
+                update_data["age_stage_label"] = calculate_age_stage_label(update_data["age"])
+            else:
+                update_data["age_stage_label"] = ""
         update_data["version"] = (orm_obj.version or 0) + 1
         updated = await self._repo.update(case_id, update_data)
         return self._mapper.to_read(updated, TestCaseRead)
@@ -122,19 +125,21 @@ class CaseService:
         """从 JSON 批量导入，校验 domain 为合法枚举值，允许重复上传"""
         created = []
         for item in data.cases:
-            if not item.query or not item.domain:
+            if not item.query:
                 continue
 
-            # 校验 domain 为合法 TestDomain 值
-            domain_value = _parse_enum(item.domain, TestDomain)
-            if domain_value is None:
-                continue
+            # 校验 domain 为合法 TestDomain 值（domain 可选，为 None 时跳过校验）
+            domain_value = None
+            if item.domain is not None:
+                domain_value = _parse_enum(item.domain, TestDomain)
+                if domain_value is None:
+                    continue
 
             difficulty_value = None
             if item.difficulty_level:
                 difficulty_value = _parse_enum(item.difficulty_level, DifficultyLevel)
 
-            age_stage = calculate_age_stage_label(item.age)
+            age_stage = calculate_age_stage_label(item.age) if item.age is not None else ""
             obj_data = {
                 "id": generate_id(),
                 "query": item.query,
