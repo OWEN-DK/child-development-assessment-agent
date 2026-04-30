@@ -27,22 +27,30 @@ class FaithfulnessChecker:
 
     async def check(self, draft: DraftCreate, source_content: str) -> float:
         """检查单个草稿忠实度，返回 0-1 评分"""
-        draft_text = draft.description or draft.query
-        if not draft_text.strip() or not source_content.strip():
-            return 0.0
+        # 优先使用 answer_points 构建比较文本
+        if draft.answer_points:
+            compare_text = "。".join(draft.answer_points)
+        else:
+            compare_text = draft.description or ""
 
-        emb_score = await self._embedding_faithfulness_async(draft_text, source_content)
-        threshold = self._config.get_config_value("rag.eval.draft.faithfulness_threshold", 0.7)
+        compare_text = compare_text[:500]
+        if not compare_text.strip() or not source_content.strip():
+            return 0.5
 
-        if emb_score >= threshold:
-            return emb_score
+        emb_score = await self._embedding_faithfulness_async(
+            compare_text, source_content[:1500]
+        )
 
-        try:
-            llm_score = await self._llm_faithfulness_check(draft_text, source_content)
-            return max(emb_score, llm_score)
-        except Exception as e:
-            logger.error(f"LLM 忠实度校验失败: {e}")
-            return emb_score
+        if emb_score < 0.6:
+            try:
+                llm_score = await self._llm_faithfulness_check(
+                    compare_text, source_content[:1500]
+                )
+                return max(emb_score, llm_score)
+            except Exception as e:
+                logger.error(f"LLM 忠实度校验失败: {e}")
+
+        return emb_score
 
     async def batch_check(
         self, drafts: list[DraftCreate],
@@ -95,9 +103,14 @@ class FaithfulnessChecker:
 
     async def _llm_faithfulness_check(self, draft_text: str, source_content: str) -> float:
         """LLM 深度忠实度校验，返回 0-1"""
-        prompt = f"""评估草稿忠实度。源文档内容: {source_content[:1500]}
-草稿: {draft_text[:800]}
-返回 JSON: {{"faithfulness_score": 0.85, "reason": "..."}}"""
+        prompt = f"""评估答案要点是否忠实于原文。
+
+原文: {source_content[:1500]}
+
+答案要点: {draft_text[:800]}
+
+请判断答案要点中的内容是否都能在原文中找到依据，返回 JSON:
+{{"faithfulness_score": 0.85, "reason": "..."}}"""
 
         model = self._config.get_config_value("rag.eval.draft.llm_model", "") or "qwen-plus"
         llm = LLMServiceFactoryCompat.create(
