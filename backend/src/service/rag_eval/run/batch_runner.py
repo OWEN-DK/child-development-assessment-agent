@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from src.core.config.cache import ConfigCache
+from src.core.interfaces import IRetrievalService
 from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.repository.rag_eval.test_run_result_repository import TestRunResultRepository
 from src.service.rag_eval.run.executor import TestCaseExecutor
@@ -23,6 +24,7 @@ class BatchTestRunner:
         test_run_result_repository: TestRunResultRepository,
         config_cache: ConfigCache | None = None,
         sse_publisher=None,
+        retrieval_service: IRetrievalService | None = None,
     ):
         self._executor = executor
         self._result_processor = result_processor
@@ -30,8 +32,17 @@ class BatchTestRunner:
         self._result_repo = test_run_result_repository
         self._config = config_cache or ConfigCache.get_instance()
         self._sse = sse_publisher
+        self._retrieval = retrieval_service
 
-    async def execute_run(self, run_id: str, test_cases: list, task_id: str = None) -> None:
+    async def execute_run(
+        self,
+        run_id: str,
+        test_cases: list,
+        task_id: str = None,
+        progress_callback=None,
+        cancellation_event=None,
+        task_type: str = None,
+    ) -> None:
         """执行完整测试运行
 
         流程：
@@ -126,10 +137,22 @@ class BatchTestRunner:
         """带信号量控制的单用例执行"""
         async with sem:
             timeout_ms = self._get_config_int("rag.eval.run.timeout_ms", 30000)
+
+            retrieval_fn = None
+            if self._retrieval:
+                async def _retrieval(query, age, domain):
+                    results = await self._retrieval.retrieve_knowledge(query, limit=5)
+                    return [{"id": getattr(r, "id", "") or r.get("id", "")} for r in (results or [])]
+                retrieval_fn = _retrieval
+
+            generation_fn = None
+
             return await self._executor.execute(
                 test_case=case,
                 run_id=run_id,
                 timeout_ms=timeout_ms,
+                retrieval_fn=retrieval_fn,
+                generation_fn=generation_fn,
             )
 
     async def _push_event(self, channel: str | None, event_type: str, data: dict):

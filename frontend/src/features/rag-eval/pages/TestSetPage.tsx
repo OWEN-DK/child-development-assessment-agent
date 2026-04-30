@@ -3,9 +3,9 @@ import {
   Space, Button, Card, Modal, message, Typography, Spin, Alert, Form, Input, Row, Col, Empty, Tag, Popconfirm,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, ExportOutlined, EditOutlined, SwapOutlined } from '@ant-design/icons';
-import type { TestSet, TestDomain } from '@entities/rag-eval';
+import type { TestSet } from '@entities/rag-eval';
 import { useTestSets, useCreateTestSet, useUpdateTestSet, useDeleteTestSet, useExportTestSet } from '../hooks/useTestSets';
-import { DOMAIN_COLORS, formatDomain } from '@entities/rag-eval';
+import { CaseTransferModal } from '../components/test-set/CaseTransferModal';
 import { formatTimestamp } from '@entities/rag-eval';
 
 const { Title, Text, Paragraph } = Typography;
@@ -23,7 +23,7 @@ export function TestSetPage() {
   const [transferSetId, setTransferSetId] = useState<string | null>(null);
   const [form] = Form.useForm<{ name: string; description?: string }>();
 
-  const testSets = data?.items || [];
+  const testSets = data || [];
 
   const handleCreate = useCallback(() => {
     setEditingSet(null);
@@ -97,8 +97,7 @@ export function TestSetPage() {
                     <div>
                       {set.description && <Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 8 }}>{set.description}</Paragraph>}
                       <Space wrap size={[4, 4]}>
-                        <Tag color="blue">{set.test_case_count} 个用例</Tag>
-                        {set.domains.map((d: string) => <Tag key={d} color={(DOMAIN_COLORS as Record<string, string>)[d]}>{formatDomain(d as TestDomain)}</Tag>)}
+                        <Tag color="blue">{set.case_count} 个用例</Tag>
                       </Space>
                       <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>{formatTimestamp(set.updated_at)}</Text>
                     </div>
@@ -118,9 +117,11 @@ export function TestSetPage() {
         </Form>
       </Modal>
 
-      <Modal title="管理测试用例" open={transferOpen} onCancel={() => setTransferOpen(false)} footer={null} width={640}>
-        <Alert type="info" message={`用例转移功能开发中 (测试集: ${transferSetId})`} style={{ marginBottom: 16 }} />
-      </Modal>
+      <CaseTransferModal
+        open={transferOpen}
+        setId={transferSetId!}
+        onClose={() => setTransferOpen(false)}
+      />
     </div>
   );
 }

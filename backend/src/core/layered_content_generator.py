@@ -386,7 +386,7 @@ class LayeredContentGenerator:
                 f"Batch LLM generation failed, falling back to concurrent individual calls: {e}"
             )
             # 降级为并发调用
-            base_concurrency_limit = layered_config["concurrency_limit"]
+            base_concurrency_limit = layered_config.get("concurrency_limit", 4)
             concurrency_limit = max(4, base_concurrency_limit)
             semaphore = asyncio.Semaphore(concurrency_limit)
 

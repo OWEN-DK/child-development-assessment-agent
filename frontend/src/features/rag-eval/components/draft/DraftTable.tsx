@@ -1,16 +1,24 @@
 import { Table, Space, Button, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EyeOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
-import type { TestCaseDraft, TestDomain } from '@entities/rag-eval';
-import { DomainTag } from '../common/DomainTag';
+import type { TestCaseDraft } from '@entities/rag-eval';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatPercent, formatTimestamp } from '@entities/rag-eval';
+import { PAGE_SIZE_OPTIONS } from '@shared/lib/constants';
 
 const { Text } = Typography;
+
+interface PaginationState {
+  current: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number, pageSize: number) => void;
+}
 
 interface DraftTableProps {
   drafts: TestCaseDraft[];
   loading?: boolean;
+  pagination: PaginationState;
   onView: (draft: TestCaseDraft) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -22,6 +30,7 @@ interface DraftTableProps {
 export function DraftTable({
   drafts,
   loading,
+  pagination,
   onView,
   onApprove,
   onReject,
@@ -31,8 +40,6 @@ export function DraftTable({
 }: DraftTableProps) {
   const columns: ColumnsType<TestCaseDraft> = [
     { title: '查询', dataIndex: 'query', width: 220, ellipsis: true },
-    { title: '领域', dataIndex: 'domain', width: 100, render: (d: TestDomain) => <DomainTag domain={d} /> },
-    { title: '年龄段', dataIndex: 'age_stage_label', width: 90 },
     {
       title: '忠实度',
       dataIndex: 'faithfulness_score',
@@ -67,7 +74,16 @@ export function DraftTable({
       loading={loading}
       size="small"
       rowSelection={onSelectChange ? { selectedRowKeys, onChange: (keys) => onSelectChange(keys as string[]) } : undefined}
-      pagination={{ pageSize: 20, showSizeChanger: true }}
+      pagination={{
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+        total: pagination.total,
+        showSizeChanger: true,
+        pageSizeOptions: PAGE_SIZE_OPTIONS.map(String),
+        onChange: pagination.onPageChange,
+        onShowSizeChange: pagination.onPageChange,
+        showTotal: (total) => `共 ${total} 条`,
+      }}
       scroll={{ x: 900 }}
     />
   );

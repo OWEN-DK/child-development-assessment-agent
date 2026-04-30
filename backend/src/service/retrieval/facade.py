@@ -1,6 +1,10 @@
+import asyncio
+import hashlib
 from typing import List, Optional
 
 from src.config import settings
+from src.core.query_decomposer import QueryDecomposer
+from src.core.query_router import QueryRouter
 from src.schemas import KnowledgeItem
 from src.service.cache_service import CacheService
 from src.service.index_manager_service import IndexManagerService
@@ -56,6 +60,12 @@ class RetrievalFacade:
         self._pipeline_orchestrator = None
         self._init_pipeline_orchestrator()
 
+        # 查询路由与分解器
+        self.query_router = QueryRouter()
+        self.query_decomposer = QueryDecomposer(
+            llm_enabled=settings.query_router_llm_enabled,
+        )
+
     def _init_pipeline_orchestrator(self):
         """初始化 PipelineOrchestrator（失败时不阻塞启动）"""
         try:
@@ -92,17 +102,17 @@ class RetrievalFacade:
         self.retriever_manager.vector_retriever = value
 
     # 向后兼容：转发内部方法
-    async def _rewrite_query(self, query: str, age: int) -> str:
-        return await self.query_rewriter._rewrite_query(query, age)
+    async def _rewrite_query(self, query: str) -> str:
+        return await self.query_rewriter._rewrite_query(query)
 
     async def _expand_synonyms(self, query: str) -> str:
         return await self.query_rewriter._expand_synonyms(query)
 
-    def _get_cache_key(self, query: str, age: int, limit: int) -> tuple:
-        return self.knowledge_retriever._get_cache_key(query, age, limit)
+    def _get_cache_key(self, query: str, limit: int) -> tuple:
+        return self.knowledge_retriever._get_cache_key(query, limit)
 
-    def _convert_to_knowledge_items(self, nodes, user_age: int = None):
-        return self.knowledge_retriever._convert_to_knowledge_items(nodes, user_age)
+    def _convert_to_knowledge_items(self, nodes):
+        return self.knowledge_retriever._convert_to_knowledge_items(nodes)
 
     async def _process_search_results(self, nodes, original_query: str, expanded_query: str, bm25_nodes: list = None):
         return await self.result_processor._process_search_results(
@@ -128,40 +138,133 @@ class RetrievalFacade:
         return []
 
     async def retrieve_knowledge(
-        self, query: str, age: int, limit: int = 3, user_id: str = None
+        self, query: str, limit: int = 3, user_id: str = None
     ) -> List[KnowledgeItem]:
-        """
-        根据查询和年龄检索相关知识点
-        :param user_id: 用户 ID，用于 A/B 测试分配
-        """
+        """检索知识。复杂查询自动拆解为子查询分别检索后归并。"""
+        classification = await self.query_router.classify_async(query)
+
+        if classification.query_type.value != "complex":
+            return await self._single_retrieve(query, limit, user_id)
+
+        # 复杂查询：拆解子查询
+        sub_queries = await self.query_decomposer.decompose(query)
+
+        if len(sub_queries) <= 1:
+            return await self._single_retrieve(query, limit, user_id)
+
+        # 各子查询并行检索
+        all_results = []
+        tasks = [
+            self._single_retrieve(sq.text, limit, user_id) for sq in sub_queries
+        ]
+        per_query_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for sq, result in zip(sub_queries, per_query_results):
+            if isinstance(result, Exception):
+                logger.warning(f"子查询 '{sq.text}' 检索失败: {result}")
+                continue
+            for item in result:
+                item.metadata["sub_query"] = sq.text
+                item.metadata["sub_focus"] = sq.focus
+            all_results.extend(result)
+
+        return self._merge_and_rerank(query, all_results, limit)
+
+    async def _single_retrieve(
+        self, query: str, limit: int, user_id: str = None
+    ) -> List[KnowledgeItem]:
+        """单次检索：走现有 RRF pipeline 或 knowledge_retriever"""
         use_pipeline = (
             settings.rag_query_pipeline_enabled
             and self._pipeline_orchestrator is not None
         )
-
         if use_pipeline:
-            return await self._retrieve_via_pipeline(query, age, limit)
+            return await self._retrieve_via_pipeline(query, limit)
         else:
             return await self.knowledge_retriever.retrieve_knowledge(
-                query=query, age=age, limit=limit, user_id=user_id
+                query=query, limit=limit, user_id=user_id
             )
 
-    async def _retrieve_via_pipeline(
-        self, query: str, age: int, limit: int
+    def _merge_and_rerank(
+        self,
+        original_query: str,
+        results: List[KnowledgeItem],
+        limit: int,
     ) -> List[KnowledgeItem]:
-        """通过声明式流水线执行检索"""
+        """子查询结果归并：内容去重 → reranker 精排 → 截断"""
+        from llama_index.core.schema import NodeWithScore, TextNode
+
+        # 去重：基于内容 hash
+        seen = set()
+        deduped = []
+        for item in results:
+            h = hashlib.sha256(item.content.encode()).hexdigest()
+            if h not in seen:
+                seen.add(h)
+                deduped.append(item)
+
+        if not deduped:
+            return []
+
+        # 如果有 reranker，对去重结果精排
+        try:
+            from src.core.reranker import CrossEncoderReranker
+
+            reranker = CrossEncoderReranker()
+            nodes = [
+                NodeWithScore(
+                    node=TextNode(
+                        text=item.content, metadata={"knowledge_item": item}
+                    ),
+                    score=item.relevance_score,
+                )
+                for item in deduped
+            ]
+            ranked = reranker.rerank(query=original_query, nodes=nodes)
+            deduped = [
+                n.node.metadata["knowledge_item"]
+                for n in ranked
+                if "knowledge_item" in n.node.metadata
+            ]
+        except Exception as e:
+            logger.warning(f"合并后重排失败: {e}")
+
+        return deduped[:limit]
+
+    async def _retrieve_via_pipeline(
+        self, query: str, limit: int
+    ) -> List[KnowledgeItem]:
+        """通过声明式流水线执行检索（带缓存）"""
+        cache_key = ("pipeline", query.strip().lower(), limit)
+
+        # 缓存检查
+        try:
+            cached = await self.cache_service.get(cache_key)
+            if cached:
+                logger.debug(f"Pipeline 检索命中缓存: {query[:30]}")
+                return cached
+        except Exception:
+            pass  # 缓存查询失败不阻塞检索
+
         try:
             raw_results = await self._pipeline_orchestrator.execute(
                 query=query,
-                age=float(age),
                 limit=limit,
             )
-            return self.knowledge_retriever._convert_to_knowledge_items(
-                raw_results, user_age=age
+            results = self.knowledge_retriever._convert_to_knowledge_items(
+                raw_results
             )
         except Exception as e:
             logger.error(f"Pipeline 检索失败，抛出异常: {e}")
             raise
+
+        # 缓存写入
+        try:
+            await self.cache_service.set(cache_key, results)
+        except Exception:
+            pass  # 缓存写入失败不阻塞返回
+
+        return results
 
     async def search_content(
         self, query: str, limit: int = 20, offset: int = 0

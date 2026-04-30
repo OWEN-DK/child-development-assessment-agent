@@ -142,8 +142,10 @@ class ResultProcessor:
             kw for kw in all_keywords if len(kw) > 1 and kw not in stop_words
         }
 
-        results = []
+        scored_items = []
         logger.info(f"_process_search_results: 开始处理 {len(nodes)} 个搜索结果")
+
+        # === 第一阶段：过滤、关键词加成、收集 scored_items ===
         for i, node_with_score in enumerate(nodes):
             node = node_with_score.node
             metadata = node.metadata or {}
@@ -197,29 +199,56 @@ class ResultProcessor:
                 f"Processing result {i}: 内部绝对分数={final_score:.4f} (原始={raw_score:.4f} + 加成={keyword_bonus:.4f})"
             )
 
-            # 将内部绝对分数映射为人类友好的展示分数
-            # 内部绝对分数通常在阈值到 max_expected_score 之间
-            max_expected_score = settings.rag_scoring_max_expected_score
-            base_display_score = settings.rag_scoring_base_display_score
-            max_display_score = settings.rag_scoring_max_display_score
+            scored_items.append(
+                {
+                    "node": node,
+                    "metadata": metadata,
+                    "content": content,
+                    "raw_score": raw_score,
+                    "final_score": final_score,
+                    "index": i,
+                }
+            )
 
-            if final_score >= max_expected_score:
-                display_score = max_display_score
-            else:
-                # 线性映射: [threshold, max_expected_score] -> [base_display_score, max_display_score]
-                score_range = max_expected_score - threshold
-                if score_range > 0:
-                    ratio = (final_score - threshold) / score_range
+        # === 第二阶段：Per-Query Min-Max 归一化 ===
+        base_display_score = settings.rag_scoring_base_display_score
+        max_display_score = settings.rag_scoring_max_display_score
+        score_spread_min = settings.rag_scoring_score_spread_min
+
+        if scored_items:
+            scores = [item["final_score"] for item in scored_items]
+            score_min = min(scores)
+            score_max = max(scores)
+            score_spread = score_max - score_min
+            do_normalize = score_spread >= score_spread_min and len(scored_items) > 1
+
+            logger.debug(
+                f"Per-Query 归一化: score_min={score_min:.4f}, score_max={score_max:.4f}, "
+                f"spread={score_spread:.6f}, spread_min={score_spread_min}, do_normalize={do_normalize}"
+            )
+
+            for item in scored_items:
+                if do_normalize:
+                    ratio = (item["final_score"] - score_min) / score_spread
                     display_score = base_display_score + ratio * (
                         max_display_score - base_display_score
                     )
                 else:
-                    display_score = base_display_score
+                    display_score = max_display_score
+                display_score = min(
+                    max(display_score, base_display_score), max_display_score
+                )
+                item["display_score"] = display_score
 
-            display_score = min(
-                max(display_score, base_display_score), max_display_score
-            )
-            logger.debug(f"Processing result {i}: 展示分数={display_score:.4f}")
+        # === 第三阶段：构建最终结果列表（去重 + 元数据补充） ===
+        results = []
+        for item in scored_items:
+            content = item["content"]
+            metadata = item["metadata"]
+            node = item["node"]
+            final_score = item["final_score"]
+            display_score = item["display_score"]
+            i = item["index"]
 
             # 获取源书名
             file_hash = metadata.get("file_hash")
@@ -240,12 +269,8 @@ class ResultProcessor:
             # 检查重复内容
             is_duplicate = False
             for existing_item in results:
-                # 优先检查file_hash是否相同（如果是同一文件的同一部分，hash相同则大概率重复）
-                # 但这里的需求主要是内容去重，不同文件如果内容完全一致也应该去重
                 if self._is_content_duplicate(content, existing_item["content"]):
                     is_duplicate = True
-                    # 如果当前结果分数更高（理论上已按分数排序，不会发生），或者元数据更完整，可以考虑替换
-                    # 这里简单起见，保留已存在的（分数更高的）结果
                     break
 
             if is_duplicate:
@@ -258,20 +283,19 @@ class ResultProcessor:
                     "content": content,
                     "score": display_score,
                     "raw_score": final_score,
-                    "age_fit_score": None,  # 搜索页不计算年龄适配度，后续如需支持需修改 search_content 签名
                     "source_book": source_book,
                     "chapter_title": metadata.get("chapter_title"),
                     "page_label": page_label,
-                    "target_age_min": metadata.get("target_age_min", 0),
-                    "target_age_max": metadata.get("target_age_max", 18),
                     "brain_regions": metadata.get("brain_regions", []),
                     "topics": metadata.get("topics", []),
                     "file_hash": metadata.get("file_hash"),
                 }
             )
             logger.debug(
-                f"Added result {i}: 分数={final_score:.4f}, 来源={source_book}, 章节={metadata.get('chapter_title', 'N/A')}"
+                f"Added result {i}: 展示分数={display_score:.4f}, raw_score={final_score:.4f}, 来源={source_book}, 章节={metadata.get('chapter_title', 'N/A')}"
             )
+
+        results.sort(key=lambda x: x["score"], reverse=True)
 
         logger.info(f"_process_search_results: 处理完成，返回 {len(results)} 个结果")
         if results:

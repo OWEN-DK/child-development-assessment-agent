@@ -145,9 +145,6 @@ CREATE TABLE `test_case_drafts` (
     `id` VARCHAR(64) PRIMARY KEY,
     `source_document_id` VARCHAR(64) COMMENT '来源文档 ID',
     `query` TEXT NOT NULL COMMENT '测试问题',
-    `age` DECIMAL(4,1) NOT NULL COMMENT '年龄（岁，如 1.5）',
-    `age_stage_label` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '年龄段标签(0-6m/1-2y等)',
-    `domain` VARCHAR(32) NOT NULL COMMENT 'gross_motor/fine_motor/language/cognitive/social_emotional/sensory_integration',
     `description` TEXT COMMENT '期望答案描述',
     `expected_knowledge_ids` JSON COMMENT '期望检索的知识片段 ID 列表',
     `expected_keywords` JSON COMMENT '期望关键词列表',
@@ -167,7 +164,6 @@ CREATE TABLE `test_case_drafts` (
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_source_document_id` (`source_document_id`),
     INDEX `idx_status` (`status`),
-    INDEX `idx_domain` (`domain`),
     INDEX `idx_batch_id` (`batch_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -179,9 +175,9 @@ DROP TABLE IF EXISTS `test_cases`;
 CREATE TABLE `test_cases` (
     `id` VARCHAR(64) PRIMARY KEY,
     `query` TEXT NOT NULL COMMENT '测试问题',
-    `age` DECIMAL(4,1) NOT NULL COMMENT '年龄（岁）',
+    `age` DECIMAL(4,1) DEFAULT NULL COMMENT '年龄（岁），从草稿提升时可留空',
     `age_stage_label` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '年龄段标签',
-    `domain` VARCHAR(32) NOT NULL COMMENT '测试领域',
+    `domain` VARCHAR(32) DEFAULT NULL COMMENT '测试领域，从草稿提升时可留空',
     `description` TEXT COMMENT '期望答案描述',
     `expected_knowledge_ids` JSON COMMENT '期望检索的知识片段 ID 列表',
     `expected_keywords` JSON COMMENT '期望关键词列表',

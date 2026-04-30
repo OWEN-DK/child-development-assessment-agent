@@ -12,6 +12,8 @@ export type SSEStatus = 'connecting' | 'connected' | 'done' | 'error';
 
 /** 终结 SSE 流的关键事件类型集合 */
 const TERMINAL_EVENTS = new Set([
+  'run_completed',
+  'run_failed',
   'complete',
   'error',
 ]);
@@ -23,9 +25,10 @@ const TERMINAL_EVENTS = new Set([
  * 替代不支持自定义 Header 的原生 EventSource。
  *
  * @param url - SSE 端点 URL，传入 null 时不会发起连接
+ * @param onComplete - 收到终结事件时的回调，可用于自动刷新列表
  * @returns events - 接收到的全部 SSE 事件，status - 当前连接状态
  */
-export function useSSEProgress(url: string | null) {
+export function useSSEProgress(url: string | null, onComplete?: () => void) {
   const [events, setEvents] = useState<SSEEvent[]>([]);
   const [status, setStatus] = useState<SSEStatus>('connecting');
   const eventsRef = useRef<SSEEvent[]>([]);
@@ -33,15 +36,18 @@ export function useSSEProgress(url: string | null) {
   const handleMessage = useCallback((raw: string) => {
     try {
       const event: SSEEvent = JSON.parse(raw);
+      // 忽略保活心跳，不展示给用户
+      if (event.type === 'heartbeat') return;
       eventsRef.current = [...eventsRef.current, event];
       setEvents(eventsRef.current);
       if (TERMINAL_EVENTS.has(event.type)) {
         setStatus('done');
+        onComplete?.();
       }
     } catch {
       // 非 JSON 格式数据忽略
     }
-  }, []);
+  }, [onComplete]);
 
   useEffect(() => {
     if (!url) {

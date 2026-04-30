@@ -19,12 +19,6 @@ class ExtractedMetadata(BaseModel):
     brain_regions: List[str] = Field(
         default_factory=list, description="提到或隐含的大脑区域列表"
     )
-    target_age_min: float = Field(
-        default=0.0, description="推荐最小年龄，无明确标注时默认为0"
-    )
-    target_age_max: float = Field(
-        default=18.0, description="推荐最大年龄，无明确标注时默认为18"
-    )
     activity_type: str = Field(default="Theory", description="内容类型")
 
 
@@ -38,27 +32,8 @@ class RuleBasedMetadataExtractor:
         self.theme_keywords = metadata_config.theme_keywords
         self.brain_regions_map = metadata_config.brain_regions_map
         self.activity_type_keywords = metadata_config.activity_type_keywords
-        self.age_patterns = metadata_config.age_patterns
 
         logger.info("Metadata rules loaded from global rule settings")
-
-    def extract_age_range(self, text: str) -> Tuple[float, float]:
-        """从文本中提取年龄范围"""
-        for pattern in self.age_patterns:
-            match = re.search(pattern, text)
-            if match:
-                groups = match.groups()
-                if len(groups) == 2:
-                    return float(groups[0]), float(groups[1])
-                elif len(groups) == 1:
-                    age_value = float(groups[0])
-                    match_text = match.group(0)
-                    if "月龄" in match_text:
-                        age = age_value / 12
-                        return round(age, 1), round(age, 1)
-                    elif "以上" in match_text:
-                        return age_value, 18.0
-        return 0.0, 18.0
 
     def extract_themes(self, text: str) -> List[str]:
         """提取内容主题"""
@@ -99,15 +74,12 @@ class RuleBasedMetadataExtractor:
 
     def extract(self, text: str) -> ExtractedMetadata:
         """基于规则提取所有元数据"""
-        age_min, age_max = self.extract_age_range(text)
         themes = self.extract_themes(text)
 
         return ExtractedMetadata(
             summary=self.extract_summary(text),
             topics=themes,
             brain_regions=self.extract_brain_regions(themes),
-            target_age_min=int(age_min) if age_min.is_integer() else age_min,
-            target_age_max=int(age_max) if age_max.is_integer() else age_max,
             activity_type=self.extract_activity_type(text),
         )
 
@@ -155,9 +127,9 @@ class MetadataExtractor:
         # 生成缓存键（使用文本哈希）
         cache_key = None
         if use_cache:
-            import hashlib
+            from src.utils.hash_utils import content_hash
 
-            cache_key = hashlib.md5(cleaned_text[:2000].encode()).hexdigest()
+            cache_key = content_hash(cleaned_text)
             if cache_key in _llm_response_cache:
                 metadata, timestamp = _llm_response_cache[cache_key]
                 # 检查是否过期
@@ -277,46 +249,6 @@ class MetadataExtractor:
                     or data["activity_type"] not in allowed_activity_types
                 ):
                     data["activity_type"] = "Theory"
-
-                # 验证并清理年龄字段
-                try:
-                    if "target_age_min" in data:
-                        # 支持浮点型年龄
-                        age_min = float(data["target_age_min"])
-                        data["target_age_min"] = max(0.0, min(18.0, age_min))
-                    else:
-                        data["target_age_min"] = 0.0
-
-                    if "target_age_max" in data:
-                        age_max = float(data["target_age_max"])
-                        data["target_age_max"] = max(0.0, min(18.0, age_max))
-                    else:
-                        data["target_age_max"] = 18.0
-
-                    # 确保最小年龄不大于最大年龄
-                    if data["target_age_min"] > data["target_age_max"]:
-                        data["target_age_min"], data["target_age_max"] = (
-                            data["target_age_max"],
-                            data["target_age_min"],
-                        )
-
-                    # 转换为整数保持兼容性
-                    data["target_age_min"] = (
-                        int(data["target_age_min"])
-                        if data["target_age_min"].is_integer()
-                        else data["target_age_min"]
-                    )
-                    data["target_age_max"] = (
-                        int(data["target_age_max"])
-                        if data["target_age_max"].is_integer()
-                        else data["target_age_max"]
-                    )
-
-                except (ValueError, TypeError):
-                    # 解析失败时使用规则提取的年龄
-                    age_min, age_max = _rule_extractor.extract_age_range(text)
-                    data["target_age_min"] = age_min
-                    data["target_age_max"] = age_max
 
                 # 构建结果对象
                 result = ExtractedMetadata(**data)

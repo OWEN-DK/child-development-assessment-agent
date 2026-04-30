@@ -1,11 +1,13 @@
 import asyncio
 import json
+import time
 from typing import Any, Callable
 
 from src.config import settings
 from src.core.metadata_processor import MetadataProcessor
 from src.service.document_manager import document_manager
 from src.utils.di import get_task_state_service
+from src.utils.hash_utils import content_hash as _content_hash
 from src.utils.logger import logger
 
 TASK_TYPE = "upload"
@@ -65,18 +67,22 @@ class ChunkingAndIndexing:
                     res = progress_callback(stage, overall_progress, message)
                     if asyncio.iscoroutine(res):
                         asyncio.run_coroutine_threadsafe(res, loop)
+            t_chunk_start = time.monotonic()
             all_nodes = await asyncio.to_thread(
                 MetadataProcessor.split_chapters_into_chunks,
                 documents, chunk_target_size=settings.rag_epub_chunk_target_size,
                 file_hash=file_hash, progress_callback=chunking_progress,
             )
+            logger.info(f"[PERF] chunking ({file_type}): {time.monotonic() - t_chunk_start:.2f}s, {len(all_nodes)} nodes from {len(documents)} chapters")
         else:
             # 使用线程池执行同步的分块操作，避免阻塞事件循环
+            t_chunk_start = time.monotonic()
             all_nodes = await loop.run_in_executor(
                 None,
                 MetadataProcessor.split_pages_into_chunks,
                 documents, settings.rag_pdf_chunk_size, settings.rag_chunk_overlap, file_hash,
             )
+            logger.info(f"[PERF] chunking (page-based): {time.monotonic() - t_chunk_start:.2f}s, {len(all_nodes)} nodes from {len(documents)} pages")
 
         if progress_callback:
             await _safe_call_callback(progress_callback, "metadata_extraction", 30.0, f"正在提取元数据：0/{len(all_nodes)} 个块")
@@ -99,9 +105,11 @@ class ChunkingAndIndexing:
 
         metadata_processor = MetadataProcessor()
         try:
+            t_meta_start = time.monotonic()
             processed_nodes = await metadata_processor.process_nodes(
                 all_nodes, file_hash=file_hash, progress_callback=wrapped_progress, total_chunks=len(all_nodes),
             )
+            logger.info(f"[PERF] metadata_extraction: {time.monotonic() - t_meta_start:.2f}s, {len(processed_nodes)} nodes")
         except Exception as e:
             logger.error(f"Metadata extraction failed completely: {e}", exc_info=True)
             logger.warning("Falling back to importing without metadata extraction")
@@ -109,8 +117,6 @@ class ChunkingAndIndexing:
                 node.metadata["content"] = node.get_content()
                 node.metadata["file_hash"] = file_hash
                 node.metadata["metadata_extraction_skipped"] = True
-                node.metadata["target_age_min"] = 0
-                node.metadata["target_age_max"] = 18
                 node.metadata["topics"] = json.dumps([])
                 node.metadata["brain_regions"] = json.dumps([])
                 node.metadata["summary"] = ""
@@ -124,10 +130,10 @@ class ChunkingAndIndexing:
             updates={"progress": 90.0, "stage": "indexing", "message": f"正在插入 {len(processed_nodes)} 个节点到索引"}
         )
 
-        import hashlib
         unique_nodes = []
         existing_hashes = set()
-        
+
+        t_dedup_start = time.monotonic()
         if self.index_manager.is_index_available():
             index = self.index_manager.get_index()
             if hasattr(index, "docstore"):
@@ -138,17 +144,20 @@ class ChunkingAndIndexing:
 
         for node in processed_nodes:
             content = node.get_content()
-            content_hash = hashlib.sha256(content.encode()).hexdigest()
-            node.metadata["content_hash"] = content_hash
-            if content_hash not in existing_hashes:
+            ch = _content_hash(content)
+            node.metadata["content_hash"] = ch
+            if ch not in existing_hashes:
                 unique_nodes.append(node)
-                existing_hashes.add(content_hash)
+                existing_hashes.add(ch)
             else:
-                logger.info(f"Skipping duplicate node with hash: {content_hash}")
+                logger.info(f"Skipping duplicate node with hash: {ch}")
         
         # 去重完成后清理内存
         import gc
         gc.collect()
+        logger.info(f"[PERF] dedup: {time.monotonic() - t_dedup_start:.2f}s, {len(unique_nodes)} unique / {len(processed_nodes)} total")
+
+        cancelled = False
 
         if not unique_nodes:
             logger.info("No new unique nodes to insert. All content is duplicate.")
@@ -177,6 +186,7 @@ class ChunkingAndIndexing:
                 logger.info(
                     f"Pre-computing embeddings using async batch API for {len(unique_nodes)} nodes..."
                 )
+                t_embed_start = time.monotonic()
                 
                 # 分批处理嵌入，使用配置值避免一次性加载所有文本到内存
                 EMBED_BATCH_SIZE = settings.rag_index_insert_batch_size
@@ -201,11 +211,12 @@ class ChunkingAndIndexing:
                         await _safe_call_callback(progress_callback, "embedding", batch_progress, f"正在计算嵌入向量：{i + len(batch_nodes)}/{len(unique_nodes)} 个块")
                 
                 logger.info("Pre-computed embeddings for all nodes")
+                logger.info(f"[PERF] embedding: {time.monotonic() - t_embed_start:.2f}s")
 
             # 将同步的索引操作放入线程池执行，避免阻塞事件循环，添加取消检查和进度更新
             indexing_completed = False
-            cancelled = False
-            
+            t_index_start = time.monotonic()
+
             def check_cancellation():
                 nonlocal cancelled
                 if progress_callback:
@@ -250,6 +261,7 @@ class ChunkingAndIndexing:
                 indexing_completed = True
             
             await loop.run_in_executor(None, wrapped_insert)
+            logger.info(f"[PERF] index_insert: {time.monotonic() - t_index_start:.2f}s, {len(unique_nodes)} nodes")
             
         # 索引构建完成后清理内存
         gc.collect()

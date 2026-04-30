@@ -14,7 +14,6 @@ import type {
 export async function getDrafts(params?: {
   page?: number;
   page_size?: number;
-  domain?: string;
   status?: string;
   document_id?: string;
 }): Promise<PaginatedResponse<TestCaseDraft>> {
@@ -31,7 +30,7 @@ export async function getDraft(id: string): Promise<TestCaseDraft> {
 /** 更新草稿 */
 export async function updateDraft(
   id: string,
-  data: Partial<Pick<TestCaseDraft, 'query' | 'age' | 'domain' | 'description' | 'difficulty_level' | 'expected_knowledge_ids' | 'expected_keywords' | 'answer_points' | 'professional_terms'>>,
+  data: Partial<Pick<TestCaseDraft, 'query' | 'description' | 'difficulty_level' | 'expected_knowledge_ids' | 'expected_keywords' | 'answer_points' | 'professional_terms'>>,
 ): Promise<TestCaseDraft> {
   const res = await apiClient.put<TestCaseDraft>(`/api/v1/rag/eval/drafts/${id}`, data);
   return res.data;

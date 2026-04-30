@@ -83,15 +83,15 @@ def mock_config_manager():
                     ],
                     "priority": "medium",
                 },
-                "age_adaptation_optimization": {
+                "age_adaptation_optimization_disabled": {
                     "trigger": {
-                        "metric": "age_related_bad_case_ratio",
+                        "metric": "bad_case_ratio",
                         "operator": ">",
                         "threshold": 0.3,
                     },
                     "suggestions": [
                         {
-                            "param": "rag_age_filter_strictness",
+                            "param": "rag_hybrid_bm25_weight",
                             "action": "decrease",
                             "suggested_value": 0.5,
                             "safe_range": [0.3, 0.8],
@@ -156,7 +156,6 @@ def mock_config_manager():
             "rag_reranker_final_k": 5,
             "rag_reranker_initial_k": 30,
             "rag_hybrid_merge_mode": "OR",
-            "rag_age_filter_strictness": 0.7,
             "pageindex_enabled": False,
             "rag_chunk_size": 600,
             "rag_max_workers": 20,
@@ -244,15 +243,15 @@ async def test_comparison_trigger(mock_config_manager):
     metrics = {
         "overall_recall": 0.80,
         "overall_precision": 0.80,
-        "age_related_bad_case_ratio": 0.35,
+        "bad_case_ratio": 0.35,
     }
     engine = RuleEngine(mock_config_manager)
     suggestions = await engine.evaluate(metrics)
 
-    age_suggestions = [
-        s for s in suggestions if s.param_name == "rag_age_filter_strictness"
+    weight_suggestions = [
+        s for s in suggestions if s.param_name == "rag_hybrid_bm25_weight"
     ]
-    assert len(age_suggestions) > 0
+    assert len(weight_suggestions) > 0
 
 
 @pytest.mark.asyncio

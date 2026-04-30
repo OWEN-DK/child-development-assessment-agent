@@ -50,8 +50,6 @@ def base_state():
                 content="Jumping helps balance",
                 source_book="Book A",
                 risk_level="Low",
-                target_age_min=3,
-                target_age_max=5,
                 relevance_score=0.9,
             )
         ],

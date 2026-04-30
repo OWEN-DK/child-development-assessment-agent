@@ -18,7 +18,7 @@ class CacheCheckStep(PipelineStep):
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """执行缓存检查"""
         # 生成缓存键
-        key = self._generate_cache_key(context.query, context.age, context.limit)
+        key = self._generate_cache_key(context.query, context.limit)
 
         # 检查缓存
         cached = await self._cache_service.get(key)
@@ -39,8 +39,8 @@ class CacheCheckStep(PipelineStep):
         logger.debug(f"缓存未命中：{context.query[:50]}...")
         return context
 
-    def _generate_cache_key(self, query: str, age: float, limit: int) -> str:
+    def _generate_cache_key(self, query: str, limit: int) -> str:
         """生成缓存键"""
-        raw = f"{query}:{age}:{limit}".encode("utf-8")
+        raw = f"{query}:{limit}".encode("utf-8")
         hash_str = hashlib.md5(raw).hexdigest()
         return f"{self._prefix}:{hash_str}"

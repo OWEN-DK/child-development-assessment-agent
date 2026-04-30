@@ -160,7 +160,8 @@ class SetService:
         case_count = len(set_cases)
         case_ids = [sc.test_case_id for sc in set_cases]
 
-        read = self._mapper.to_read(orm_obj, TestSetRead)
-        read.case_count = case_count
-        read.case_ids = case_ids
-        return read
+        attrs = OrmMapper._extract_orm_attrs(orm_obj)
+        transformed = {k: OrmMapper._transform_value(v) for k, v in attrs.items()}
+        transformed["case_count"] = case_count
+        transformed["case_ids"] = case_ids
+        return TestSetRead.model_validate(transformed)

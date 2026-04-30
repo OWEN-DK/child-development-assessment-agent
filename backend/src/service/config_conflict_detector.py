@@ -27,10 +27,7 @@ class ConfigConflictDetector:
         # 规则 4: 分块大小 + 重叠比例
         conflicts.extend(self._check_chunk_overlap(merged_config))
 
-        # 规则 5: 年龄过滤严格度 + 容忍度
-        conflicts.extend(self._check_age_filter(merged_config))
-
-        # 规则 6: LLM 温度 + TopP
+        # 规则 5: LLM 温度 + TopP
         conflicts.extend(self._check_llm_sampling(merged_config))
 
         # 规则 7: 缓存 TTL + 更新频率
@@ -112,20 +109,6 @@ class ConfigConflictDetector:
             ]
         return []
 
-    def _check_age_filter(self, config: dict) -> list[Conflict]:
-        """规则 5: 严格度高时容忍度应低"""
-        strictness = config.get("age_filter_strictness", "medium")
-        tolerance = config.get("age_tolerance", 2)
-        if strictness == "high" and tolerance > 1:
-            return [
-                Conflict(
-                    level="warning",
-                    rule="age_filter",
-                    message=f"年龄过滤严格度高时，容忍度 ({tolerance}) 应不大于 1",
-                    affected_configs=["age_filter_strictness", "age_tolerance"],
-                )
-            ]
-        return []
 
     def _check_llm_sampling(self, config: dict) -> list[Conflict]:
         """规则 6: 温度高时 TopP 应低，避免过度随机"""

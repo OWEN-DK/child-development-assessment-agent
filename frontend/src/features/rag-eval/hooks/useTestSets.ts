@@ -2,17 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as testSetsApi from '@/api/rag-eval/cases';
 import type { TestSet } from '@entities/rag-eval';
 
-/** 测试集列表筛选参数 */
-export interface TestSetFilters {
-  page?: number;
-  page_size?: number;
-}
-
 /** 获取测试集列表 */
-export function useTestSets(filters?: TestSetFilters) {
+export function useTestSets() {
   return useQuery({
-    queryKey: ['rag-eval', 'test-sets', filters],
-    queryFn: () => testSetsApi.getTestSets(filters),
+    queryKey: ['rag-eval', 'test-sets'],
+    queryFn: () => testSetsApi.getTestSets(),
     staleTime: 30_000,
   });
 }
@@ -32,7 +26,7 @@ export function useCreateTestSet() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { name: string; description?: string; case_ids?: string[] }) =>
-      testSetsApi.createTestSet({ name: data.name, description: data.description ?? null, case_ids: data.case_ids || [] }),
+      testSetsApi.createTestSet({ name: data.name, description: data.description ?? '', case_ids: data.case_ids || [] }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rag-eval', 'test-sets'] });
     },

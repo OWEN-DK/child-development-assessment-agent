@@ -1,7 +1,8 @@
 """DraftEngineFacade - 草稿引擎门面"""
 
 import asyncio
-from typing import Optional
+import re
+from typing import ClassVar, Optional
 
 from src.schemas.rag_eval.draft import (
     DraftGenerationConfig, DraftList, DraftRead, DraftReview, DraftUpdate,
@@ -24,6 +25,11 @@ from src.utils.orm_mapper import OrmMapper
 
 class DraftEngineFacade:
     """草稿引擎门面——流水线化生成与忠诚度检查"""
+
+    _SKIP_PATTERNS: ClassVar[list[str]] = [
+        "目录", "版权", "版权所有", "出版信息", "前言", "序言",
+        "ISBN", "责任编辑", "封面设计", "版次", "印次",
+    ]
 
     def __init__(
         self, draft_generator: DraftGenerator, faithfulness_checker: FaithfulnessChecker,
@@ -56,10 +62,14 @@ class DraftEngineFacade:
         try:
             doc = await self._load_doc(source_document_id)
             chunks = await self._load_chunks(doc.file_hash)
+            chunks = self._filter_chunks(chunks)
             await pub("generation_started", "开始", document_id=source_document_id)
-            meta = await self._analyzer.analyze(doc)
-            await pub("metadata_analyzed", "元数据完成",
-                age_ranges=meta.age_ranges, domains=meta.domains, topic_summary=meta.topic_summary)
+            meta = await self._analyzer.analyze(
+                title=doc.title or "",
+                file_type=doc.file_type or "",
+                content_summary=getattr(doc, "content_summary", None) or "",
+            )
+            await pub("metadata_analyzed", "元数据完成", topic_summary=meta.topic_summary)
 
             # ── 流水线: 生成器 → Queue → 检查器 ──
             concurrency = self._config.get_config_value("rag.eval.draft.concurrency", 15)
@@ -68,9 +78,7 @@ class DraftEngineFacade:
             total_chunks = len(chunks)
             gen_completed = [0]
             check_completed = [0]
-            # 全局共享 semaphore，避免 checker worker 各自独立 semaphore 导致并发爆炸
             check_sem = asyncio.Semaphore(concurrency)
-            # 检查器 worker 数量独立控制（不需要和并发数相同，避免 15×15 问题）
             checker_count = min(4, concurrency)
 
             async def checker_worker():
@@ -89,10 +97,8 @@ class DraftEngineFacade:
                     finally:
                         queue.task_done()
 
-            # 启动检查器消费者
             checker_tasks = [asyncio.create_task(checker_worker()) for _ in range(checker_count)]
 
-            # 生成回调：每完成一个分块就将草稿批次放入队列
             async def on_draft_batch(batch):
                 if batch:
                     await queue.put(batch)
@@ -104,14 +110,12 @@ class DraftEngineFacade:
                     f"生成+校验: {done}/{total} 分块, 已校验 {check_completed[0]} 条",
                     done=done, total=total, checked=check_completed[0], pct=pct)
 
-            # 启动生成器（内部并发 LLM 调用，每完成一个分块回调 on_draft_batch）
             await self._gen.generate(
-                chunks, meta, config,
+                chunks, config,
                 progress_callback=on_gen_progress,
                 draft_batch_callback=on_draft_batch,
             )
 
-            # 生成完成，通知检查器退出
             for _ in range(checker_count):
                 await queue.put(None)
             await asyncio.gather(*checker_tasks)
@@ -135,8 +139,7 @@ class DraftEngineFacade:
                 try:
                     await self._draft_repo.create(dict(
                         id=generate_prefixed_id("draft"), source_document_id=source_document_id,
-                        query=d.query, age=float(d.age), age_stage_label=d.age_stage_label or "",
-                        domain=d.domain, description=d.description,
+                        query=d.query, description=d.description,
                         expected_knowledge_ids=d.expected_knowledge_ids or [],
                         expected_keywords=d.expected_keywords or [], answer_points=d.answer_points or [],
                         professional_terms=d.professional_terms or [], difficulty_level=d.difficulty_level,
@@ -161,19 +164,13 @@ class DraftEngineFacade:
 
     # ── CRUD ──
 
-    async def get_drafts(self, page=1, page_size=20, status=None, domain=None,
+    async def get_drafts(self, page=1, page_size=20, status=None,
                          source_document_id=None, batch_id=None) -> DraftList:
         skip = (page - 1) * page_size
         f = {}
         for k, v in [("status", status), ("source_document_id", source_document_id), ("batch_id", batch_id)]:
             if v is not None:
                 f[k] = v
-        if domain:
-            try:
-                from src.models.rag_eval.enums import TestDomain as TD
-                f["domain"] = TD(domain)
-            except ValueError:
-                pass
         orms = await (self._draft_repo.get_all(skip=skip, limit=page_size) if not f
                       else self._draft_repo.get_by_filter(**f, skip=skip, limit=page_size))
         total = await (self._draft_repo.count_all() if not f else self._draft_repo.count_by_filter(**f))
@@ -198,7 +195,7 @@ class DraftEngineFacade:
         if review.action == "reject":
             await self._draft_repo.update(draft_id, {"status": TestCaseStatus.REJECTED, "version": o.version + 1})
             return None
-        tc = await self._tc_repo.create(self._tc_dict(o, draft_id))
+        tc = await self._tc_repo.create(self._tc_dict(o, draft_id, o.source_document_id))
         await self._draft_repo.update(draft_id, {"status": TestCaseStatus.REVIEWED, "version": o.version + 1})
         return OrmMapper.to_read(tc, TestCaseRead).model_dump()
 
@@ -209,7 +206,8 @@ class DraftEngineFacade:
                 o = await self._draft_repo.get_by_id(did)
                 if not o or o.status != TestCaseStatus.REVIEWED:
                     continue
-                tc = await self._tc_repo.get_by_source_draft(did) or await self._tc_repo.create(self._tc_dict(o, did))
+                tc = await self._tc_repo.get_by_source_draft(did) or await self._tc_repo.create(
+                    self._tc_dict(o, did, o.source_document_id))
                 await self._draft_repo.update(did, {"status": TestCaseStatus.IMPORTED, "version": o.version + 1})
                 r.append(OrmMapper.to_read(tc, TestCaseRead).model_dump())
             except Exception as e:
@@ -258,13 +256,19 @@ class DraftEngineFacade:
     # ── 内部辅助 ──
 
     @staticmethod
-    def _tc_dict(o, draft_id) -> dict:
-        return dict(id=generate_prefixed_id("tc"), query=o.query, age=float(o.age),
-            age_stage_label=o.age_stage_label or "", domain=o.domain, description=o.description,
+    def _tc_dict(o, draft_id, source_document_id) -> dict:
+        return dict(
+            id=generate_prefixed_id("tc"), query=o.query,
+            age=None, age_stage_label="", domain=None,
+            description=o.description,
             expected_knowledge_ids=o.expected_knowledge_ids or [],
-            expected_keywords=o.expected_keywords or [], answer_points_summary=(o.description or "")[:500],
-            difficulty_level=o.difficulty_level, professional_terms=o.professional_terms or [],
-            source="draft", source_draft_id=draft_id, source_document_id=o.source_document_id, version=1)
+            expected_keywords=o.expected_keywords or [],
+            answer_points_summary=(o.description or "")[:500],
+            difficulty_level=o.difficulty_level,
+            professional_terms=o.professional_terms or [],
+            source="draft", source_draft_id=draft_id,
+            source_document_id=source_document_id, version=1,
+        )
 
     async def _load_doc(self, doc_id: str):
         from src.schemas.rag_eval.source_document import SourceDocumentRead
@@ -272,6 +276,30 @@ class DraftEngineFacade:
         if not o:
             raise ValueError(f"源文档不存在: {doc_id}")
         return OrmMapper.to_read(o, SourceDocumentRead)
+
+    def _filter_chunks(self, chunks: list[dict]) -> list[dict]:
+        """过滤掉不适合生成测试用例的分块（过短、无实质内容、非正文）"""
+        min_length = self._config.get_config_value(
+            "rag.eval.draft.min_chunk_length", 100,
+        )
+        filtered = []
+        for c in chunks:
+            content = c.get("content", "")
+            # 过短
+            if len(content) < min_length:
+                continue
+            # 去除空白和标点后实质内容过少（纯数字/符号分隔线等）
+            text = re.sub(r"[\s\d\W_]+", "", content)
+            if len(text) < min_length * 0.3:
+                continue
+            # 短内容匹配非正文模式（目录/版权页等），仅对 <300 字符检查避免误杀正文
+            if len(content) < 300 and any(p in content for p in self._SKIP_PATTERNS):
+                continue
+            filtered.append(c)
+        skipped = len(chunks) - len(filtered)
+        if skipped:
+            logger.info(f"分块预过滤: {len(chunks)} → {len(filtered)} (跳过 {skipped})")
+        return filtered
 
     async def _load_chunks(self, file_hash: str) -> list[dict]:
         """按 file_hash 从向量库加载文档的所有分块"""

@@ -1,7 +1,7 @@
 /**
  * SSE 连接配置回调
  */
-interface SSECallbacks {
+export interface SSECallbacks {
   /** 连接成功建立时触发 */
   onOpen: () => void;
   /** 收到一条完整 SSE 消息时触发（`data:` 行后的原始字符串） */

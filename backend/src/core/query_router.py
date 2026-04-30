@@ -15,19 +15,6 @@ from src.schemas import LLMMessage, LLMRequest, QueryClassification, QueryType
 logger = logging.getLogger(__name__)
 
 
-class QueryType(str, Enum):
-    """查询类型枚举"""
-
-    SIMPLE = "simple"  # 简单查询：关键词/事实性
-    COMPLEX = "complex"  # 复杂查询：推理/分析性
-    DEFAULT = "default"  # 默认查询
-
-
-    query_type: QueryType
-    confidence: float
-    reasoning: str = ""  # 分类理由（用于调试）
-
-
 class QueryRouter:
     """
     查询路由器
@@ -48,7 +35,7 @@ class QueryRouter:
         r".*技巧.*",  # "亲子沟通技巧"
     ]
 
-    # 复杂查询的关键字
+    # 复杂查询的关键字（单个即触发，从 orchestrator 对齐）
     COMPLEX_KEYWORDS = [
         "分析",
         "评估",
@@ -60,7 +47,15 @@ class QueryRouter:
         "多维度",
         "几个方面",
         "生成报告",
+        "区别",
+        "差异",
+        "比较",
+        "如何",
+        "为什么",
     ]
+
+    # 长度阈值：超过此长度视为复杂查询
+    COMPLEX_LENGTH_THRESHOLD = 20
 
     def __init__(self):
         self.llm_available = settings.query_router_llm_enabled and bool(
@@ -143,15 +138,21 @@ class QueryRouter:
                     reasoning=f"匹配简单查询模式：{pattern}",
                 )
 
-        # 检查是否包含复杂查询关键字
-        complexity_score = sum(
-            1 for kw in self.COMPLEX_KEYWORDS if kw in normalized_query
-        )
-        if complexity_score >= 2:
+        # 检查是否包含复杂查询关键字（单个即触发）
+        for kw in self.COMPLEX_KEYWORDS:
+            if kw in normalized_query:
+                return QueryClassification(
+                    query_type=QueryType.COMPLEX,
+                    confidence=0.8,
+                    reasoning=f"包含复杂查询关键字：{kw}",
+                )
+
+        # 长度阈值
+        if len(query) > self.COMPLEX_LENGTH_THRESHOLD:
             return QueryClassification(
                 query_type=QueryType.COMPLEX,
-                confidence=0.8,
-                reasoning=f"包含{complexity_score}个复杂查询关键字",
+                confidence=0.65,
+                reasoning=f"查询长度 {len(query)} > {self.COMPLEX_LENGTH_THRESHOLD}",
             )
 
         return None

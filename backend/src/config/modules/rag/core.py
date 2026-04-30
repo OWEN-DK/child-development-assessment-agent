@@ -87,10 +87,10 @@ class RagCoreSettings(BaseSettings):
         validation_alias="RAG_SCORING_KEYWORD_BONUS_MAX",
         description="关键词加成上限（防止覆盖检索本身相关性）",
     )
-    rag_scoring_max_expected_score: float = Field(
-        default=0.65,
-        validation_alias="RAG_SCORING_MAX_EXPECTED_SCORE",
-        description="最大预期内部分数",
+    rag_scoring_score_spread_min: float = Field(
+        default=0.002,
+        validation_alias="RAG_SCORING_SCORE_SPREAD_MIN",
+        description="Per-Query 分数展开最小值（结果集内 min-max 差值小于此值时统一给高分）",
     )
     rag_scoring_base_display_score: float = Field(
         default=0.55,
@@ -103,61 +103,6 @@ class RagCoreSettings(BaseSettings):
         description="最大展示分数",
     )
 
-    # 年龄过滤配置
-    rag_age_filter_stage_boundaries: dict = Field(
-        default_factory=lambda: {
-            "infant": 1,
-            "toddler": 3,
-            "preschool": 6,
-        },
-        validation_alias="RAG_AGE_FILTER_STAGE_BOUNDARIES",
-        description="儿童发展阶段年龄边界",
-    )
-    rag_age_fit_base_score: float = Field(
-        default=0.5,
-        validation_alias="RAG_AGE_FIT_BASE_SCORE",
-        description="年龄适配度基础分数",
-    )
-    rag_age_fit_decay_factor: float = Field(
-        default=0.1,
-        validation_alias="RAG_AGE_FIT_DECAY_FACTOR",
-        description="年龄适配度衰减系数",
-    )
-    rag_age_fit_threshold_high: float = Field(
-        default=0.7,
-        validation_alias="RAG_AGE_FIT_THRESHOLD_HIGH",
-        description="年龄适配度高阈值（±1 岁）",
-    )
-    rag_age_fit_threshold_low: float = Field(
-        default=0.3,
-        validation_alias="RAG_AGE_FIT_THRESHOLD_LOW",
-        description="年龄适配度低阈值（超出范围）",
-    )
-    rag_age_fit_default_score: float = Field(
-        default=0.5,
-        validation_alias="RAG_AGE_FIT_DEFAULT_SCORE",
-        description="年龄适配度默认分数（异常时）",
-    )
-    rag_age_milestone_match_range_start: int = Field(
-        default=6,
-        validation_alias="RAG_AGE_MILESTONE_MATCH_RANGE_START",
-        description="里程碑匹配年龄范围起始",
-    )
-    rag_age_milestone_match_range_end: int = Field(
-        default=2,
-        validation_alias="RAG_AGE_MILESTONE_MATCH_RANGE_END",
-        description="里程碑匹配年龄范围结束（不包含）",
-    )
-    rag_age_default_range_min: int = Field(
-        default=3,
-        validation_alias="RAG_AGE_DEFAULT_RANGE_MIN",
-        description="默认年龄范围最小值",
-    )
-    rag_age_default_range_max: int = Field(
-        default=6,
-        validation_alias="RAG_AGE_DEFAULT_RANGE_MAX",
-        description="默认年龄范围最大值",
-    )
     rag_unsuitable_content_threshold: float = Field(
         default=0.5,
         validation_alias="RAG_UNSUITABLE_CONTENT_THRESHOLD",

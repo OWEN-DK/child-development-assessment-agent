@@ -96,8 +96,8 @@ class SynonymValidator:
         if len(term) < 2:
             return "太短（单字）"
 
-        if len(term) > 15:
-            return "太长（超过 15 字）"
+        if len(term) > 25:
+            return "太长（超过 25 字）"
 
         if not self._valid_char_pattern.match(term):
             return "包含非法字符"
@@ -137,10 +137,13 @@ class SynonymValidator:
         return False
 
     def _has_semantic_overlap(self, term: str, original_query: str) -> bool:
-        """检查扩展词与原词是否有语义重叠"""
+        """检查扩展词与原词是否有语义重叠（jieba 词级）"""
         if self._chinese_pattern.search(original_query):
-            shared_chars = set(term) & set(original_query)
-            if shared_chars:
+            import jieba
+
+            term_words = set(jieba.lcut(term))
+            query_words = set(jieba.lcut(original_query))
+            if term_words & query_words:
                 return True
 
         if re.search(r"[a-zA-Z]", original_query):

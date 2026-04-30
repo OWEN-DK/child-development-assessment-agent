@@ -29,13 +29,11 @@ sys.path.insert(0, backend_dir)
 sys.path.insert(0, os.path.join(backend_dir, "src"))
 
 # 导入新模块
-from src.core.rag.age_fit_scorer import AgeFitScorer
 from src.core.rag.score_calibrator import ScoreCalibrator
 from src.core.rag.query_analyzer import QueryAnalyzer
 from src.core.rag.dedup_engine import DedupEngine
 from src.core.rag.boundary_handler import BoundaryHandler
 from src.core.rag.synonym_validator import SynonymValidator
-from src.core.age_filter import AgeFilter, AgeFilterMode
 from src.core.hybrid_retrieval import HybridRetrievalMerger
 
 
@@ -321,57 +319,6 @@ def test_score_distribution():
     passed = comparison["avg_diff"] < 0.5 and range_overlap > 0.5  # 放宽标准
     print(
         f"\n{'✅ 通过' if passed else '❌ 失败'}：分数校准{'合理' if passed else '需要优化'}"
-    )
-    return passed
-
-
-def test_age_fit_granularity():
-    """测试 3: 年龄适配度细粒度 (使用 AgeFitScorer)"""
-    print("\n" + "=" * 80)
-    print("测试 3: 年龄适配度细粒度")
-    print("=" * 80)
-
-    test_cases = [
-        ("适合 3 岁儿童的精细动作训练，使用串珠游戏", 3, 0, 2),
-        ("适合 4 岁儿童的语言表达训练，讲故事活动", 4, 3, 5),
-        ("适合 5 岁儿童的认知发展训练，简单的数学游戏", 5, 4, 6),
-        ("适合 6 岁儿童的社交技能训练，角色扮演游戏", 6, 5, 7),
-        ("适合 2 岁儿童的大动作训练，爬行和走路练习", 2, 1, 3),
-        ("儿童注意力训练方法，通过游戏提高专注力", 3, 0, 18),
-        ("亲子阅读技巧，培养孩子的阅读兴趣", 4, 0, 18),
-        ("儿童情绪管理，帮助孩子学会表达情感", 5, 0, 18),
-        ("适合 3-4 岁儿童的平衡训练，走直线游戏", 3, 3, 4),
-        ("适合 5-6 岁儿童的逻辑思维训练，拼图游戏", 5, 5, 6),
-    ]
-
-    test_ages = [2, 3, 4, 5, 6]
-
-    scores = set()
-    score_counts = {}
-
-    print(f"\n{'内容':<45} {'年龄':<6} {'适配度':<8}")
-    print("-" * 65)
-
-    for content, user_age, target_min, target_max in test_cases:
-        for age in test_ages:
-            score = AgeFitScorer.calculate(content, age, target_min, target_max)
-            scores.add(score)
-            score_counts[score] = score_counts.get(score, 0) + 1
-            print(f"{content[:43]:<45} {age:<6} {score:<8.4f}")
-
-    print(f"\n结果：年龄适配度分数有 {len(scores)} 个不同值")
-    print(f"期望：应该有 ≥10 个不同值（细粒度连续分布）")
-
-    print(f"\n分数分布（前 15 个）：")
-    for score in sorted(scores)[:15]:
-        count = score_counts[score]
-        print(
-            f"  {score:.4f}: {count} 次 ({count / len(test_cases) / len(test_ages) * 100:.0f}%)"
-        )
-
-    passed = len(scores) >= 10
-    print(
-        f"\n{'✅ 通过' if passed else '❌ 失败'}：年龄适配度分数{'过于粗糙，仅三档固定值' if not passed else '有细粒度分布'}"
     )
     return passed
 
@@ -851,68 +798,6 @@ def test_boundary_scenarios():
     return passed
 
 
-def test_age_filter_accuracy():
-    """测试 11: 年龄过滤准确性 (使用 AgeFilter)"""
-    print("\n" + "=" * 80)
-    print("测试 11: 年龄过滤准确性")
-    print("=" * 80)
-
-    # 测试用例：(内容描述, 用户年龄, 内容年龄范围, 期望通过, 说明)
-    test_cases = [
-        ("适合 3 岁儿童的精细动作训练", 3, (3, 3), True, "应通过"),
-        ("适合 6 岁儿童的数学游戏", 3, (6, 6), False, "应过滤"),
-        (
-            "适合 2 岁儿童的爬行练习",
-            3,
-            (2, 2),
-            False,
-            "应过滤（2 岁内容对 3 岁可能太简单）",
-        ),
-        ("儿童注意力训练方法", 3, (0, 18), True, "无明确年龄，应通过"),
-        ("适合 4-5 岁儿童的语言训练", 3, (4, 5), False, "应过滤"),
-        ("适合 3-4 岁儿童的平衡训练", 3, (3, 4), True, "应通过（年龄范围重叠）"),
-        ("适合 0-2 岁婴儿的感官刺激", 3, (0, 2), False, "应过滤"),
-    ]
-
-    print(
-        f"\n{'内容':<30} {'用户年龄':<8} {'内容年龄':<10} {'期望':<6} {'说明':<35} {'状态'}"
-    )
-    print("-" * 100)
-
-    correct = 0
-    total = len(test_cases)
-
-    for content, user_age, (
-        target_min,
-        target_max,
-    ), should_pass, description in test_cases:
-        # 使用 AgeFilter 判断
-        should_filter = AgeFilter.should_filter(
-            target_min, target_max, user_age, AgeFilterMode.STRICT
-        )
-        actually_passes = not should_filter
-
-        if actually_passes == should_pass:
-            correct += 1
-            result = "✅"
-        else:
-            result = "❌"
-
-        print(
-            f"{content[:28]:<30} {user_age:<8} [{target_min},{target_max}]:<10 {str(should_pass):<6} {description:<35} {result}"
-        )
-
-    accuracy = correct / total if total > 0 else 0
-    print(f"\n准确率：{accuracy:.0%} ({correct}/{total})")
-    print(f"期望：≥90%")
-
-    passed = accuracy >= 0.9
-    print(
-        f"\n{'✅ 通过' if passed else '❌ 失败'}：年龄过滤准确率{'达标' if passed else '不足'}"
-    )
-    return passed
-
-
 def test_synonym_expansion_quality():
     """测试 12: 同义词扩展质量 (使用 SynonymValidator)"""
     print("\n" + "=" * 80)
@@ -997,7 +882,6 @@ def main():
         ("1. 检索质量指标 (P@5/R@5/NDCG@5/MRR/HR@5)", test_retrieval_quality_metrics())
     )
     results.append(("2. 分数分布分析", test_score_distribution()))
-    results.append(("3. 年龄适配度细粒度", test_age_fit_granularity()))
     results.append(("4. 查询类型分析", test_query_type_analysis()))
     results.append(("5. 内容去重效果", test_deduplication_effectiveness()))
     results.append(("6. 重排序效果", test_reranker_effectiveness()))
@@ -1005,7 +889,6 @@ def main():
     results.append(("8. 稳定性分析", test_stability()))
     results.append(("9. 相关性一致性分析", test_relevance_consistency()))
     results.append(("10. 边界场景分析", test_boundary_scenarios()))
-    results.append(("11. 年龄过滤准确性", test_age_filter_accuracy()))
     results.append(("12. 同义词扩展质量", test_synonym_expansion_quality()))
 
     # 汇总结果

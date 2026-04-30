@@ -27,13 +27,13 @@ class QueryRewriter:
         self._synonym_validator = synonym_validator
         self._local_expander = local_expander
 
-    async def _rewrite_query(self, query: str, age: int) -> str:
+    async def _rewrite_query(self, query: str) -> str:
         """重写查询以提高检索准确率"""
         if not settings.rag_config["query_rewrite"]["enabled"]:
             return query
 
         if not self.dashscope_available:
-            return self._local_rewrite_query(query, age)
+            return self._local_rewrite_query(query)
 
         try:
             # Prompt 注入检测
@@ -53,7 +53,7 @@ class QueryRewriter:
             # 通过 PromptManager 获取提示词并渲染
             system_prompt = await prompt_manager.get_prompt("rag_query_rewrite")
             user_prompt = await prompt_manager.get_prompt(
-                "rag_query_rewrite", variables={"age": age, "query": query}
+                "rag_query_rewrite", variables={"query": query}
             )
 
             # 构建提示词
@@ -78,20 +78,12 @@ class QueryRewriter:
             return rewritten_query if rewritten_query else query
         except Exception as e:
             logger.warning(f"Query rewrite failed: {e}, using local fallback")
-            return self._local_rewrite_query(query, age)
+            return self._local_rewrite_query(query)
 
-    def _local_rewrite_query(self, query: str, age: int) -> str:
+    def _local_rewrite_query(self, query: str) -> str:
         """本地查询重写兜底逻辑"""
         # 移除常见无意义词和标点
         query = re.sub(r"[?？!！.。，,]", " ", query)
-        # 针对年龄添加关键词
-        if age > 0:
-            if age < 3:
-                query += " 婴幼儿 早期教育"
-            elif age < 6:
-                query += " 幼儿园 学前教育"
-            else:
-                query += " 学龄儿童"
         return query.strip()
 
     def _validate_expansion(self, expansion_text: str, original_query: str) -> bool:
@@ -165,8 +157,8 @@ class QueryRewriter:
             # 使用安全包装的提示词
             safe_prompt = formatted_prompt
 
-            # 通过 PromptManager 获取系统提示词
-            system_prompt = await prompt_manager.get_prompt("synonym_expansion")
+            # 使用独立的 system prompt（不重复加载 synonym_expansion 模板）
+            system_prompt = "你是儿童发展领域的同义词扩展专家。根据用户查询，生成语义相关的同义词和变体表达，以提高知识库检索的召回率。输出格式为 JSON 列表。"
 
             # 使用工厂创建 LLM 实例（使用兼容层保持向后兼容）
             llm = LLMServiceFactoryCompat.create(

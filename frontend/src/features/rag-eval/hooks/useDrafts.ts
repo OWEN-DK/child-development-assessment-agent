@@ -5,7 +5,6 @@ import type { DraftGenerationConfig } from '@entities/rag-eval';
 /** 草稿列表筛选参数 */
 export interface DraftFilters {
   status?: 'pending' | 'approved' | 'rejected';
-  domain?: string;
   page?: number;
   page_size?: number;
 }

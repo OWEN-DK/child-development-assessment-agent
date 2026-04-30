@@ -2,33 +2,36 @@ import { useState, useCallback } from 'react';
 import {
   Space, Button, Select, Input, Modal, message, Typography, Alert, Row, Col,
 } from 'antd';
-import type { TestCaseDraft, TestDomain } from '@entities/rag-eval';
-import { DOMAIN_MAP } from '@entities/rag-eval';
+import type { TestCaseDraft } from '@entities/rag-eval';
 import {
   useDrafts, useDeleteDrafts, useCreateDrafts, useReviewDraft, useSourceDocuments,
 } from '../hooks/useDrafts';
 import { useDraftGenerationProgress } from '../hooks/useDraftGenerationProgress';
 import { DraftTable } from '../components/draft/DraftTable';
 import { DraftGenerationForm } from '../components/draft/DraftGenerationForm';
-import { DomainTag } from '../components/common/DomainTag';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { getDraftStatusLabel } from '@entities/rag-eval';
-import { formatPercent, formatAgeRange, formatTimestamp } from '@entities/rag-eval';
+import { formatPercent, formatTimestamp } from '@entities/rag-eval';
 import { ProgressList } from '../../../components/progress';
 import { draftGenerationConfig } from '../../../components/progress/configs/draftGeneration';
+import { usePagination } from '@shared/hooks/usePagination';
 
 const { Title, Text, Paragraph } = Typography;
 
 export function DraftPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [domainFilter, setDomainFilter] = useState<string | undefined>();
   const [searchText, setSearchText] = useState('');
+  const { currentPage, pageSize, total, setCurrentPage, setPageSize, setTotal } = usePagination();
 
   const { data, isLoading, isError } = useDrafts({
     status: statusFilter as 'pending' | 'approved' | 'rejected' | undefined,
-    domain: domainFilter,
-    page_size: 20,
+    page: currentPage,
+    page_size: pageSize,
   });
+
+  // 同步服务端返回的 total
+  const serverTotal = data?.total ?? 0;
+  if (serverTotal !== total) setTotal(serverTotal);
 
   const { data: sourceDocsData } = useSourceDocuments();
   const sourceDocuments = sourceDocsData?.items || [];
@@ -47,6 +50,17 @@ export function DraftPage() {
     if (!searchText) return true;
     return d.query.toLowerCase().includes(searchText.toLowerCase());
   });
+
+  const handlePageChange = useCallback((page: number, size: number) => {
+    setCurrentPage(page);
+    if (size !== pageSize) setPageSize(size);
+  }, [pageSize, setCurrentPage, setPageSize]);
+
+  // 状态筛选变更时重置到第一页
+  const handleStatusChange = useCallback((value: string | undefined) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  }, [setCurrentPage]);
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -75,20 +89,35 @@ export function DraftPage() {
     });
   }, [selectedRowKeys, deleteMutation]);
 
-  const handleBatchImport = useCallback(async () => {
+  const handleBatchApprove = useCallback(async () => {
     if (selectedRowKeys.length === 0) return;
-    message.info('批量导入用例功能开发中');
-  }, [selectedRowKeys]);
+    Modal.confirm({
+      title: '批量通过',
+      content: `确定要通过选中的 ${selectedRowKeys.length} 个草稿吗？`,
+      onOk: async () => {
+        // 后端仅支持单个审核，逐个调用
+        const results = await Promise.allSettled(
+          selectedRowKeys.map(id => reviewMutation.mutateAsync({ id, status: 'approved' })),
+        );
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+        setSelectedRowKeys([]);
+        if (failed > 0) {
+          message.warning(`通过 ${succeeded} 个，失败 ${failed} 个`);
+        } else {
+          message.success(`已通过 ${succeeded} 个草稿`);
+        }
+      },
+    });
+  }, [selectedRowKeys, reviewMutation]);
 
   const handleGenerate = useCallback(
-    async (values: { document_id: string; max_qa_per_chunk: number; min_qa_per_chunk: number; age_ranges: string[]; domains: TestDomain[] }) => {
+    async (values: { document_id: string; max_qa_per_chunk: number; min_qa_per_chunk: number }) => {
       const result = await generateMutation.mutateAsync({
         documentId: values.document_id,
         config: {
           max_qa_per_chunk: values.max_qa_per_chunk,
           min_qa_per_chunk: values.min_qa_per_chunk,
-          age_ranges: values.age_ranges,
-          domains: values.domains,
         },
       });
       setShowGenerateModal(false);
@@ -122,22 +151,18 @@ export function DraftPage() {
       </div>
 
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={6}>
+        <Col xs={24} sm={8}>
           <Input.Search placeholder="搜索查询..." allowClear onSearch={setSearchText} style={{ width: '100%' }} />
         </Col>
-        <Col xs={12} sm={4}>
-          <Select placeholder="领域筛选" allowClear value={domainFilter} onChange={setDomainFilter}
-            options={Object.entries(DOMAIN_MAP).map(([v, l]) => ({ value: v, label: l }))} style={{ width: '100%' }} />
-        </Col>
-        <Col xs={12} sm={4}>
-          <Select placeholder="状态筛选" allowClear value={statusFilter} onChange={setStatusFilter}
+        <Col xs={12} sm={6}>
+          <Select placeholder="状态筛选" allowClear value={statusFilter} onChange={handleStatusChange}
             options={['pending', 'generating', 'generated', 'approved', 'rejected', 'archived', 'imported'].map((s) => ({ value: s, label: getDraftStatusLabel(s as never) }))}
             style={{ width: '100%' }} />
         </Col>
         <Col xs={24} sm={10}>
           <Space>
+            <Button disabled={selectedRowKeys.length === 0} onClick={handleBatchApprove}>批量通过</Button>
             <Button danger disabled={selectedRowKeys.length === 0} onClick={handleBatchDelete} loading={deleteMutation.isPending}>批量删除</Button>
-            <Button disabled={selectedRowKeys.length === 0} onClick={handleBatchImport}>批量导入用例</Button>
           </Space>
         </Col>
       </Row>
@@ -152,6 +177,7 @@ export function DraftPage() {
       <DraftTable
         drafts={filteredDrafts}
         loading={isLoading}
+        pagination={{ current: currentPage, pageSize, total, onPageChange: handlePageChange }}
         onView={setDetailDraft}
         onApprove={handleApprove}
         onReject={handleReject}
@@ -164,13 +190,10 @@ export function DraftPage() {
         {detailDraft && (
           <div>
             <Space wrap style={{ marginBottom: 12 }}>
-              <DomainTag domain={detailDraft.domain} />
               <StatusBadge status={detailDraft.status} type="draft" />
             </Space>
             <Paragraph><Text strong>查询: </Text>{detailDraft.query}</Paragraph>
-            <Paragraph><Text strong>年龄段: </Text>{formatAgeRange(detailDraft.age)}</Paragraph>
             <Paragraph><Text strong>忠实度: </Text>{detailDraft.faithfulness_score != null ? formatPercent(detailDraft.faithfulness_score, 1) : '未评估'}</Paragraph>
-            {detailDraft.answer_points_summary && <Paragraph><Text strong>答案要点: </Text>{detailDraft.answer_points_summary}</Paragraph>}
             {detailDraft.expected_keywords.length > 0 && <Paragraph><Text strong>预期关键词: </Text>{detailDraft.expected_keywords.join(', ')}</Paragraph>}
             <Text type="secondary" style={{ fontSize: 12 }}>创建: {formatTimestamp(detailDraft.created_at)} | 更新: {formatTimestamp(detailDraft.updated_at)}</Text>
           </div>

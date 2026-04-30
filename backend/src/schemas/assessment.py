@@ -139,11 +139,9 @@ class KnowledgeItem(BaseModel):
     brain_regions: List[str] = Field(default_factory=list)
     benefits: List[str] = Field(default_factory=list)
     risk_level: RiskLevel = "Low"
-    target_age_min: int = 0
-    target_age_max: int = 18
     activity_type: Optional[str] = None
     relevance_score: float = Field(default=0.0, description="检索相关性分数")
-    age_fit_score: float = Field(default=0.0, ge=0.0, le=1.0, description="年龄适配度分数")
+    metadata: dict = Field(default_factory=dict, description="扩展元数据（如子查询来源等）")
 
 
 class DimensionAnalysis(BaseModel):

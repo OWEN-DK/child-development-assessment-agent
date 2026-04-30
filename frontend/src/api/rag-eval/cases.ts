@@ -61,11 +61,8 @@ export async function importTestCases(draftIds: string[]): Promise<TestCase[]> {
 /* ==================== 测试集 CRUD ==================== */
 
 /** 获取测试集列表 */
-export async function getTestSets(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedResponse<TestSet>> {
-  const res = await apiClient.get<PaginatedResponse<TestSet>>('/api/v1/rag/eval/test-sets', { params });
+export async function getTestSets(): Promise<TestSet[]> {
+  const res = await apiClient.get<TestSet[]>('/api/v1/rag/eval/test-sets');
   return res.data;
 }
 

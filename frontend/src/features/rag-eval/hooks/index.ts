@@ -36,6 +36,7 @@ export {
   useTestRuns,
   useTestRun,
   useCreateRun,
+  useExecuteRun,
   useDeleteRun,
   useBatchDeleteRuns,
   useCompareRuns,

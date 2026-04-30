@@ -13,7 +13,7 @@ export function useTestRuns(filters?: RunFilters) {
   return useQuery({
     queryKey: ['rag-eval', 'runs', filters],
     queryFn: () => runsApi.getRuns(filters),
-    staleTime: 30_000,
+    staleTime: 10_000,
   });
 }
 
@@ -31,8 +31,19 @@ export function useTestRun(id: string) {
 export function useCreateRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; testSetId: string; config?: Record<string, unknown> }) =>
+    mutationFn: (data: { name: string; test_set_ids: string[]; description?: string }) =>
       runsApi.createRun(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
+    },
+  });
+}
+
+/** 执行运行（启动后台任务） */
+export function useExecuteRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => runsApi.executeRun(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
     },

@@ -3,6 +3,8 @@
 将章节级文档拆分为更小的语义块。
 """
 
+import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, List, Optional
 
@@ -35,6 +37,7 @@ def split_chapters_into_chunks(
         拆分后的节点列表
     """
     all_nodes = []
+    t_start = time.monotonic()
     sample_text = "\n".join([doc.text[:500] for doc in documents if doc.text])
     splitter = get_chapter_splitter(sample_text)
 
@@ -74,6 +77,7 @@ def split_chapters_into_chunks(
 
     logger.info(
         f"Split {len(documents)} chapters into {len(all_nodes)} semantic chunks"
+        f" in {time.monotonic() - t_start:.2f}s"
     )
     return all_nodes
 
@@ -98,6 +102,7 @@ def _process_chapter(
         try:
             chunks = splitter.get_nodes_from_documents([sub_doc])
             chunks = _filter_empty_nodes(chunks)
+            chunks = [c for c in chunks if not _is_low_density(c.text or c.get_content())]
             final_chunks = _refine_chunks(chunks, chunk_target_size)
             for chunk in final_chunks:
                 _attach_metadata(chunk, doc.metadata, file_hash)
@@ -108,6 +113,23 @@ def _process_chapter(
             chapter_nodes.extend(fallback)
 
     return chapter_nodes
+
+
+def _is_low_density(text: str, threshold: float = 0.3) -> bool:
+    """检测信息密度过低的碎片块（页眉页脚、版权声明等）"""
+    if not text or len(text.strip()) < 20:
+        return True
+    chinese_chars = len(re.findall(r'[一-龥]', text))
+    total_chars = len(text.strip())
+    if total_chars == 0:
+        return True
+    chinese_ratio = chinese_chars / total_chars
+    if chinese_chars > 10:
+        unique_chars = len(set(re.findall(r'[一-龥]', text)))
+        uniqueness = unique_chars / chinese_chars
+        if uniqueness > 0.85:
+            return True
+    return chinese_ratio < threshold
 
 
 def _is_poorly_formatted(text: str) -> bool:

@@ -84,23 +84,6 @@ def mock_config_manager():
                     ],
                     "priority": "medium",
                 },
-                "age_adaptation_optimization": {
-                    "trigger": {
-                        "metric": "age_related_bad_case_ratio",
-                        "operator": ">",
-                        "threshold": 0.3,
-                    },
-                    "suggestions": [
-                        {
-                            "param": "rag_age_filter_strictness",
-                            "action": "decrease",
-                            "suggested_value": 0.5,
-                            "safe_range": [0.3, 0.8],
-                            "expected_effect": "降低年龄过滤严格度",
-                        }
-                    ],
-                    "priority": "medium",
-                },
                 "complex_query_optimization": {
                     "trigger": {
                         "metric": "complex_query_failure_rate",

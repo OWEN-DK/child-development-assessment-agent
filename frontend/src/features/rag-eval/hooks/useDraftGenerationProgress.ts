@@ -1,7 +1,10 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createSSEConnection } from '../utils/sse';
 import type { DraftGenerationTask } from '../../../components/progress/configs/draftGeneration';
+
+/** localStorage 存储键 */
+const STORAGE_KEY = 'draft-generation-active-tasks';
 
 /** SSE 各阶段对应进度百分比（流水线化后的新阶段分布） */
 const STAGE_PROGRESS: Record<string, number> = {
@@ -13,18 +16,38 @@ const STAGE_PROGRESS: Record<string, number> = {
   deduplication_completed: 90,
 };
 
+/** 从 localStorage 读取活跃的 batch_id 列表 */
+function loadActiveTaskIds(): Array<{ taskId: string; documentName?: string }> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 持久化活跃的 batch_id 列表到 localStorage */
+function saveActiveTaskIds(entries: Array<{ taskId: string; documentName?: string }>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
 /**
  * 基于 SSE 的草稿生成进度管理
  *
  * 后端生成与忠诚度检查已流水线化，pipeline_running 阶段同时覆盖
  * 生成和校验进度，通过 metadata.pct 提供动态百分比。
+ *
+ * 支持页面刷新后恢复：通过 localStorage 持久化活跃的 batch_id，
+ * 挂载时自动重新建立 SSE 连接。
  */
 export function useDraftGenerationProgress() {
   const [tasks, setTasks] = useState<DraftGenerationTask[]>([]);
   const abortControllers = useRef<Map<string, AbortController>>(new Map());
   const qc = useQueryClient();
+  const initialized = useRef(false);
 
-  const startTracking = useCallback((taskId: string, documentName?: string) => {
+  /** 建立 SSE 连接并跟踪指定 taskId 的进度 */
+  const trackTask = useCallback((taskId: string, documentName?: string) => {
     const now = Date.now();
     const task: DraftGenerationTask = {
       taskId,
@@ -35,7 +58,11 @@ export function useDraftGenerationProgress() {
       documentName,
     };
 
-    setTasks(prev => [...prev, task]);
+    setTasks(prev => {
+      // 避免重复跟踪
+      if (prev.some(t => t.taskId === taskId)) return prev;
+      return [...prev, task];
+    });
 
     const abortController = new AbortController();
     abortControllers.current.set(taskId, abortController);
@@ -61,7 +88,6 @@ export function useDraftGenerationProgress() {
                 let progress: number;
 
                 if (stage === 'pipeline_running' && typeof evt.metadata?.pct === 'number') {
-                  // 流水线阶段使用后端动态百分比 (20-85%)
                   progress = evt.metadata.pct;
                 } else {
                   progress = stage ? (STAGE_PROGRESS[stage] ?? t.progress) : t.progress;
@@ -72,6 +98,9 @@ export function useDraftGenerationProgress() {
 
               if (evt.type === 'complete') {
                 const result = evt.result as { saved_count?: number; skipped?: number } | undefined;
+                // 完成后从 localStorage 移除
+                const active = loadActiveTaskIds().filter(e => e.taskId !== taskId);
+                saveActiveTaskIds(active);
                 setTimeout(() => {
                   setTasks(prev => prev.filter(tt => tt.taskId !== taskId));
                   qc.invalidateQueries({ queryKey: ['rag-eval', 'drafts'] });
@@ -87,6 +116,9 @@ export function useDraftGenerationProgress() {
               }
 
               if (evt.type === 'error') {
+                // 失败也从 localStorage 移除
+                const active = loadActiveTaskIds().filter(e => e.taskId !== taskId);
+                saveActiveTaskIds(active);
                 return {
                   ...t,
                   status: 'failed' as const,
@@ -105,16 +137,52 @@ export function useDraftGenerationProgress() {
           setTasks(prev => prev.map(t =>
             t.taskId === taskId ? { ...t, status: 'failed', error: 'SSE 连接异常' } : t,
           ));
+          // 连接异常也移除，避免无限重连
+          const active = loadActiveTaskIds().filter(e => e.taskId !== taskId);
+          saveActiveTaskIds(active);
         },
       },
     );
   }, [qc]);
+
+  /** 用户触发生成后调用，开始跟踪并持久化 */
+  const startTracking = useCallback((taskId: string, documentName?: string) => {
+    // 持久化到 localStorage
+    const active = loadActiveTaskIds();
+    if (!active.some(e => e.taskId === taskId)) {
+      active.push({ taskId, documentName });
+      saveActiveTaskIds(active);
+    }
+    trackTask(taskId, documentName);
+  }, [trackTask]);
 
   const removeTask = useCallback((taskId: string) => {
     const ac = abortControllers.current.get(taskId);
     ac?.abort();
     abortControllers.current.delete(taskId);
     setTasks(prev => prev.filter(t => t.taskId !== taskId));
+    // 同步清理 localStorage
+    const active = loadActiveTaskIds().filter(e => e.taskId !== taskId);
+    saveActiveTaskIds(active);
+  }, []);
+
+  // 挂载时从 localStorage 恢复未完成的任务
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    const active = loadActiveTaskIds();
+    for (const entry of active) {
+      trackTask(entry.taskId, entry.documentName);
+    }
+  }, [trackTask]);
+
+  // 卸载时清理所有 SSE 连接
+  useEffect(() => {
+    return () => {
+      abortControllers.current.forEach(ac => ac.abort());
+      abortControllers.current.clear();
+    };
   }, []);
 
   return { tasks, startTracking, removeTask };

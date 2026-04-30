@@ -1,4 +1,4 @@
-"""DraftGenerator - 从文档分块生成 QA 草稿"""
+"""DraftGenerator - 从文档分块生成忠实于原文的 QA 草稿"""
 
 import asyncio
 import json
@@ -6,49 +6,43 @@ from typing import Awaitable, Callable, Optional
 
 from json_repair import repair_json as _repair
 
-from src.schemas.rag_eval.draft import BookMetadata, DraftCreate, DraftGenerationConfig
+from src.schemas.rag_eval.draft import DraftCreate, DraftGenerationConfig
 from src.schemas.llm import LLMMessage, LLMRequest
 from src.config.core.manager import ConfigManager
 from src.core.llm.factory import LLMServiceFactoryCompat
-from src.models.rag_eval.enums import DifficultyLevel, TestDomain
-from src.utils.age_stage import calculate_age_stage_label
+from src.models.rag_eval.enums import DifficultyLevel
 from src.utils.embedding_helper import EmbeddingHelper
 from src.utils.logger import logger
-
-
-_DOMAIN_LABELS = {
-    "gross_motor": "大运动", "fine_motor": "精细动作", "language": "语言",
-    "cognitive": "认知", "social_emotional": "社交情绪", "sensory_integration": "感觉统合",
-}
+from src.core.prompt_impl.facade import prompt_manager as _default_prompt_manager
 
 
 class DraftGenerator:
-    """从文档分块生成 QA 草稿——每分块一次 LLM 调用，覆盖所有年龄段和领域组合"""
+    """从文档分块生成 QA 草稿——每分块一次 LLM 调用，生成忠实于原文的问答对"""
 
     def __init__(
         self,
         config_cache: Optional[ConfigManager] = None,
         embedding_helper: Optional[EmbeddingHelper] = None,
+        prompt_manager=_default_prompt_manager,
     ):
         self._config = config_cache or ConfigManager()
         self._embedding = embedding_helper
+        self._prompt_manager = prompt_manager
 
     async def generate(
-        self, chunks: list[dict], metadata: BookMetadata, config: DraftGenerationConfig,
+        self, chunks: list[dict], config: DraftGenerationConfig,
         progress_callback: Optional[Callable[[int, int], Awaitable[None]]] = None,
         draft_batch_callback: Optional[Callable[[list[DraftCreate]], Awaitable[None]]] = None,
     ) -> list[DraftCreate]:
-        """从分块生成草稿，每个分块一次 LLM 调用覆盖所有 (age_range, domain) 组合"""
+        """从分块生成草稿，每个分块独立生成 N 个 QA 对"""
 
-        age_ranges = config.custom_age_ranges or metadata.age_ranges or [(0, 6)]
-        domains = config.custom_domains or metadata.domains or ["gross_motor"]
         concurrency = self._config.get_config_value("rag.eval.draft.concurrency", 15)
         sem = asyncio.Semaphore(concurrency)
 
         async def _wrapper(chunk):
             async with sem:
                 try:
-                    return await self._generate_for_chunk_all_combos(chunk, age_ranges, domains, config)
+                    return await self._generate_for_chunk(chunk, config)
                 except Exception as e:
                     logger.error(f"生成失败 chunk={chunk.get('id')}: {e}")
                     return []
@@ -72,11 +66,34 @@ class DraftGenerator:
         logger.info(f"草稿生成: {len(drafts)} 个 (来自 {total} 个分块)")
         return drafts
 
-    async def _generate_for_chunk_all_combos(
-        self, chunk: dict, age_ranges: list[tuple[float, float]],
-        domains: list[str], config: DraftGenerationConfig,
+    def _build_prompt(self, max_qa: int, content: str) -> str:
+        """构建 fallback prompt（PromptManager 不可用时使用）"""
+        return (
+            f"你是一名 RAG 系统测试用例设计师。以下是一段文档原文。\n"
+            f"请从中提取 {max_qa} 个可直接回答的测试问题。\n\n"
+            f"## 生成约束（强制）\n"
+            f"1. **忠实性铁律**：query 必须能从原文直接找到答案\n"
+            f"2. **禁止编造**：不允许引入原文未提及的概念、数据或术语\n"
+            f"3. **答案来源**：answer_points 中每条必须是原文关键短语或其直接改写\n"
+            f"4. **关键词来源**：expected_keywords 中每个词必须出现在原文中\n"
+            f"5. **语言一致**：输出语言与原文保持一致\n\n"
+            f"## 如果原文内容不足以生成问题\n"
+            f"如果原文过短或无实质内容，返回空数组 []。不要强行编造。\n\n"
+            f"## 文档原文\n{content}\n\n"
+            f"## 返回格式\n"
+            f"返回 JSON 数组，每个元素：\n"
+            f'[{{"query": "基于原文可回答的问题", '
+            f'"description": "测试意图描述", '
+            f'"expected_keywords": ["原文中的关键词"], '
+            f'"answer_points": ["从原文提取的答案要点"], '
+            f'"difficulty_level": "easy|medium|hard"}}]\n\n'
+            f"仅返回 JSON，不要包含任何解释性文字。"
+        )
+
+    async def _generate_for_chunk(
+        self, chunk: dict, config: DraftGenerationConfig,
     ) -> list[DraftCreate]:
-        """单次 LLM 调用为一个分块生成所有 (年龄段 × 领域) 组合的 QA 问题"""
+        """单次 LLM 调用为一个分块生成 QA 对，忠实于原文"""
         content = chunk.get("content", "")
         chunk_id = chunk.get("id", "")
 
@@ -91,45 +108,24 @@ class DraftGenerator:
         if not content.strip():
             return []
 
-        age_descs = []
-        for ar in age_ranges:
-            mid = (ar[0] + ar[1]) / 2
-            label = calculate_age_stage_label(mid)
-            age_descs.append(f"{mid}岁({label})")
-
-        domain_labels = [_DOMAIN_LABELS.get(d, d) for d in domains]
-
-        combos_desc = "\n".join(
-            f"  - {ad} × {dl} (domain={d})"
-            for ad, (_, _, d) in zip(age_descs, [(None, None, d) for d in domains])
-            for ad in age_descs
-        ) if len(age_descs) == 1 and len(domain_labels) == 1 else ""
-
-        # Build combo list for the prompt
-        combo_lines = []
-        for ar in age_ranges:
-            mid = (ar[0] + ar[1]) / 2
-            label = calculate_age_stage_label(mid)
-            for d in domains:
-                dl = _DOMAIN_LABELS.get(d, d)
-                combo_lines.append(f"  age={mid}, domain=\"{d}\" ({dl})")
-        combos_str = "\n".join(combo_lines)
-
-        # Per-combo question count
-        q_per_combo = max(1, config.max_qa_per_chunk // max(1, len(age_ranges) * len(domains)))
-        q_per_combo = max(1, min(q_per_combo, 2))
-
-        prompt = (
-            f"你是一名儿童发展评估专家。以下文档内容适用于多个年龄段和发展领域。\n"
-            f"对每个 (年龄段, 领域) 组合生成 {q_per_combo} 个评估问题。\n"
-            f"组合列表:\n{combos_str}\n\n"
-            f"文档内容: {content[:2500]}\n\n"
-            f"返回 JSON 数组，每个元素包含 age, domain, query, description, "
-            f"expected_keywords, answer_points, difficulty_level:\n"
-            f"[{{\"age\": 1.5, \"domain\": \"gross_motor\", \"query\": \"...\", "
-            f"\"description\": \"...\", \"expected_keywords\": [\"...\"], "
-            f"\"answer_points\": [\"...\"], \"difficulty_level\": \"easy\"}}]"
+        max_qa = config.max_qa_per_chunk
+        max_content_length = self._config.get_config_value(
+            "rag.eval.draft.max_chunk_content_length", 2500,
         )
+
+        # 优先使用 PromptManager，不可用时退回 fallback
+        prompt = None
+        if self._prompt_manager:
+            try:
+                prompt = await self._prompt_manager.get_prompt(
+                    "draft_generation_rag",
+                    variables={"max_qa": max_qa, "chunk_content": content[:max_content_length]},
+                )
+            except Exception as e:
+                logger.warning(f"PromptManager 加载失败，使用 fallback: {e}")
+
+        if not prompt:
+            prompt = self._build_prompt(max_qa, content[:max_content_length])
 
         try:
             model = self._config.get_config_value("rag.eval.draft.llm_model", "") or "qwen-plus"
@@ -153,30 +149,22 @@ class DraftGenerator:
             if not isinstance(items, list):
                 items = [items]
 
-            return self._build_drafts(items[:config.max_qa_per_chunk * len(age_ranges) * len(domains)],
-                                      age_ranges, domains, chunk_id, page, content)
+            return self._build_drafts(items[:max_qa], chunk_id, page, content)
         except Exception as e:
             logger.error(f"LLM 生成失败 chunk={chunk_id}: {e}")
             return []
 
     def _build_drafts(
-        self, items: list[dict], age_ranges: list[tuple[float, float]],
-        domains: list[str], chunk_id: str, page: Optional[int], content: str,
+        self, items: list[dict], chunk_id: str, page: Optional[int], content: str,
     ) -> list[DraftCreate]:
-        """将 LLM 输出解析为 DraftCreate 列表，自动匹配年龄标签"""
+        """将 LLM 输出解析为 DraftCreate 列表"""
         drafts = []
         for item in items:
             q = item.get("query", "")
             if not q:
                 continue
-
-            age = float(item.get("age", 0))
-            domain_str = item.get("domain", "")
-
-            if domain_str not in domains:
+            if item.get("skip"):
                 continue
-
-            age_label = calculate_age_stage_label(age)
 
             kw = item.get("expected_keywords", [])
             if isinstance(kw, str):
@@ -189,17 +177,13 @@ class DraftGenerator:
                 diff = DifficultyLevel(item.get("difficulty_level", "easy"))
             except ValueError:
                 diff = DifficultyLevel.EASY
-            try:
-                dom = TestDomain(domain_str)
-            except ValueError:
-                dom = TestDomain.GROSS_MOTOR
 
             drafts.append(DraftCreate(
-                query=q, age=age, age_stage_label=age_label, domain=dom,
+                query=q,
                 description=item.get("description"),
                 expected_keywords=kw, answer_points=ap,
                 difficulty_level=diff, source_chunk_id=chunk_id,
                 source_page=page, source_content_snippet=content[:500],
-                generation_params={"chunk_id": chunk_id, "domain": domain_str},
+                generation_params={"chunk_id": chunk_id},
             ))
         return drafts

@@ -14,7 +14,6 @@ class PipelineContext:
     """流水线上下文"""
 
     query: str
-    age: float
     limit: int = 5
     results: list[Any] = None
     metadata: dict[str, Any] = None
@@ -54,6 +53,10 @@ class PipelineOrchestrator:
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.step_pipelines = self._initialize_pipelines()
+
+        from src.core.query_router import QueryRouter
+        self._query_router = QueryRouter()
+
         if not PipelineOrchestrator._ever_initialized:
             PipelineOrchestrator._ever_initialized = True
             logger.info(f"RAG 流水线已初始化：{self.config['pipeline']['name']}")
@@ -73,7 +76,6 @@ class PipelineOrchestrator:
             "cache_check": "CacheCheckStep",
             "query_rewrite": "QueryRewriteStep",
             "synonym_expansion": "SynonymExpansionStep",
-            "age_filter": "AgeFilterStep",
             "hybrid_retrieval": "HybridRetrievalStep",
             "reranking": "RerankingStep",
             "deduplication": "DeduplicationStep",
@@ -110,7 +112,7 @@ class PipelineOrchestrator:
         PipelineOrchestrator._pipelines_ever_loaded = True
         return pipelines
 
-    async def execute(self, query: str, age: float, limit: int = 5) -> list[Any]:
+    async def execute(self, query: str, limit: int = 5) -> list[Any]:
         """执行流水线（根据查询复杂度自动路由）"""
         # 1. 查询路由（决定使用 simple 还是 complex 流水线）
         query_type = await self._classify_query(query)
@@ -121,7 +123,7 @@ class PipelineOrchestrator:
         )
 
         # 3. 执行流水线
-        context = PipelineContext(query=query, age=age, limit=limit)
+        context = PipelineContext(query=query, limit=limit)
         context.metadata["query_type"] = query_type
 
         logger.info(f"开始执行 RAG 流水线 [{query_type}]：{query[:50]}...")
@@ -169,27 +171,11 @@ class PipelineOrchestrator:
             logger.warning(f"流水线执行错误：{', '.join(context.errors)}")
 
     async def _classify_query(self, query: str) -> str:
-        """基于规则简单/复杂查询分类"""
-        complex_keywords = [
-            "区别",
-            "对比",
-            "差异",
-            "比较",
-            "如何",
-            "为什么",
-            "原因",
-            "分析",
-            "评估",
-        ]
+        """使用统一 QueryRouter 进行分类"""
+        from src.core.query_router import QueryRouter
 
-        for keyword in complex_keywords:
-            if keyword in query:
-                return "complex"
-
-        if len(query) > 20:
-            return "complex"
-
-        return "simple"
+        classification = self._query_router.classify(query)
+        return classification.query_type.value
 
     def reload_config(self):
         """重新加载配置（热重载）"""

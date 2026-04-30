@@ -87,13 +87,11 @@ class RagRetrievalSettings(BaseSettings):
     )
     rag_weight_by_query_type: Dict[str, Dict[str, float]] = Field(
         default_factory=lambda: {
-            "short": {"bm25": 0.3, "vector": 0.7},
-            "terminology": {"bm25": 0.7, "vector": 0.3},
-            "descriptive": {"bm25": 0.4, "vector": 0.6},
+            "simple": {"bm25": 0.4, "vector": 0.6},
             "complex": {"bm25": 0.5, "vector": 0.5},
             "default": {"bm25": 0.5, "vector": 0.5},
         },
-        description="按查询类型的权重配置",
+        description="按统一查询类型 (simple/complex/default) 的权重配置",
     )
 
     # 搜索页面专用
@@ -113,14 +111,14 @@ class RagRetrievalSettings(BaseSettings):
         description="无关键词匹配惩罚（越低越严格，设为 1.0 表示不惩罚）",
     )
     rag_search_score_threshold_hybrid: float = Field(
-        default=0.25,
+        default=0.003,
         validation_alias="RAG_SEARCH_SCORE_THRESHOLD_HYBRID",
-        description="搜索页面混合阈值（低于此分数的结果将被过滤）",
+        description="搜索页面混合阈值（RRF 分数，低于此分数的结果将被过滤）",
     )
     rag_search_score_threshold_vector: float = Field(
-        default=0.25,
+        default=0.003,
         validation_alias="RAG_SEARCH_SCORE_THRESHOLD_VECTOR",
-        description="搜索页面向量阈值",
+        description="搜索页面向量阈值（RRF 分数）",
     )
     rag_search_relative_cutoff_ratio: float = Field(
         default=0.5,
@@ -128,9 +126,9 @@ class RagRetrievalSettings(BaseSettings):
         description="搜索页面截断比例",
     )
     rag_search_min_similarity_threshold: float = Field(
-        default=0.2,
+        default=0.003,
         validation_alias="RAG_SEARCH_MIN_SIMILARITY_THRESHOLD",
-        description="搜索页面最小相似度",
+        description="搜索页面最小相似度（RRF 分数）",
     )
 
     # 重排序相关
@@ -175,36 +173,6 @@ class RagRetrievalSettings(BaseSettings):
         default=2,
         validation_alias="QUERY_ROUTER_LLM_MAX_RETRIES",
         description="路由 LLM 最大重试次数",
-    )
-
-    # 年龄过滤相关
-    rag_age_filter_mode: str = Field(
-        default="strict",
-        validation_alias="RAG_AGE_FILTER_MODE",
-        description="年龄过滤模式：strict（严格）| loose（宽松）",
-    )
-    rag_age_filter_tolerance_strict: int = Field(
-        default=1,
-        validation_alias="RAG_AGE_FILTER_TOLERANCE_STRICT",
-        description="严格模式 tolerance（岁）",
-    )
-    rag_age_filter_tolerance_loose: int = Field(
-        default=2,
-        validation_alias="RAG_AGE_FILTER_TOLERANCE_LOOSE",
-        description="宽松模式 tolerance（岁）",
-    )
-    rag_age_filter_strictness: float = Field(
-        default=0.7,
-        validation_alias="RAG_AGE_FILTER_STRICTNESS",
-        description="年龄过滤严格程度（向后兼容）",
-    )
-    rag_age_filter_tolerance: int = Field(
-        default=2,
-        validation_alias="RAG_AGE_FILTER_TOLERANCE",
-        description="年龄容忍范围（岁）（向后兼容）",
-    )
-    rag_age_fit_weight: float = Field(
-        default=0.3, validation_alias="RAG_AGE_FIT_WEIGHT", description="年龄适配度权重"
     )
 
     # 融合配置

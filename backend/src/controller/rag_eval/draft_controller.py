@@ -66,9 +66,8 @@ class DraftController:
         page: int = Query(1, ge=1),
         page_size: int = Query(20, ge=1, le=100),
         status: Optional[str] = Query(None),
-        domain: Optional[str] = Query(None),
     ):
-        result = await self._draft.get_drafts(page, page_size, status, domain)
+        result = await self._draft.get_drafts(page, page_size, status)
         return APIResponse.success(result.model_dump(mode="json"))
 
     async def get_draft(self, draft_id: str = Path(...)):

@@ -1,11 +1,11 @@
 """
 结果融合器 - 合并混合检索和 PageIndex 的结果
 """
-import hashlib
 import re
 from typing import Any, Dict, List
 
 from src.config import settings
+from src.utils.hash_utils import content_hash as _content_hash
 
 
 class ResultFusion:
@@ -27,30 +27,29 @@ class ResultFusion:
         self,
         hybrid_results: List[Dict[str, Any]],
         pageindex_results: List[Dict[str, Any]],
-        query_type: str
+        query_type: str,
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """
         融合两种检索结果
-        
+
         Args:
             hybrid_results: 混合检索结果
             pageindex_results: PageIndex 结果
             query_type: 查询类型 (simple/complex/default)
-            
+            limit: 最大返回结果数
+
         Returns:
             List[Dict]: 融合后的结果
         """
         if query_type == "simple":
-            # 简单查询：仅使用混合检索
-            return hybrid_results
-        
+            return hybrid_results[:limit]
+
         elif query_type == "complex":
-            # 复杂查询：融合两种结果
-            return self._fuse_complex(hybrid_results, pageindex_results)
-        
+            return self._fuse_complex(hybrid_results, pageindex_results)[:limit]
+
         else:  # default
-            # 默认查询：混合检索为主，PageIndex 补充
-            return self._fuse_default(hybrid_results, pageindex_results)
+            return self._fuse_default(hybrid_results, pageindex_results)[:limit]
     
     def _fuse_complex(
         self, 
@@ -149,5 +148,5 @@ class ResultFusion:
         return text
     
     def _content_hash(self, content: str) -> str:
-        """计算内容哈希"""
-        return hashlib.sha256(content.encode()).hexdigest()[:16]
+        """计算内容哈希 — 使用统一工具函数"""
+        return _content_hash(content)[:16]  # 截断 16 字符用于去重键

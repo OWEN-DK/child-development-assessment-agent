@@ -2,6 +2,7 @@
 
 包含查询分类相关的 Pydantic 模型：
 - QueryClassification: 查询分类结果
+- QueryType: 统一查询类型枚举（全项目唯一）
 """
 
 from enum import Enum
@@ -10,11 +11,11 @@ from pydantic import BaseModel, Field
 
 
 class QueryType(str, Enum):
-    """查询类型"""
+    """统一查询类型枚举 — 全项目唯一定义"""
 
-    DIRECT = "direct"
-    COMPARISON = "comparison"
-    EXPLORATION = "exploration"
+    SIMPLE = "simple"
+    COMPLEX = "complex"
+    DEFAULT = "default"
 
 
 class QueryClassification(BaseModel):

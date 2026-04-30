@@ -51,8 +51,8 @@ class ReportExporter:
         for c in report.bad_cases:
             writer.writerow([
                 c.query,
-                c.domain,
-                c.age,
+                c.domain or "",
+                c.age if c.age is not None else "",
                 f"{c.precision:.4f}" if c.precision is not None else "",
                 f"{c.recall:.4f}" if c.recall is not None else "",
                 c.error_message or "",

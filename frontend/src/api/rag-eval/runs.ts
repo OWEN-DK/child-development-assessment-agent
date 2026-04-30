@@ -34,6 +34,12 @@ export async function getRun(id: string): Promise<TestRun> {
   return res.data;
 }
 
+/** 执行运行（启动后台任务） */
+export async function executeRun(id: string): Promise<{ task_id: string }> {
+  const res = await apiClient.post<{ task_id: string }>(`/api/v1/rag/eval/runs/${id}/execute`);
+  return res.data;
+}
+
 /** 删除运行 */
 export async function deleteRun(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/rag/eval/runs/${id}`);

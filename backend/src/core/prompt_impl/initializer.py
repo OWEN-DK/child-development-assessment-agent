@@ -8,6 +8,7 @@ from src.core.prompt_impl.facade import prompt_manager
 from src.core.prompts_fallback import (
     ASSESSMENT_SYSTEM_PROMPT,
     CATEGORY_INFERENCE_PROMPT,
+    DRAFT_GENERATION_RAG_PROMPT,
     INTENSITY_INFERENCE_PROMPT,
     METADATA_EXTRACTION_PROMPT,
     QUERY_REWRITE_PROMPT,
@@ -76,6 +77,15 @@ DEFAULT_PROMPTS = [
         "category": "test_case_generation",
         "variables": ["chunk_id", "chunk_content", "chunk_page", "chunk_topics", "domain", "age_stage_label", "age_min_months", "age_max_months"],
         "tags": ["rag_eval", "test_case", "chunk"],
+    },
+    {
+        "key": "draft_generation_rag",
+        "content": DRAFT_GENERATION_RAG_PROMPT,
+        "name_zh": "RAG 草稿生成",
+        "purpose": "从文档分块中生成忠实于原文的 RAG 测试 QA 对",
+        "category": "test_case_generation",
+        "variables": ["max_qa", "chunk_content"],
+        "tags": ["rag_eval", "draft", "chunk_grounded"],
     },
     {
         "key": "validation",

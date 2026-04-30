@@ -52,7 +52,6 @@ async def debug_search():
             print(f"  - 最终分数：{result.relevance_score:.4f}")
             print(f"  - 内容：{result.content[:80]}...")
             print(f"  - 来源：{result.source_book}")
-            print(f"  - 适用年龄：{result.target_age_min}-{result.target_age_max}岁")
             print()
         
         print("=" * 80)

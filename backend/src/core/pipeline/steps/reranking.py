@@ -23,14 +23,14 @@ class RerankingStep(PipelineStep):
 
         # 执行重排序
         try:
-            ranked_results = await self._reranker.rerank(
-                query=context.query, candidates=candidates, top_k=self._final_k
+            ranked_results = self._reranker.rerank(
+                query=context.query, nodes=candidates
             )
 
-            context.results = ranked_results
-            context.metadata["reranked_count"] = len(ranked_results)
+            context.results = ranked_results[: self._final_k]
+            context.metadata["reranked_count"] = len(context.results)
             logger.info(
-                f"重排序完成：原始={len(candidates)}, 重排序后={len(ranked_results)}"
+                f"重排序完成：原始={len(candidates)}, 重排序后={len(context.results)}"
             )
 
         except Exception as e:

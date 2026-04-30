@@ -14,17 +14,17 @@ class TestCase(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     query: Mapped[str] = mapped_column(Text, nullable=False, comment="测试问题")
-    age: Mapped[float] = mapped_column(
-        DECIMAL(4, 1), nullable=False, comment="年龄（岁）"
+    age: Mapped[float | None] = mapped_column(
+        DECIMAL(4, 1), nullable=True, comment="年龄（岁），从草稿提升时可留空"
     )
     age_stage_label: Mapped[str] = mapped_column(
         String(20), nullable=False, default="", comment="年龄段标签"
     )
-    domain: Mapped[TestDomain] = mapped_column(
+    domain: Mapped[TestDomain | None] = mapped_column(
         Enum(TestDomain, values_callable=lambda obj: [e.value for e in obj]),
-        nullable=False,
+        nullable=True,
         index=True,
-        comment="测试领域",
+        comment="测试领域，从草稿提升时可留空",
     )
     description: Mapped[str | None] = mapped_column(Text, comment="期望答案描述")
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(

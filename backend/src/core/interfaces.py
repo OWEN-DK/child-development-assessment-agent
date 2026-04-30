@@ -61,7 +61,7 @@ class IRetrievalService(ABC):
     """检索服务接口"""
     
     @abstractmethod
-    async def retrieve_knowledge(self, query: str, age: int, limit: int = 3, load_level: str = "l1") -> List[Any]:
+    async def retrieve_knowledge(self, query: str, limit: int = 3, user_id: str = None) -> List[Any]:
         pass
     
     @abstractmethod

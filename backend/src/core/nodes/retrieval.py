@@ -17,8 +17,6 @@ class RetrievalNode(BaseNode):
             "rag_query_template",
             variables={"issues": state.child_profile.issues, "goals": state.proposed_plan.goals},
         )
-        age = state.child_profile.age
-
-        docs = await rag_service.retrieve_knowledge(query, age, limit=5)
+        docs = await rag_service.retrieve_knowledge(query, limit=5)
 
         return {"retrieved_docs": docs}

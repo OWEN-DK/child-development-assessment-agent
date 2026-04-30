@@ -225,10 +225,11 @@ class PromptStorage:
     def _get_fallback_prompt(self, prompt_key: str) -> str:
         from src.core.prompts_fallback import (
             ASSESSMENT_SYSTEM_PROMPT, CATEGORY_INFERENCE_PROMPT,
-            INTENSITY_INFERENCE_PROMPT, METADATA_EXTRACTION_PROMPT,
-            QUERY_REWRITE_PROMPT, RAG_QUERY_TEMPLATE, REPORTING_SYSTEM_PROMPT,
-            SCORING_SYSTEM_PROMPT, SYNONYM_EXPANSION_PROMPT,
-            TEST_CASE_DRAFT_GENERATION_PROMPT, TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT, VALIDATION_SYSTEM_PROMPT)
+            DRAFT_GENERATION_RAG_PROMPT, INTENSITY_INFERENCE_PROMPT,
+            METADATA_EXTRACTION_PROMPT, QUERY_REWRITE_PROMPT, RAG_QUERY_TEMPLATE,
+            REPORTING_SYSTEM_PROMPT, SCORING_SYSTEM_PROMPT, SYNONYM_EXPANSION_PROMPT,
+            TEST_CASE_DRAFT_GENERATION_PROMPT, TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT,
+            VALIDATION_SYSTEM_PROMPT)
         fallbacks = {
             "rag_query_rewrite": QUERY_REWRITE_PROMPT, "synonym_expansion": SYNONYM_EXPANSION_PROMPT,
             "rag_query_template": RAG_QUERY_TEMPLATE,
@@ -238,6 +239,6 @@ class PromptStorage:
             "category_inference": CATEGORY_INFERENCE_PROMPT, "child_assessment": ASSESSMENT_SYSTEM_PROMPT,
             "assessment_system": ASSESSMENT_SYSTEM_PROMPT, "scoring": SCORING_SYSTEM_PROMPT,
             "scoring_system": SCORING_SYSTEM_PROMPT, "report_generation": REPORTING_SYSTEM_PROMPT,
-            "reporting_system": REPORTING_SYSTEM_PROMPT,
+            "reporting_system": REPORTING_SYSTEM_PROMPT, "draft_generation_rag": DRAFT_GENERATION_RAG_PROMPT,
         }
         return fallbacks.get(prompt_key, "You are a helpful assistant.")

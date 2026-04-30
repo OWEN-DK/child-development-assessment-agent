@@ -4,8 +4,9 @@
 """
 
 import asyncio
-from src.schemas.rag_eval.metrics import RunMetrics, MetricScore
+from src.schemas.rag_eval.metrics import MetricInput, RunMetrics, MetricScore
 from src.schemas.rag_eval.diagnosis import DiagnosisResult, LayerResult
+from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.scoring.facade import ScoringFacade
 from src.service.rag_eval.metrics.diagnosis.orchestrator import (
     DiagnosisOrchestrator,
@@ -32,18 +33,19 @@ class MetricEngineFacade:
         """计算三层标准化指标
 
         Args:
-            results: MetricInput 对象列表，每个代表一个测试用例的完整数据
+            results: MetricInput 或 TestRunResultItem 对象列表
 
         Returns:
             RunMetrics: 包含 L1/L2/L3 三层指标和加权综合得分的完整指标
         """
-        return await self._scoring.calculate_all(results)
+        metric_inputs = self._to_metric_inputs(results)
+        return await self._scoring.calculate_all(metric_inputs)
 
     async def diagnose_all(
         self,
         run_id: str,
         results: list,
-        run_data: dict = None,
+        run_data: TestRunRead = None,
     ) -> DiagnosisResult:
         """执行六层诊断
 
@@ -58,15 +60,13 @@ class MetricEngineFacade:
         Returns:
             DiagnosisResult: 六层诊断完整结果
         """
-        if run_data is None:
-            run_data = {}
         return await self._diagnosis.run_all(run_id, results, run_data)
 
     async def calculate_and_diagnose(
         self,
         run_id: str,
         results: list,
-        run_data: dict = None,
+        run_data: TestRunRead = None,
     ) -> tuple[RunMetrics, DiagnosisResult]:
         """并行执行双轨评估
 
@@ -80,8 +80,6 @@ class MetricEngineFacade:
         Returns:
             (RunMetrics, DiagnosisResult) 元组
         """
-        if run_data is None:
-            run_data = {}
         metrics, diagnosis = await asyncio.gather(
             self.calculate_all(results),
             self.diagnose_all(run_id, results, run_data),
@@ -97,19 +95,41 @@ class MetricEngineFacade:
 
         Args:
             layer: 层级编号 (1/2/3)
-            results: 测试用例执行结果列表
+            results: MetricInput 或 TestRunResultItem 对象列表
 
         Returns:
             指标名 → MetricScore 的映射字典
         """
-        return await self._scoring.calculate_layer(layer, results)
+        metric_inputs = self._to_metric_inputs(results)
+        return await self._scoring.calculate_layer(layer, metric_inputs)
+
+    @staticmethod
+    def _to_metric_inputs(results: list) -> list[MetricInput]:
+        """将 TestRunResultItem 列表转换为 MetricInput 列表（已是 MetricInput 则直接返回）"""
+        if not results:
+            return []
+        if isinstance(results[0], MetricInput):
+            return results
+        return [
+            MetricInput(
+                run_id=r.run_id,
+                test_case_id=r.test_case_id,
+                query=r.query,
+                retrieved_contexts=r.retrieved_doc_ids or [],
+                expected_knowledge_ids=r.expected_knowledge_ids or [],
+                actual_knowledge_ids=r.actual_knowledge_ids or [],
+                actual_answer=r.actual_answer,
+                execution_time_ms=r.execution_time_ms,
+            )
+            for r in results
+        ]
 
     async def diagnose_layer(
         self,
         layer: int,
         run_id: str,
         results: list,
-        run_data: dict = None,
+        run_data: TestRunRead = None,
     ) -> LayerResult:
         """只执行指定层的六层诊断
 
@@ -122,6 +142,4 @@ class MetricEngineFacade:
         Returns:
             LayerResult: 该层的诊断结果
         """
-        if run_data is None:
-            run_data = {}
         return await self._diagnosis.run_layer(layer, run_id, results, run_data)
