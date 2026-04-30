@@ -8,7 +8,7 @@ def test_validate_scene_valid():
     """测试有效场景配置校验通过"""
     config = {
         "provider": "dashscope",
-        "model": "qwen3.5-plus",
+        "model": "qwen-plus",
         "temperature": 0.7,
         "max_tokens": 2000,
         "top_p": 0.8,
@@ -37,7 +37,7 @@ def test_validate_scene_invalid_scene():
     """测试无效场景名校验失败"""
     config = {
         "provider": "dashscope",
-        "model": "qwen3.5-plus",
+        "model": "qwen-plus",
     }
 
     is_valid, errors = LLMConfigValidator.validate_scene("unknown_scene", config)
@@ -49,7 +49,7 @@ def test_validate_scene_temperature_out_of_range():
     """测试温度参数超出范围校验失败"""
     config = {
         "provider": "dashscope",
-        "model": "qwen3.5-plus",
+        "model": "qwen-plus",
         "temperature": 3.0,  # 超出 0-2 范围
         "max_tokens": 2000,
     }
@@ -64,7 +64,7 @@ def test_validate_all_scenes():
     full_config = {
         "llm_report_generation": {
             "provider": "dashscope",
-            "model": "qwen3.5-plus",
+            "model": "qwen-plus",
             "temperature": 0.7,
             "max_tokens": 2000,
             "top_p": 0.8,
@@ -73,7 +73,7 @@ def test_validate_all_scenes():
         },
         "llm_validation": {
             "provider": "dashscope",
-            "model": "qwen3.5-turbo",
+            "model": "qwen-turbo",
             "temperature": 0.5,
             "max_tokens": 1000,
             "top_p": 0.9,

@@ -32,6 +32,7 @@ class DraftController:
         router.add_api_route("/drafts/{draft_id}/review", self.review_draft, methods=["POST"])
         router.add_api_route("/drafts/batch-import", self.batch_import, methods=["POST"])
         router.add_api_route("/drafts/batch", self.batch_delete, methods=["DELETE"])
+        router.add_api_route("/drafts/generate", self.start_generation, methods=["POST"])
         router.add_api_route("/drafts/generation/{task_id}/stream", self.stream_generation, methods=["GET"])
 
     async def list_source_docs(
@@ -95,6 +96,16 @@ class DraftController:
             raise AppException(400, 13016, "draft_ids 不能为空", "INVALID_TEST_CASE_FORMAT")
         await self._draft.batch_delete(draft_ids)
         return APIResponse.success(None)
+
+    async def start_generation(self, body: dict = Body(...)):
+        """启动草稿批量生成"""
+        document_id = body.get("document_id")
+        config = body.get("config", {})
+        if not document_id:
+            raise AppException(400, 13016, "document_id 不能为空", "INVALID_PARAMETER")
+        from src.schemas.rag_eval.draft import DraftGenerationConfig
+        task_id = await self._draft.start_generation(document_id, DraftGenerationConfig(**config))
+        return APIResponse.success({"batch_id": task_id})
 
     async def stream_generation(self, task_id: str = Path(...)):
         """SSE 草稿生成进度"""

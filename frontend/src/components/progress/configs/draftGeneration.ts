@@ -1,50 +1,41 @@
 import type { ProgressListConfig, BaseProgressTask } from '../types';
 
-// 草稿生成任务类型
+/** 草稿生成任务类型 */
 export interface DraftGenerationTask extends BaseProgressTask {
-  // 扩展字段
-  domain: string;
-  ageStage: string;
+  documentName?: string;
   generated?: number;
-  deduplicated?: number;
-  totalCombinations?: number;
-  currentCombination?: number;
+  skipped?: number;
 }
 
-// 草稿生成配置
+const STAGE_LABELS: Record<string, string> = {
+  generation_started: '初始化生成任务',
+  metadata_analyzed: '文档元数据分析完成',
+  generating: '生成草稿中',
+  drafts_generated: '草稿已生成',
+  checking: '忠实度校验中',
+  faithfulness_checked: '忠实度校验完成',
+  deduplication_completed: '去重完成',
+};
+
 export const draftGenerationConfig: ProgressListConfig<DraftGenerationTask> = {
   title: '草稿生成任务',
   emptyText: '暂无草稿生成任务',
   getItemKey: (task) => task.taskId,
-  getItemTitle: (task) => `生成草稿：${task.domain}`,
-  getItemSubtitle: (task) => `年龄段：${task.ageStage}`,
+  getItemTitle: (task) => task.documentName ? `生成草稿：${task.documentName}` : '生成草稿',
   getStageText: (task) => {
-    if (task.status === 'running') {
-      const progress = task.currentCombination && task.totalCombinations
-        ? ` (${task.currentCombination}/${task.totalCombinations})`
-        : '';
-      return `正在生成 [${task.domain}] [${task.ageStage}]${progress}`;
-    }
     if (task.status === 'completed') {
-      return `已完成，共生成 ${task.generated || 0} 个草稿`;
+      return `已完成，生成 ${task.generated ?? 0} 个，跳过 ${task.skipped ?? 0} 个`;
     }
-    if (task.status === 'cancelled') {
-      return '已取消';
+    if (task.status === 'failed') {
+      return task.error ?? '生成失败';
     }
-    return task.message;
+    return task.message || '处理中...';
   },
   showProgress: true,
   showStage: true,
-  onCancel: (task) => {
-    fetch(`/api/v1/rag/test/drafts/generate/${task.taskId}/cancel`, {
-      method: 'POST',
-    }).catch((error) => {
-      console.error('Failed to cancel draft generation:', error);
-    });
-  },
   autoRemoveOnSuccess: true,
-  autoRemoveOnCancel: true,
   successKeepSeconds: 5,
-  cancelKeepSeconds: 2,
   failedKeepSeconds: 3600,
 };
+
+export { STAGE_LABELS };

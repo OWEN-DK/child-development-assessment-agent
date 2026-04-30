@@ -31,7 +31,7 @@
 | **RAG 知识库检索** | `.ai/rag_pipeline.md` | RAG 核心模块、双流水线解析、向量库(Chroma)检索策略、API端点 |
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
-| **RAG 完整技术文档**| `docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md` | RAG 系统完整的技术细节与 API 规范 |
+| **RAG 完整技术文档**| `.ai/rag_pipeline.md` | RAG 系统完整的技术细节、双流水线架构与 API 规范 |
 | **RAG+LLM 重构计划**| `docs/superpowers/plans/rag-llm-refactoring/` | RAG 与 LLM 架构重构的详细实施方案、进度追踪与验收标准 |
 | **RAG页面重构计划**| `docs/superpowers/plans/rag-evaluation-page-refactoring/` | RAG 评估页面的6层校验诊断、工作流及 SSE 推送的详细重构计划 |
 | **统一响应与异常规范**| `.ai/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
@@ -50,13 +50,16 @@
 - **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送, Prometheus 指标收集
 - **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, Zustand 5, React Router 7, TanStack Query 5
 - **包管理**: uv (后端), npm (前端)
+- **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
 
 ## 常用开发命令
 - **后端**: `cd backend && uv sync && uv run start` 或 `uv run python src/server.py`
+- **后端测试**: `cd backend && uv run pytest`
 - **前端**: `cd frontend && npm install && npm run dev`
 - **前端测试**: `cd frontend && npm run test`
 - **前端类型检查**: `cd frontend && npm run typecheck`
 - **前端代码规范**: `cd frontend && npm run lint`
+- **Docker 部署**: `docker-compose up -d`（后端容器，端口 51002，使用 `backend/Dockerfile` 两阶段构建）
 
 ---
 
@@ -149,7 +152,7 @@
 ### 9. 前端测试与类型安全
 - **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`。
 - **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型。
-- **路由懒加载**: RAG 评估与提示词管理页面使用 `lazy()` + `Suspense` 按需加载。
+- **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载。
 
 ---
 

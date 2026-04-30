@@ -33,7 +33,7 @@ class DashScopeMultiModalAdapter(LLMService):
         """初始化适配器
         
         Args:
-            model: 模型名称（如 qwen3.5-turbo, qwen3-omni-flash, qwen-vl-max）
+            model: 模型名称（如 qwen-plus, qwen3-omni-flash, qwen-vl-max）
             api_key: DashScope API Key
             multimodal_prefixes: 多模态模型前缀列表（从配置读取，未提供时使用默认值）
             **kwargs: 其他参数（temperature, max_tokens, top_p 等）
@@ -41,12 +41,14 @@ class DashScopeMultiModalAdapter(LLMService):
         self._model = model
         self._api_key = api_key
         self._multimodal_prefixes = multimodal_prefixes or self._get_default_prefixes()
+        # Generation API 独占参数（MultiModalConversation 不支持）
+        self._generation_only_params = {'result_format', 'presence_penalty', 'frequency_penalty'}
         self._default_params = {
             k: v for k, v in kwargs.items()
-            if k in ('temperature', 'max_tokens', 'top_p', 'presence_penalty', 
+            if k in ('temperature', 'max_tokens', 'top_p', 'presence_penalty',
                      'frequency_penalty', 'result_format')
         }
-        # 默认使用 message 格式返回
+        # result_format 仅对 Generation API 有意义，默认值在调用时按需补充
         if 'result_format' not in self._default_params:
             self._default_params['result_format'] = 'message'
 
@@ -70,6 +72,10 @@ class DashScopeMultiModalAdapter(LLMService):
                 'qwen-omni-flash',
                 'qwen3-omni-flash',
                 'qwen3-omni-turbo',
+                'qwen3.5-vl',
+                'qwen3.5-omni',
+                'qwen3.6-vl',
+                'qwen3.6-omni',
             ]
 
     def _is_multimodal_model(self) -> bool:
@@ -77,31 +83,19 @@ class DashScopeMultiModalAdapter(LLMService):
         return any(self._model.startswith(prefix) for prefix in self._multimodal_prefixes)
 
     def _convert_messages(self, messages: list[LLMMessage]) -> list[dict]:
-        """转换消息格式为 DashScope MultiModalConversation 格式
-        
-        Args:
-            messages: LLMMessage 列表
-            
-        Returns:
-            DashScope 消息格式列表
+        """转换消息格式为 DashScope 格式
+
+        多模态模型要求所有角色的 content 为结构化列表（如 [{"text": "..."}]），
+        纯文本模型使用字符串 content。
         """
+        is_multimodal = self._is_multimodal_model()
         converted = []
         for msg in messages:
-            if msg.role == "system":
-                converted.append({
-                    "role": "system",
-                    "content": msg.content
-                })
-            elif msg.role == "user":
-                converted.append({
-                    "role": "user",
-                    "content": msg.content
-                })
-            elif msg.role == "assistant":
-                converted.append({
-                    "role": "assistant",
-                    "content": msg.content
-                })
+            if is_multimodal:
+                content = [{"text": msg.content}]
+            else:
+                content = msg.content
+            converted.append({"role": msg.role, "content": content})
         return converted
 
     def _call_sync(self, messages: list[dict], **kwargs) -> str:
@@ -119,13 +113,16 @@ class DashScopeMultiModalAdapter(LLMService):
         
         # 合并默认参数和调用时参数
         call_params = {**self._default_params, **kwargs}
-        
+
         if self._is_multimodal_model():
+            # 多模态 API 不接受 Generation 独占参数，过滤掉避免 url error
+            filtered = {k: v for k, v in call_params.items()
+                        if k not in self._generation_only_params}
             response = dashscope.MultiModalConversation.call(
                 model=self._model,
                 messages=messages,
                 api_key=self._api_key,
-                **call_params
+                **filtered
             )
         else:
             # 纯文本模型使用 Generation API
@@ -179,174 +176,108 @@ class DashScopeMultiModalAdapter(LLMService):
         prompt_parts.append("Assistant: ")
         return "\n".join(prompt_parts)
 
+    async def _call_with_timeout(self, ds_messages: list[dict], request: LLMRequest) -> str:
+        """带超时的同步调用包装"""
+        timeout = getattr(request, 'timeout', 30) or 30
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                self._call_sync,
+                ds_messages,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+            ),
+            timeout=timeout,
+        )
+
+    async def _record_success(self, request_id: str, request: LLMRequest,
+                              content: str, duration_ms: int, ttft: int = 0,
+                              writer=None, trace_id: str = None, span_id: str = None):
+        """统一记录成功日志（避免 TraceWriter 和 LLMLogCollector 重复写入）"""
+        input_tokens = sum(len(msg.content) for msg in request.messages) // 4
+        output_tokens = len(content) // 4
+
+        if writer and span_id:
+            truncated_messages = truncate_messages(
+                [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            )
+            truncated_completion, _ = truncate_content(content)
+            await writer.record_llm_start(
+                trace_id=trace_id, span_id=span_id,
+                parent_span_id=get_parent_span_id(),
+                prompt_messages=truncated_messages,
+                call_parameters={"model": self._model, "scenario": request.scenario, "prompt_key": request.prompt_key},
+                request_id=request_id,
+            )
+            await writer.record_llm_complete(
+                trace_id=trace_id, span_id=span_id,
+                parent_span_id=get_parent_span_id(),
+                completion_message=truncated_completion,
+                tokens={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
+                ttft=ttft, request_id=request_id,
+            )
+        else:
+            # 无 TraceWriter 时走 LLMLogCollector
+            await LLMLogCollector.submit({
+                "request_id": request_id, "model_name": self._model,
+                "prompt_key": request.prompt_key, "scenario": request.scenario,
+                "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "duration_ms": duration_ms, "status": "success",
+            })
+
+    async def _record_error(self, request_id: str, request: LLMRequest,
+                            error: str, status: str = "failed",
+                            writer=None, trace_id: str = None, span_id: str = None):
+        """统一记录错误日志"""
+        if writer and span_id:
+            await writer.record_llm_error(trace_id=trace_id, span_id=span_id, error=str(error))
+        else:
+            await LLMLogCollector.submit({
+                "request_id": request_id, "model_name": self._model,
+                "prompt_key": request.prompt_key, "scenario": request.scenario,
+                "status": status, "error_message": str(error),
+            })
+
     async def chat(self, request: LLMRequest) -> LLMResponse:
         """聊天接口实现（异步）"""
         start_time = time.time()
         request_id = str(uuid.uuid4())
         trace_id = get_current_trace_id()
         writer = get_trace_writer() if trace_id else None
+        span_id = None
 
         try:
             ds_messages = self._convert_messages(request.messages)
 
-            # Tracing: 记录 LLM 调用开始
-            span_id = None
-            if writer:
-                with create_span(f"llm_call_{self._model}") as span_id:
-                    truncated_messages = truncate_messages(
-                        [
-                            {"role": msg.role, "content": msg.content}
-                            for msg in request.messages
-                        ]
-                    )
-                    await writer.record_llm_start(
-                        trace_id=trace_id,
-                        span_id=span_id,
-                        parent_span_id=get_parent_span_id(),
-                        prompt_messages=truncated_messages,
-                        call_parameters={
-                            "model": self._model,
-                            "scenario": request.scenario,
-                            "prompt_key": request.prompt_key,
-                        },
-                        request_id=request_id,
-                    )
+            # Tracing 上下文：创建 span
+            span_ctx = create_span(f"llm_call_{self._model}") if writer else None
+            if span_ctx:
+                span_id = span_ctx.__enter__()
 
-                    # 在线程池中执行同步调用
-                    content = await asyncio.to_thread(
-                        self._call_sync,
-                        ds_messages,
-                        temperature=request.temperature,
-                        max_tokens=request.max_tokens,
-                    )
-                    
-                    ttft = int((time.time() - start_time) * 1000)
-                    duration_ms = int((time.time() - start_time) * 1000)
+            content = await self._call_with_timeout(ds_messages, request)
 
-                    input_tokens = (
-                        sum(len(msg.content) for msg in request.messages) // 4
-                    )
-                    output_tokens = len(content) // 4
+            ttft = int((time.time() - start_time) * 1000)
+            duration_ms = ttft
+            input_tokens = sum(len(msg.content) for msg in request.messages) // 4
+            output_tokens = len(content) // 4
 
-                    # Tracing: 记录 LLM 调用完成
-                    truncated_completion, _ = truncate_content(content)
-                    await writer.record_llm_complete(
-                        trace_id=trace_id,
-                        span_id=span_id,
-                        parent_span_id=get_parent_span_id(),
-                        completion_message=truncated_completion,
-                        tokens={
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "total_tokens": input_tokens + output_tokens,
-                        },
-                        ttft=ttft,
-                        request_id=request_id,
-                    )
+            await self._record_success(request_id, request, content, duration_ms, ttft, writer, trace_id, span_id)
 
-                    llm_response = LLMResponse(
-                        content=content,
-                        model_name=self._model,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        total_tokens=input_tokens + output_tokens,
-                        duration_ms=duration_ms,
-                    )
+            if span_ctx:
+                span_ctx.__exit__(None, None, None)
 
-                    await LLMLogCollector.submit(
-                        {
-                            "request_id": request_id,
-                            "model_name": self._model,
-                            "prompt_key": request.prompt_key,
-                            "scenario": request.scenario,
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "total_tokens": input_tokens + output_tokens,
-                            "duration_ms": duration_ms,
-                            "status": "success",
-                        }
-                    )
-
-                    return llm_response
-            else:
-                # 无 tracing 上下文，走简化逻辑
-                content = await asyncio.to_thread(
-                    self._call_sync,
-                    ds_messages,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                )
-
-                duration_ms = int((time.time() - start_time) * 1000)
-
-                input_tokens = sum(len(msg.content) for msg in request.messages) // 4
-                output_tokens = len(content) // 4
-
-                llm_response = LLMResponse(
-                    content=content,
-                    model_name=self._model,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=input_tokens + output_tokens,
-                    duration_ms=duration_ms,
-                )
-
-                await LLMLogCollector.submit(
-                    {
-                        "request_id": request_id,
-                        "model_name": self._model,
-                        "prompt_key": request.prompt_key,
-                        "scenario": request.scenario,
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
-                        "duration_ms": duration_ms,
-                        "status": "success",
-                    }
-                )
-
-                return llm_response
-
-        except TimeoutError as e:
-            # Tracing: 记录 LLM 调用错误
-            if writer and span_id:
-                await writer.record_llm_error(
-                    trace_id=trace_id,
-                    span_id=span_id,
-                    error=str(e),
-                )
-
-            await LLMLogCollector.submit(
-                {
-                    "request_id": request_id,
-                    "model_name": self._model,
-                    "prompt_key": request.prompt_key,
-                    "scenario": request.scenario,
-                    "status": "timeout",
-                    "error_message": str(e),
-                }
+            return LLMResponse(
+                content=content, model_name=self._model,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens, duration_ms=duration_ms,
             )
+
+        except asyncio.TimeoutError as e:
+            await self._record_error(request_id, request, e, "timeout", writer, trace_id, span_id)
             logger.error(f"LLM 调用超时：{e}")
             raise LLMTimeoutError(f"LLM 调用超时：{e}")
         except Exception as e:
-            # Tracing: 记录 LLM 调用错误
-            if writer and span_id:
-                await writer.record_llm_error(
-                    trace_id=trace_id,
-                    span_id=span_id,
-                    error=str(e),
-                )
-
-            await LLMLogCollector.submit(
-                {
-                    "request_id": request_id,
-                    "model_name": self._model,
-                    "prompt_key": request.prompt_key,
-                    "scenario": request.scenario,
-                    "status": "failed",
-                    "error_message": str(e),
-                }
-            )
+            await self._record_error(request_id, request, e, "failed", writer, trace_id, span_id)
             if "rate limit" in str(e).lower():
                 raise LLMRateLimitError(f"LLM 频率限制：{e}")
             logger.error(f"LLM 调用失败：{e}")
@@ -379,14 +310,16 @@ class DashScopeMultiModalAdapter(LLMService):
         
         ds_messages = self._convert_messages(request.messages)
         call_params = {**self._default_params}
-        
+
         if self._is_multimodal_model():
+            filtered = {k: v for k, v in call_params.items()
+                        if k not in self._generation_only_params}
             response = dashscope.MultiModalConversation.call(
                 model=self._model,
                 messages=ds_messages,
                 api_key=self._api_key,
                 stream=True,
-                **call_params
+                **filtered
             )
         else:
             # 纯文本模型使用 Generation API

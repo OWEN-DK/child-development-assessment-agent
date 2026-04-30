@@ -401,7 +401,7 @@ class TraceWriter:
                 parent_span_id=item.get("parent_span_id"),
                 prompt_messages=item.get("prompt_messages"),
                 level=CallLevel.INFO,
-                model_name=item.get("model_name", "unknown"),
+                model_name=item.get("model_name") or item.get("call_parameters", {}).get("model", "unknown"),
                 status=LLMCallStatus.SUCCESS,
             )
             session.add(log)

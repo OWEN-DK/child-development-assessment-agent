@@ -137,6 +137,10 @@ class RagService:
         """获取指定分块的详细信息"""
         return self.index_manager.get_chunk_detail(chunk_id)
 
+    def get_all_chunks_by_file_hash(self, file_hash: str) -> list[dict]:
+        """按 file_hash 获取文档的所有分块"""
+        return self.index_manager.get_all_chunks_by_file_hash(file_hash)
+
 
 import threading
 

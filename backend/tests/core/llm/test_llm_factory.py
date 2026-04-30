@@ -13,7 +13,7 @@ def mock_config_manager():
         manager.get_full_config.return_value = {
             "llm_report_generation": {
                 "provider": "dashscope",
-                "model": "qwen3.5-plus",
+                "model": "qwen-plus",
                 "temperature": 0.7,
                 "max_tokens": 2000,
                 "top_p": 0.8,
@@ -22,7 +22,7 @@ def mock_config_manager():
             },
             "llm_validation": {
                 "provider": "dashscope",
-                "model": "qwen3.5-turbo",
+                "model": "qwen-turbo",
                 "temperature": 0.5,
                 "max_tokens": 1000,
                 "top_p": 0.9,

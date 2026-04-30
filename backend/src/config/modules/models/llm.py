@@ -88,6 +88,11 @@ class LLMSettings(BaseSettings):
             "qwen-omni-flash",
             "qwen3-omni-flash",
             "qwen3-omni-turbo",
+            # Qwen3.5/3.6 多模态变体（vl/omni），文本模型如 qwen-plus 不在此列
+            "qwen3.5-vl",
+            "qwen3.5-omni",
+            "qwen3.6-vl",
+            "qwen3.6-omni",
         ],
         validation_alias="LLM_MULTIMODAL_MODEL_PREFIXES",
         description="DashScope 多模态模型前缀列表（用于自动选择 API，匹配任一前缀即使用 MultiModalConversation API）",
@@ -115,7 +120,7 @@ class LLMSettings(BaseSettings):
                 currency="CNY",
             ),
             # 性价比之王（推荐默认）
-            "qwen3.5-plus": ModelPricingConfig(
+            "qwen-plus": ModelPricingConfig(
                 input_per_million=0.8,
                 output_per_million=4.8,
                 currency="CNY",
@@ -143,12 +148,12 @@ class LLMSettings(BaseSettings):
 
     # ===== 保留：旧的字符串字段（向后兼容）=====
     model_report_generation: str = Field(
-        default="qwen3.5-plus",
+        default="qwen-plus",
         validation_alias="MODEL_REPORT_GENERATION",
         description="评估报告生成使用的模型（性价比之王，效果媲美 Max）",
     )
     model_assessment: str = Field(
-        default="qwen3.5-plus",
+        default="qwen-plus",
         validation_alias="MODEL_ASSESSMENT",
         description="儿童发展评估使用的模型（性价比之王）",
     )
@@ -190,11 +195,11 @@ class LLMSettings(BaseSettings):
         return {
             "report_generation": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_report_generation or "qwen3.5-plus",
+                model=self.model_report_generation or "qwen-plus",
             ),
             "assessment": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_assessment or "qwen3.5-plus",
+                model=self.model_assessment or "qwen-plus",
             ),
             "validation": LLMSceneConfig(
                 provider="dashscope",
@@ -222,7 +227,7 @@ class LLMSettings(BaseSettings):
             ),
             "content_generation": LLMSceneConfig(
                 provider="dashscope",
-                model=self.model_report_generation or "qwen3.5-plus",
+                model=self.model_report_generation or "qwen-plus",
             ),
             "draft_generation": LLMSceneConfig(
                 provider="dashscope",

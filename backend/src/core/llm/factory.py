@@ -445,7 +445,7 @@ class LLMServiceFactoryCompat:
             return cls._instances[cache_key]
 
         # 使用配置中的默认模型
-        model_name = model_name or "qwen3.5-plus"
+        model_name = model_name or "qwen-plus"
 
         # 使用新工厂创建实例
         factory = _get_legacy_factory()

@@ -52,7 +52,7 @@
 - **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`
 - **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型
 - **代码规范**: ESLint + Prettier，`npm run lint` 自动修复
-- **路由懒加载**: RAG 评估与提示词管理页面使用 `lazy()` + `Suspense` 按需加载
+- **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载
 
 ### 5.2 知识库管理 (Documents)
 - **文档上传**: 支持 PDF/EPUB/TXT 上传和导入进度跟踪
@@ -181,17 +181,17 @@ graph TB
 ```
 
 - **PromptManager**: 提示词版本控制和 MySQL 存储 + Redis 缓存
-  - 位置: `src/core/prompt/manager.py`
+  - 位置: `src/core/prompt_impl/facade.py`（核心实现）/ `src/core/prompt/manager.py`（简单门面）
   - 功能: 版本管理、A/B 测试分流、缓存失效
 - **PromptController**: 提示词 API 控制器
-  - 位置: `src/controller/prompt_controller.py`
-  - 路由前缀: `/api/v1/prompts`
-- **数据模型**: `src/models/prompt.py`
-  - `PromptVersion`: 提示词版本 (id, prompt_key, version, content, content_hash, description, created_by, variables, tags, fallback)
-  - `PromptABTest`: A/B 测试配置 (id, prompt_key, name, is_active, variant_a_version, variant_b_version, variant_a_ratio)
-- **前端页面**: `src/features/prompts/PromptManagementPage.tsx`
-  - 路由: `/prompt-management`
-  - 功能: 版本列表、在线编辑、版本对比、A/B 测试配置
+  - 位置: `src/controller/prompt_management_controller.py`
+  - 路由前缀: `/api/v1/rag/prompts`
+- **数据模型**: `src/models/prompt_metadata.py` + `src/models/prompt_version.py`
+  - `PromptMetadata`: 提示词元数据 (prompt_key, category, description, variables, tags, fallback)
+  - `PromptVersion`: 提示词版本 (id, prompt_key, version, content, content_hash, description, created_by)
+- **前端页面**: `src/features/rag-eval/pages/PromptListPage.tsx`（列表）/ `PromptEditPage.tsx`（编辑）/ `PromptVersionComparisonPage.tsx`（对比）/ `PromptTestSandboxPage.tsx`（沙箱）
+  - 路由: `/prompt-management`（懒加载）
+  - 功能: 版本列表、在线编辑、版本对比、沙箱测试
 
 ### 6.10 数据访问层 (Repository Layer)
 
@@ -205,9 +205,21 @@ graph TB
         Base[BaseRepository 泛型基类<br/>CRUD/过滤通用实现]
         subgraph SpecificRepo [专属模型 Repository]
             ConfigRepo[config_repository]
-            TestRepo[test_case_repository]
             DocRepo[document_repository]
-            PromptRepo[prompt_repository]
+            MonitorRepo[monitor_repository]
+            subgraph RagEvalRepo [RAG Eval Repository]
+                DraftRepo[draft_repository]
+                CaseRepo[test_case_repository]
+                RunRepo[test_run_repository]
+                RunResultRepo[test_run_result_repository]
+                SetRepo[test_set_repository]
+                SetCaseRepo[test_set_case_repository]
+                SnapshotRepo[snapshot_repository]
+                ReportRepo[report_repository]
+                TuningRepo[tuning_suggestion_repository]
+                EvalConfigRepo[config_version_repository]
+                ChangeSetRepo[config_change_set_repository]
+            end
         end
     end
     subgraph StorageLayer [数据存储层]
@@ -216,14 +228,14 @@ graph TB
     
     Service --> DI
     DI --> ConfigRepo
-    DI --> TestRepo
     DI --> DocRepo
-    DI --> PromptRepo
+    DI --> MonitorRepo
+    DI --> RagEvalRepo
     
     ConfigRepo --继承--> Base
-    TestRepo --继承--> Base
     DocRepo --继承--> Base
-    PromptRepo --继承--> Base
+    MonitorRepo --继承--> Base
+    RagEvalRepo --继承--> Base
     
     Base --> DB
 ```
@@ -234,13 +246,23 @@ graph TB
   - Repository 接收 `async_session_factory` 而非单个 session，每个方法内部通过 `async with` 创建独立 session
   - 过滤查询时校验字段有效性，防止 SQL 注入
   - create/update 方法接收 `Dict[str, Any]`，由调用方负责数据校验
-- **BaseRepository 通用方法**: `get_by_id`, `get_all`, `create`, `update`, `delete`, `get_by_filter`, `get_one_by_filter`, `count_by_filter`
-- **专属 Repository** (已合并至模块文件):
-  - `config_repository.py`: `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
-  - `document_repository.py`: `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
-  - `test_case_repository.py`: `TestCaseRepository`, `TestCaseDraftRepository`, `TestSetRepository`, `TestSetCaseRepository`, `TestRunRepository`, `TestRunResultRepository` - 测试用例管理
-  - `prompt_repository.py`: `PromptVersionRepository`, `PromptABTestRepository` - 提示词管理
-  - `monitor_repository.py`: `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
+- **BaseRepository 通用方法**: `get_by_id`, `get_all`, `create`, `update`, `delete`, `get_by_filter`, `get_one_by_filter`, `count_by_filter`, `upsert`
+- **专属 Repository**:
+  - `repository/config_repository.py`: `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
+  - `repository/document_repository.py`: `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
+  - `repository/monitor_repository.py`: `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
+  - `repository/rag_eval/` (12 个独立文件):
+    - `draft_repository.py`: `DraftRepository`
+    - `test_case_repository.py`: `TestCaseRepository`
+    - `test_set_repository.py`: `TestSetRepository`
+    - `test_set_case_repository.py`: `TestSetCaseRepository`
+    - `test_run_repository.py`: `TestRunRepository`
+    - `test_run_result_repository.py`: `TestRunResultRepository`
+    - `snapshot_repository.py`: `SnapshotRepository`
+    - `report_repository.py`: `ReportRepository`
+    - `tuning_suggestion_repository.py`: `TuningSuggestionRepository`
+    - `config_version_repository.py`: `ConfigVersionRepository`
+    - `config_change_set_repository.py`: `ConfigChangeSetRepository`
 - **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器 (`src/core/di_container.py`)
 - **已迁移模块**: ConfigManager, PromptManager, MonitoringService, RagTestManager (部分 CRUD)
 

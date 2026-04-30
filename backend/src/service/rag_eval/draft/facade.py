@@ -11,6 +11,7 @@ from src.config.core.manager import ConfigManager
 from src.models.rag_eval.enums import TestCaseStatus
 from src.repository.rag_eval.draft_repository import DraftRepository
 from src.repository.rag_eval.test_case_repository import TestCaseRepository
+from src.repository.document_repository import SourceDocumentRepository
 from src.service.rag_eval.draft.book_analyzer import BookMetadataAnalyzer
 from src.service.rag_eval.draft.deduplicator import DraftDeduplicator
 from src.service.rag_eval.draft.faithfulness_checker import FaithfulnessChecker
@@ -22,18 +23,21 @@ from src.utils.orm_mapper import OrmMapper
 
 
 class DraftEngineFacade:
-    """草稿引擎门面"""
+    """草稿引擎门面——流水线化生成与忠诚度检查"""
 
     def __init__(
         self, draft_generator: DraftGenerator, faithfulness_checker: FaithfulnessChecker,
         deduplicator: DraftDeduplicator, book_analyzer: BookMetadataAnalyzer,
         draft_repository: DraftRepository, test_case_repository: TestCaseRepository,
+        source_document_repository: SourceDocumentRepository,
         config_cache: Optional[ConfigManager] = None, async_task_manager=None,
     ):
+        from src.core.async_task import AsyncTaskManager
         self._gen, self._faith, self._dedup = draft_generator, faithfulness_checker, deduplicator
         self._analyzer, self._draft_repo, self._tc_repo = book_analyzer, draft_repository, test_case_repository
+        self._doc_repo = source_document_repository
         self._config = config_cache or ConfigManager()
-        self._async = async_task_manager
+        self._async = async_task_manager or AsyncTaskManager()
 
     # ── 后台生成 ──
 
@@ -51,21 +55,81 @@ class DraftEngineFacade:
             data={"status": "running", "stage": s, "message": m, "metadata": d})
         try:
             doc = await self._load_doc(source_document_id)
-            chunks = await self._load_chunks(source_document_id)
+            chunks = await self._load_chunks(doc.file_hash)
             await pub("generation_started", "开始", document_id=source_document_id)
             meta = await self._analyzer.analyze(doc)
             await pub("metadata_analyzed", "元数据完成",
                 age_ranges=meta.age_ranges, domains=meta.domains, topic_summary=meta.topic_summary)
-            drafts = await self._gen.generate(chunks, meta, config)
+
+            # ── 流水线: 生成器 → Queue → 检查器 ──
+            concurrency = self._config.get_config_value("rag.eval.draft.concurrency", 15)
+            queue: asyncio.Queue = asyncio.Queue(maxsize=concurrency * 2)
+            all_scored: list = []
+            total_chunks = len(chunks)
+            gen_completed = [0]
+            check_completed = [0]
+            # 全局共享 semaphore，避免 checker worker 各自独立 semaphore 导致并发爆炸
+            check_sem = asyncio.Semaphore(concurrency)
+            # 检查器 worker 数量独立控制（不需要和并发数相同，避免 15×15 问题）
+            checker_count = min(4, concurrency)
+
+            async def checker_worker():
+                """从队列消费草稿批次并执行忠实度检查"""
+                while True:
+                    batch = await queue.get()
+                    if batch is None:
+                        queue.task_done()
+                        break
+                    try:
+                        scored = await self._faith.batch_check(batch, semaphore=check_sem)
+                        all_scored.extend(scored)
+                        check_completed[0] += len(batch)
+                    except Exception as e:
+                        logger.error(f"检查器异常: {e}")
+                    finally:
+                        queue.task_done()
+
+            # 启动检查器消费者
+            checker_tasks = [asyncio.create_task(checker_worker()) for _ in range(checker_count)]
+
+            # 生成回调：每完成一个分块就将草稿批次放入队列
+            async def on_draft_batch(batch):
+                if batch:
+                    await queue.put(batch)
+
+            async def on_gen_progress(done: int, total: int):
+                gen_completed[0] = done
+                pct = 15 + int((done / max(total, 1)) * 70)
+                await pub("pipeline_running",
+                    f"生成+校验: {done}/{total} 分块, 已校验 {check_completed[0]} 条",
+                    done=done, total=total, checked=check_completed[0], pct=pct)
+
+            # 启动生成器（内部并发 LLM 调用，每完成一个分块回调 on_draft_batch）
+            await self._gen.generate(
+                chunks, meta, config,
+                progress_callback=on_gen_progress,
+                draft_batch_callback=on_draft_batch,
+            )
+
+            # 生成完成，通知检查器退出
+            for _ in range(checker_count):
+                await queue.put(None)
+            await asyncio.gather(*checker_tasks)
+
+            scored = all_scored
             batch_id = generate_prefixed_id("batch")
-            await pub("drafts_generated", f"生成: {len(drafts)}", count=len(drafts), batch_id=batch_id)
-            scored = await self._faith.batch_check(drafts)
+            await pub("drafts_generated", f"生成+校验完成: {len(scored)} 条",
+                count=len(scored), batch_id=batch_id)
+
+            # 去重
             t = self._config.get_config_value("rag.eval.draft.faithfulness_threshold", 0.7)
-            await pub("faithfulness_checked", f"校验: {len(scored)}", checked=len(scored),
-                low=sum(1 for _, s in scored if s < t))
+            low_count = sum(1 for _, s in scored if s < t)
+            await pub("faithfulness_checked", f"校验: {len(scored)}", checked=len(scored), low=low_count)
             before = len(scored)
             deduped = await self._dedup.deduplicate(scored, source_document_id)
             await pub("deduplication_completed", f"去重: {before}→{len(deduped)}", before=before, after=len(deduped))
+
+            # 保存
             saved = 0
             for idx, (d, s) in enumerate(deduped):
                 try:
@@ -170,9 +234,9 @@ class DraftEngineFacade:
         from datetime import datetime, timedelta
         from sqlalchemy import select
         from src.models.rag_eval.draft import TestCaseDraft
-        
+
         cutoff = datetime.now() - timedelta(days=retention_days)
-        
+
         async with self._draft_repo.db_session_factory() as session:
             stmt = select(TestCaseDraft).where(
                 TestCaseDraft.status == TestCaseStatus.DRAFT,
@@ -180,7 +244,7 @@ class DraftEngineFacade:
             )
             result = await session.execute(stmt)
             old_drafts = result.scalars().all()
-            
+
         cleaned_count = 0
         for draft in old_drafts:
             try:
@@ -188,7 +252,7 @@ class DraftEngineFacade:
                 cleaned_count += 1
             except Exception as e:
                 logger.error(f"清理草稿 {draft.id} 失败: {e}")
-                
+
         return cleaned_count
 
     # ── 内部辅助 ──
@@ -204,17 +268,24 @@ class DraftEngineFacade:
 
     async def _load_doc(self, doc_id: str):
         from src.schemas.rag_eval.source_document import SourceDocumentRead
-        from src.repository.document_repository import SourceDocumentRepository
-        o = await SourceDocumentRepository().get_by_id(doc_id)
+        o = await self._doc_repo.get_by_id(doc_id)
         if not o:
             raise ValueError(f"源文档不存在: {doc_id}")
         return OrmMapper.to_read(o, SourceDocumentRead)
 
-    async def _load_chunks(self, source_document_id: str) -> list[dict]:
+    async def _load_chunks(self, file_hash: str) -> list[dict]:
+        """按 file_hash 从向量库加载文档的所有分块"""
         try:
             from src.service.rag_service import rag_service
-            info = rag_service.get_chunk_detail(source_document_id)
-            return [{"id": source_document_id, "content": info.get("content", ""), "page": None}] if info else []
+            raw_chunks = rag_service.get_all_chunks_by_file_hash(file_hash)
+            if not raw_chunks:
+                logger.warning(f"未找到分块: file_hash={file_hash}")
+                return []
+            return [
+                {"id": c.get("id", ""), "content": c.get("content", ""),
+                 "page": c.get("metadata", {}).get("page_label")}
+                for c in raw_chunks
+            ]
         except Exception as e:
-            logger.warning(f"加载分块失败: {e}")
-        return [{"id": source_document_id, "content": "", "page": None}]
+            logger.error(f"加载分块失败: {e}")
+            return []

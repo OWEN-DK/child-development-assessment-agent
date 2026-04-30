@@ -12,17 +12,17 @@ def test_llm_providers_config():
     assert settings.dashscope_api_key is not None, "dashscope_api_key 未配置"
 
     # 验证场景配置（当前为字符串字段，向后兼容）
-    assert settings.model_report_generation == "qwen3.5-plus"
-    assert settings.model_assessment == "qwen3.5-plus"
-    assert settings.model_validation == "qwen3.5-turbo"
+    assert settings.model_report_generation == "qwen-plus"
+    assert settings.model_assessment == "qwen-plus"
+    assert settings.model_validation == "qwen-plus"
 
     # 验证 llm_scene_configs 属性（新增的嵌套配置）
     assert hasattr(settings, "llm_scene_configs"), "llm_scene_configs 属性不存在"
     scene_configs = settings.llm_scene_configs
     assert "report_generation" in scene_configs
     assert scene_configs["report_generation"].provider == "dashscope"
-    assert scene_configs["report_generation"].model == "qwen3.5-plus"
-    assert scene_configs["validation"].model == "qwen3.5-turbo"
+    assert scene_configs["report_generation"].model == "qwen-plus"
+    assert scene_configs["validation"].model == "qwen-plus"
 
 
 def test_llm_scene_config_structure():

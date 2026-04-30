@@ -12,12 +12,8 @@ export type SSEStatus = 'connecting' | 'connected' | 'done' | 'error';
 
 /** 终结 SSE 流的关键事件类型集合 */
 const TERMINAL_EVENTS = new Set([
-  'run_completed',
-  'run_failed',
-  'generation_completed',
-  'generation_failed',
-  'evaluation_completed',
-  'evaluation_failed',
+  'complete',
+  'error',
 ]);
 
 /**

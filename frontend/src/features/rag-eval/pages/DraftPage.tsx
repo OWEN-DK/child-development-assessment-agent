@@ -7,12 +7,15 @@ import { DOMAIN_MAP } from '@entities/rag-eval';
 import {
   useDrafts, useDeleteDrafts, useCreateDrafts, useReviewDraft, useSourceDocuments,
 } from '../hooks/useDrafts';
+import { useDraftGenerationProgress } from '../hooks/useDraftGenerationProgress';
 import { DraftTable } from '../components/draft/DraftTable';
 import { DraftGenerationForm } from '../components/draft/DraftGenerationForm';
 import { DomainTag } from '../components/common/DomainTag';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { getDraftStatusLabel } from '@entities/rag-eval';
 import { formatPercent, formatAgeRange, formatTimestamp } from '@entities/rag-eval';
+import { ProgressList } from '../../../components/progress';
+import { draftGenerationConfig } from '../../../components/progress/configs/draftGeneration';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -37,6 +40,8 @@ export function DraftPage() {
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [detailDraft, setDetailDraft] = useState<TestCaseDraft | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+
+  const { tasks: genTasks, startTracking, removeTask } = useDraftGenerationProgress();
 
   const filteredDrafts = (data?.items || []).filter((d) => {
     if (!searchText) return true;
@@ -77,7 +82,7 @@ export function DraftPage() {
 
   const handleGenerate = useCallback(
     async (values: { document_id: string; max_qa_per_chunk: number; min_qa_per_chunk: number; age_ranges: string[]; domains: TestDomain[] }) => {
-      await generateMutation.mutateAsync({
+      const result = await generateMutation.mutateAsync({
         documentId: values.document_id,
         config: {
           max_qa_per_chunk: values.max_qa_per_chunk,
@@ -87,9 +92,10 @@ export function DraftPage() {
         },
       });
       setShowGenerateModal(false);
-      message.success('生成任务已启动');
+      const docName = sourceDocuments.find(d => d.id === values.document_id)?.name;
+      startTracking(result.batch_id, docName);
     },
-    [generateMutation],
+    [generateMutation, sourceDocuments, startTracking],
   );
 
   const handleApprove = useCallback(
@@ -135,6 +141,11 @@ export function DraftPage() {
           </Space>
         </Col>
       </Row>
+
+      <ProgressList
+        config={{ ...draftGenerationConfig, onDelete: (task) => removeTask(task.taskId) }}
+        tasks={genTasks}
+      />
 
       {isError && <Alert type="error" message="加载草稿列表失败" showIcon style={{ marginBottom: 16 }} />}
 

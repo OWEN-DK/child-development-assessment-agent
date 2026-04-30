@@ -2,13 +2,14 @@
 
 import asyncio
 import json
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from json_repair import repair_json as _repair
 
 from src.schemas.rag_eval.draft import DraftCreate
 from src.schemas.llm import LLMMessage, LLMRequest
 from src.config.core.manager import ConfigManager
+from src.core.llm.factory import LLMServiceFactoryCompat
 from src.utils.embedding_helper import EmbeddingHelper
 from src.utils.logger import logger
 
@@ -18,11 +19,9 @@ class FaithfulnessChecker:
 
     def __init__(
         self,
-        llm_factory=None,
         embedding_helper: Optional[EmbeddingHelper] = None,
         config_cache: Optional[ConfigManager] = None,
     ):
-        self._llm_factory = llm_factory
         self._embedding = embedding_helper
         self._config = config_cache or ConfigManager()
 
@@ -32,10 +31,10 @@ class FaithfulnessChecker:
         if not draft_text.strip() or not source_content.strip():
             return 0.0
 
-        emb_score = self._embedding_faithfulness(draft_text, source_content)
+        emb_score = await self._embedding_faithfulness_async(draft_text, source_content)
         threshold = self._config.get_config_value("rag.eval.draft.faithfulness_threshold", 0.7)
 
-        if emb_score >= threshold or not self._llm_factory:
+        if emb_score >= threshold:
             return emb_score
 
         try:
@@ -45,20 +44,34 @@ class FaithfulnessChecker:
             logger.error(f"LLM 忠实度校验失败: {e}")
             return emb_score
 
-    async def batch_check(self, drafts: list[DraftCreate]) -> list[tuple[DraftCreate, float]]:
+    async def batch_check(
+        self, drafts: list[DraftCreate],
+        progress_callback: Optional[Callable[[int, int], Awaitable[None]]] = None,
+        semaphore: Optional[asyncio.Semaphore] = None,
+    ) -> list[tuple[DraftCreate, float]]:
         """批量校验，返回 [(draft, score), ...]"""
         if not drafts:
             return []
 
-        concurrency = self._config.get_config_value("rag.eval.draft.concurrency", 3)
-        sem = asyncio.Semaphore(concurrency)
+        sem = semaphore or asyncio.Semaphore(
+            self._config.get_config_value("rag.eval.draft.concurrency", 15)
+        )
 
         async def _one(d: DraftCreate) -> tuple[DraftCreate, float]:
             async with sem:
                 src = (d.source_content_snippet or "")[:3000]
                 return (d, await self.check(d, src))
 
-        results = await asyncio.gather(*[_one(d) for d in drafts])
+        all_coros = [_one(d) for d in drafts]
+        total = len(all_coros)
+        results = []
+        completed = 0
+        for coro in asyncio.as_completed(all_coros):
+            item = await coro
+            results.append(item)
+            completed += 1
+            if progress_callback:
+                await progress_callback(completed, total)
 
         threshold = self._config.get_config_value("rag.eval.draft.faithfulness_threshold", 0.7)
         low = sum(1 for _, s in results if s < threshold)
@@ -66,15 +79,13 @@ class FaithfulnessChecker:
             logger.warning(f"忠实度校验: {low}/{len(results)} 低于阈值")
         return list(results)
 
-    def _embedding_faithfulness(self, draft_description: str, source_content: str) -> float:
-        """Embedding 余弦相似度快速评分"""
+    async def _embedding_faithfulness_async(self, draft_description: str, source_content: str) -> float:
+        """Embedding 余弦相似度快速评分（异步）"""
         if not self._embedding:
             return 0.5
         try:
-            import asyncio as _asyncio
-            loop = _asyncio.get_event_loop()
-            e1 = loop.run_until_complete(self._embedding.embed_text(draft_description[:500]))
-            e2 = loop.run_until_complete(self._embedding.embed_text(source_content[:500]))
+            e1 = await self._embedding.embed_text(draft_description[:500])
+            e2 = await self._embedding.embed_text(source_content[:500])
             if not e1 or not e2:
                 return 0.5
             return self._embedding.cosine_similarity(e1, e2)
@@ -88,13 +99,15 @@ class FaithfulnessChecker:
 草稿: {draft_text[:800]}
 返回 JSON: {{"faithfulness_score": 0.85, "reason": "..."}}"""
 
-        llm = await self._llm_factory.create("rag_eval", "langchain")
-        model = self._config.get_config_value("rag.eval.draft.llm_model", "")
-        resp = await llm.chat(LLMRequest(
-            messages=[LLMMessage(role="user", content=prompt)],
-            model_name=model or "qwen3.5-plus",
+        model = self._config.get_config_value("rag.eval.draft.llm_model", "") or "qwen-plus"
+        llm = LLMServiceFactoryCompat.create(
+            model_name=model,
             temperature=self._config.get_config_value("rag.eval.draft.temperature", 0.3),
             max_tokens=512,
+        )
+        resp = await llm.chat(LLMRequest(
+            messages=[LLMMessage(role="user", content=prompt)],
+            model_name=model,
         ))
 
         try:

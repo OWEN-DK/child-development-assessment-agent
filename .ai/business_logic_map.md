@@ -41,8 +41,8 @@
 | **配置管理器** | 动态配置与热更新 | 负责系统参数的 MySQL 持久化与 Redis 缓存。支持配置原子保存、热重载与 ConfigCache 单例管理。 | `backend/src/config/core/manager.py` |
 | **提示词管理器** | 动态 Prompt 与 A/B 测试 | 统管所有大模型的 Prompt，支持变量注入、版本对比、测试沙箱以及代码引用分析。 | `backend/src/core/prompt/manager.py` |
 | **LLM 工厂** | 多提供商路由与场景隔离 | 统一生成适配的 LLM 实例，支持 DashScope/OpenAI/Anthropic/DeepSeek/Ollama。支持热重载。 | `backend/src/core/llm/factory.py` |
-| **三级缓存** | 性能防穿透 | 提供 `内存LRU -> Redis -> 磁盘` 的三层缓存架构，加速高频检索和配置读取。 | `backend/src/service/cache_service.py` |
-| **异步任务管理** | 实时推送与并发控制 | `AsyncTaskManager` 管理后台任务，通过 SSE 向前端推送进度，支持断线重连与并发限制。 | `backend/src/core/async_task_manager.py` |
+| **三级缓存** | 性能防穿透 | 提供 `内存LRU -> Redis -> 磁盘` 的三层缓存架构，加速高频检索和配置读取。 | `backend/src/service/cache/facade.py` |
+| **异步任务管理** | 实时推送与并发控制 | `AsyncTaskManager` 管理后台任务，通过 SSE 向前端推送进度，支持断线重连与并发限制。 | `backend/src/core/async_task.py` |
 
 ---
 
@@ -53,9 +53,9 @@
 |---|---|---|
 | **儿童发展评估** | 表单输入与报告展示 | 收集儿童画像与运动计划，调用 Agent 接口，渲染 Markdown 报告及多维雷达图。 | `frontend/src/features/assessment/pages/HomePage.tsx`<br>`frontend/src/components/assessment/AssessmentForm.tsx` |
 | **知识库与检索** | 文档导入与智能搜索 | 管理 PDF/EPUB/TXT 知识文档的上传与分块；提供支持混合检索界面。 | `frontend/src/features/documents/pages/KnowledgeBasePage.tsx`<br>`frontend/src/features/knowledge/pages/KnowledgeSearchPage.tsx` |
-| **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/RagEvaluationPage.tsx` |
+| **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/pages/`（DraftPage / TestCasePage / RunPage / ReportPage / TuningPage 等 11 个子页面） |
 | **系统配置页** | 多模式配置热更新 | 提供向导模式/专家模式，动态修改系统参数，提供冲突检测与原子保存。 | `frontend/src/pages/SystemConfigPage.tsx` |
-| **提示词与监控** | 沙箱测试与全链路追踪 | 在线编辑 Prompt 并进行沙箱预览；查看 LLM 调用的 Span 层级树、耗时与成本大盘。 | `frontend/src/features/prompts/PromptManagementPage.tsx`<br>`frontend/src/features/monitoring/LLMMonitoringDashboard.tsx` |
+| **提示词与监控** | 沙箱测试与全链路追踪 | 在线编辑 Prompt 并进行沙箱预览；查看 LLM 调用的 Span 层级树、耗时与成本大盘。 | `frontend/src/features/rag-eval/pages/PromptListPage.tsx`<br>`frontend/src/features/rag-eval/pages/PromptEditPage.tsx`<br>`frontend/src/features/monitoring/LLMMonitoringDashboard.tsx` |
 
 ---
 
@@ -64,15 +64,16 @@
 
 | 模块 | 业务逻辑 | 代码入口 |
 |---|---|---|
-| **测试门面服务** | 回测全流程入口 | 对外提供统一的测试执行、结果查询、报告生成接口，内部协调各子模块。 | `backend/src/service/rag_test/facade.py` |
-| **测试运行执行器** | 并发批量测试 | 支持多并发执行测试用例，自动关联知识库快照、配置版本、模型版本，保证测试可复现。 | `backend/src/service/rag_test/test_run/test_batch_runner.py`<br>`backend/src/service/rag_test/test_run/test_executor.py` |
-| **测试草稿服务** | 测试用例生成与审核 | LLM自动从文档提取测试草稿，支持人工审核、批量导入，生成标准化测试用例和测试集。 | `backend/src/service/rag_test/draft_service.py`<br>`backend/src/service/rag_test/draft_generator_facade.py` |
-| **快照管理服务** | 知识库版本管理 | 生成和管理知识库快照，支持快照恢复和对比，保证测试环境一致性和可复现。 | `backend/src/service/rag_test/snapshot_service.py` |
-| **6层校验编排器** | 全链路诊断编排 | 协调6层校验引擎的执行顺序，收集各层诊断结果，生成结构化的校验报告。 | `backend/src/core/validation/orchestrator.py` |
-| **6层校验引擎** | 智能调参建议生成 | 包含规则引擎、历史对比、LLM诊断、质量校验、效果校验、回归校验6层逻辑，自动生成调优建议。 | `backend/src/core/validation/layers/`<br>`backend/src/core/tuning/engine.py` |
-| **报告生成服务** | 可视化评估报告 | 生成多维度指标统计报告，支持趋势分析、版本对比、调优建议展示，可导出为PDF/CSV/JSON。 | `backend/src/service/report/report_generator.py`<br>`backend/src/service/rag_report_service.py` |
-| **回归测试服务** | 版本迭代验证 | 优化后自动执行回归测试，与历史基线对比，验证优化效果，更新效果基线。 | `backend/src/service/rag_test/test_run/test_run_service.py` |
-| **规范驱动** | SDD 业务契约 | 所有的复杂逻辑修改必须先在 `specs/` 下写明机器可读的契约与验收标准。 | `.trae/specs/` 或 `docs/specs/` |
+| **RAG评估编排器** | 评估全流程入口 | 对外提供统一的评估执行、结果查询、报告生成接口，内部协调 6 个子引擎。 | `backend/src/service/rag_eval/orchestrator.py` |
+| **测试运行引擎** | 并发批量测试 | 支持多并发执行测试用例，自动关联知识库快照、配置版本、模型版本，保证测试可复现。 | `backend/src/service/rag_eval/run/facade.py`<br>`backend/src/service/rag_eval/run/executor.py`<br>`backend/src/service/rag_eval/run/batch_runner.py` |
+| **草稿生成引擎** | 测试用例生成与审核 | LLM自动从文档提取测试草稿，支持人工审核、批量导入，生成标准化测试用例和测试集。 | `backend/src/service/rag_eval/draft/facade.py`<br>`backend/src/service/rag_eval/draft/generator.py` |
+| **快照管理服务** | 知识库版本管理 | 生成和管理知识库快照，支持快照恢复和对比，保证测试环境一致性和可复现。 | `backend/src/service/rag_eval/run/snapshot_manager.py` |
+| **6层校验编排器** | 全链路诊断编排 | 协调6层校验引擎的执行顺序，收集各层诊断结果，生成结构化的校验报告。 | `backend/src/service/rag_eval/metrics/diagnosis/orchestrator.py` |
+| **6层校验引擎** | 智能调参建议生成 | 包含规则引擎、历史对比、LLM诊断、质量校验、效果校验、回归校验6层逻辑，自动生成调优建议。 | `backend/src/service/rag_eval/metrics/diagnosis/layer1_rules.py` ~ `layer6_regression.py` |
+| **指标评分引擎** | 多维度量化评分 | 计算 Precision@K、Recall、MRR、NDCG、Faithfulness、AnswerRelevancy、Groundedness 等指标。 | `backend/src/service/rag_eval/metrics/scoring/facade.py`<br>`backend/src/service/rag_eval/metrics/scoring/calculators/` |
+| **报告生成引擎** | 可视化评估报告 | 生成多维度指标统计报告，支持趋势分析、版本对比、调优建议展示，可导出为PDF/CSV/JSON。 | `backend/src/service/rag_eval/report/facade.py`<br>`backend/src/service/rag_eval/report/builder.py` |
+| **调优引擎** | 智能调参建议 | 基于诊断结果生成调优建议，支持一键采纳、冲突检测、配置变更管理。 | `backend/src/service/rag_eval/tuning/facade.py`<br>`backend/src/service/rag_eval/tuning/advisor.py` |
+| **规范驱动** | SDD 业务契约 | 所有的复杂逻辑修改必须先在 `specs/` 下写明机器可读的契约与验收标准。 | `docs/specs/` |
 
 ## 6. 前端测试与类型安全
 **逻辑概述**：前端代码质量保障体系，包含单元测试、集成测试与类型检查。

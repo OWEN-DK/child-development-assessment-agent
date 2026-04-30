@@ -48,9 +48,10 @@ graph TB
         CORS[CORS 中间件]
         TaskCtrl[TaskController]
         RagCtrl[RagController]
-        RagTestCtrl[RagTestController]
+        RagEvalCtrl[RagEvalControllerRegistry<br>7个子控制器]
         ConfigCtrl[ConfigController]
-        PromptCtrl[PromptController]
+        ConfigHealthCtrl[ConfigHealthController]
+        PromptCtrl[PromptManagementController]
         MonitorCtrl[MonitoringController]
     end
     
@@ -74,17 +75,15 @@ graph TB
             L2Cache[RedisCache<br>分布式缓存]
             L3Cache[DiskCache<br>磁盘持久化缓存]
         end
-        subgraph RAG 测试服务簇 RAG Test
-            TestMgr[RagTestFacade<br>RAG测试门面服务]
-            TestRunner[TestBatchRunner<br>批量测试执行器]
-            DraftService[DraftService<br>测试草稿生成/审核]
-            SnapshotService[SnapshotService<br>知识库快照管理]
-            ReportGenerator[ReportGenerator<br>评估报告生成]
-            RegressionTester[RegressionTester<br>回归测试执行器]
-            TrendAnalyzer[TrendAnalyzer<br>效果趋势分析器]
-            ValidationOrchestrator[ValidationOrchestrator<br>6层校验引擎编排器]
+        subgraph RAG 评估服务簇 RAG Eval (6子引擎)
+            EvalOrchestrator[RagEvalOrchestrator<br>评估编排器]
+            DraftEngine[DraftEngine<br>草稿生成/审核/去重]
+            CaseEngine[CaseEngine<br>测试用例/测试集管理]
+            RunEngine[RunEngine<br>批量执行/快照管理]
+            MetricEngine[MetricEngineFacade<br>评分+6层诊断]
+            ReportEngine[ReportEngine<br>报告生成/趋势/导出]
+            TuningEngine[TuningEngine<br>调优建议/冲突检测]
         end
-        ValEngine[6层校验引擎 ValidationEngine<br>规则/历史/大模型/质量/回归全链路诊断]
         MonitorSvc[MonitoringService<br>监控服务]
         AlertSvc[AlertService<br>告警服务]
         TuningSvc[TuningService<br>智能调优建议服务]
@@ -158,22 +157,23 @@ graph TB
     FastAPI --> CORS
     CORS --> TaskCtrl
     CORS --> RagCtrl
-    CORS --> RagTestCtrl
+    CORS --> RagEvalCtrl
     CORS --> ConfigCtrl
+    CORS --> ConfigHealthCtrl
     CORS --> PromptCtrl
     CORS --> MonitorCtrl
     
     TaskCtrl --> Graph
     RagCtrl --> DocIngestion
     RagCtrl --> RagSvc
-    RagTestCtrl --> TestMgr
+    RagEvalCtrl --> EvalOrchestrator
     ConfigCtrl --> ConfigMgr
     PromptCtrl --> PromptMgr
     MonitorCtrl --> MonitorSvc
     MonitorSvc --> LLMMonitor
     MonitorSvc --> AlertSvc
     
-    TestMgr --> PipelineOrch
+    EvalOrchestrator --> PipelineOrch
     RagSvc --> PipelineOrch
     
     PipelineOrch --> PreNode

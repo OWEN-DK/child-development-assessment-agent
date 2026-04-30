@@ -29,10 +29,10 @@ class RedisClient:
             if cls._pool:
                 asyncio.create_task(cls._pool.disconnect())
             
-            # 配置重试策略：指数退避，最多重试3次
+            # 配置重试策略：指数退避，最多重试5次
             retry = Retry(
-                backoff=ExponentialBackoff(cap=2, base=0.5),
-                retries=3,
+                backoff=ExponentialBackoff(cap=3, base=0.5),
+                retries=5,
                 supported_errors=(
                     ConnectionError,
                     TimeoutError,

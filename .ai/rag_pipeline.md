@@ -6,7 +6,7 @@
 
 ## RAG 系统架构
 
-RAG 系统是本项目知识库检索的核心，采用分层架构，包含文档导入和知识检索两条流水线。完整技术文档见 [RAG_SYSTEM_COMPLETE_DOCUMENTATION.md](./docs/RAG_SYSTEM_COMPLETE_DOCUMENTATION.md)。
+RAG 系统是本项目知识库检索的核心，采用分层架构，包含文档导入和知识检索两条流水线。
 
 ### 核心模块
 
@@ -45,7 +45,7 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 
 ### 关键配置
 
-所有 RAG 配置在 `backend/src/config/settings.py` 中定义，支持环境变量覆盖。主要配置分类：
+所有 RAG 配置在 `backend/src/config/` 模块中定义（`__init__.py` 聚合 `modules/rag/` 子模块），支持环境变量覆盖。主要配置分类：
 
 - **混合检索**: BM25/Vector 权重、合并模式、Top-K、动态权重
 - **缓存**: 启用状态、最大容量 (1000)、TTL (3600秒)
@@ -104,41 +104,19 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | `/api/v1/prompts/ab-tests` | GET/POST | 列出/创建 A/B 测试 |
 | `/api/v1/prompts/ab-tests/{test_id}/toggle` | POST | 启用/禁用 A/B 测试 |
 
-路由前缀: `/rag/test`
+路由前缀: `/api/v1/rag/eval`
 
-| 端点 | 方法 | 功能 |
-|------|------|------|
-| `/rag/test/cases` | POST/GET | 创建/列出测试用例 |
-| `/rag/test/cases/{case_id}` | GET/PUT/DELETE | 获取/更新/删除测试用例 |
-| `/rag/test/cases/import/preview` | POST | 预览JSON导入的测试用例 |
-| `/rag/test/cases/batch` | POST | 批量导入测试用例 |
-| `/rag/test/cases/batch/delete` | POST | 批量删除测试用例 |
-| `/rag/test/run` | POST | 运行所有测试用例 (支持并发) |
-| `/rag/test/run/{case_id}` | POST | 运行单个测试用例 |
-| `/rag/test/runs` | GET | 列出所有测试运行 |
-| `/rag/test/runs/{run_id}` | GET | 获取单个测试运行 |
-| `/rag/test/run/{run_id}/stream` | GET | SSE 进度推送 |
-| `/rag/test/runs/batch/delete` | POST | 批量删除运行记录 |
-| `/rag/test/compare` | GET | 比较两个测试运行 |
-| `/rag/test/snapshots` | POST/GET | 创建/列出快照 |
-| `/rag/test/snapshots/{snapshot_id}` | GET | 获取单个快照 |
-| `/rag/test/snapshots/{snapshot_id}/restore` | POST | 恢复快照 |
-| `/rag/test/compare-configs/{v1}/{v2}` | GET | 对比配置版本 |
-| `/rag/test/documents/upload` | POST | 上传源文档（默认自动生成草稿） |
-| `/rag/test/documents` | GET | 列出所有源文档 |
-| `/rag/test/documents/{doc_id}` | GET/DELETE | 获取/删除源文档 |
-| `/rag/test/documents/{doc_id}/generate-drafts` | POST | 手动生成测试用例草稿 |
-| `/rag/test/drafts/generate/{task_id}/stream` | GET | SSE 推送生成草稿进度 |
-| `/rag/test/drafts` | GET | 列出草稿 |
-| `/rag/test/drafts/{draft_id}` | GET/PUT | 获取/更新草稿 |
-| `/rag/test/drafts/{draft_id}/review` | POST | 审核草稿 |
-| `/rag/test/drafts/import` | POST | 导入已审核草稿 |
-| `/rag/test/drafts/batch/delete` | POST | 批量删除草稿 |
-| `/rag/test/drafts/{draft_id}/delete` | POST | 删除单个草稿 |
-| `/rag/test/sets` | POST/GET | 创建/列出测试集 |
-| `/rag/test/sets/{set_id}` | GET/PUT/DELETE | 获取/更新/删除测试集 |
-| `/rag/test/sets/{set_id}/cases` | POST/DELETE | 添加/移除测试用例 |
-| `/rag/test/sets/{set_id}/export` | GET | 导出测试集为JSON |
+通过 `RagEvalControllerRegistry` 注册 7 个子控制器：
+
+| 子控制器 | 端点前缀 | 功能 |
+|----------|----------|------|
+| `draft_controller` | `/source-documents/upload`, `/drafts/*` | 源文档上传、草稿生成/审核/批量操作、SSE 生成进度 |
+| `case_controller` | `/test-cases/*`, `/test-sets/*` | 测试用例 CRUD + 批量/导入、测试集 CRUD + 用例关联 + 导出 |
+| `run_controller` | `/runs/*` | 测试运行 CRUD + 批量执行 + 对比、单用例执行、SSE 进度 |
+| `metric_controller` | `/runs/{id}/metrics`, `/diagnosis`, `/evaluate` | 指标查询、6层诊断、触发评估 |
+| `report_controller` | `/reports/*`, `/trends` | 报告列表/生成/导出、趋势分析 |
+| `tuning_controller` | `/runs/{id}/tuning`, `/tuning/{id}/adopt\|reject\|ignore`, `/config-versions/*` | 调优建议管理、配置版本回滚 |
+| `snapshot_controller` | `/snapshots/*` | 快照创建/列表/恢复 |
 
 ## RAG流水线与回测测试集成
 回测测试与RAG检索流水线深度集成，保证测试的一致性、可复现性和隔离性：

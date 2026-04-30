@@ -9,6 +9,7 @@ from src.schemas.rag_eval.draft import BookMetadata
 from src.schemas.rag_eval.source_document import SourceDocumentRead
 from src.schemas.llm import LLMMessage, LLMRequest
 from src.config.core.manager import ConfigManager
+from src.core.llm.factory import LLMServiceFactoryCompat
 from src.utils.logger import logger
 
 
@@ -23,15 +24,10 @@ _METADATA_PROMPT = """分析以下文档，推断适用的儿童年龄范围和�
 class BookMetadataAnalyzer:
     """从文档中提取年龄范围和领域元数据"""
 
-    def __init__(self, llm_factory=None, config_cache: Optional[ConfigManager] = None):
-        self._llm_factory = llm_factory
+    def __init__(self, config_cache: Optional[ConfigManager] = None):
         self._config = config_cache or ConfigManager()
 
     async def analyze(self, document: SourceDocumentRead) -> BookMetadata:
-        if not self._llm_factory:
-            logger.warning("LLM 不可用，返回空元数据")
-            return BookMetadata(age_ranges=[], domains=[], topic_summary="")
-
         prompt = _METADATA_PROMPT.format(
             title=document.title or "",
             file_type=document.file_type or "",
@@ -39,13 +35,15 @@ class BookMetadataAnalyzer:
         )
 
         try:
-            llm = await self._llm_factory.create("rag_eval", "langchain")
-            model = self._config.get_config_value("rag.eval.draft.llm_model", "")
-            resp = await llm.chat(LLMRequest(
-                messages=[LLMMessage(role="user", content=prompt)],
-                model_name=model or "qwen3.5-plus",
+            model = self._config.get_config_value("rag.eval.draft.llm_model", "") or "qwen-plus"
+            llm = LLMServiceFactoryCompat.create(
+                model_name=model,
                 temperature=self._config.get_config_value("rag.eval.draft.temperature", 0.3),
                 max_tokens=self._config.get_config_value("rag.eval.draft.max_tokens", 2048),
+            )
+            resp = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                model_name=model,
             ))
 
             try:

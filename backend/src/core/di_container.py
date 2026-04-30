@@ -217,7 +217,11 @@ class RagEvalModule(Module):
     @singleton
     @provider
     def provide_embedding_helper(self) -> EmbeddingHelper:
-        return EmbeddingHelper()
+        return EmbeddingHelper(
+            model_name=settings.embedding_model_name,
+            api_key=settings.dashscope_api_key,
+            embed_batch_size=settings.embedding_batch_size,
+        )
 
     # ── 年龄工具 ────────────────────────────────────
 
@@ -395,6 +399,7 @@ class RagEvalModule(Module):
     def provide_draft_engine_facade(
         self, draft_generator: DraftGenerator, faithfulness_checker: FaithfulnessChecker, draft_deduplicator: DraftDeduplicator,
         book_analyzer: BookMetadataAnalyzer, draft_repository: DraftRepository, test_case_repository: TestCaseRepository,
+        source_document_repository: SourceDocumentRepository,
     ) -> DraftEngineFacade:
         return DraftEngineFacade(
             draft_generator=draft_generator,
@@ -403,6 +408,7 @@ class RagEvalModule(Module):
             book_analyzer=book_analyzer,
             draft_repository=draft_repository,
             test_case_repository=test_case_repository,
+            source_document_repository=source_document_repository,
         )
 
     # ── Phase 3: CaseEngine 子组件 ────────────────────
