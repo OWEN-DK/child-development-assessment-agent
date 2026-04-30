@@ -1,8 +1,7 @@
 import { Table, Space, Button, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EyeOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
-import type { TestCaseDraft, TestDomain } from '@entities/rag-eval';
-import { DomainTag } from '../common/DomainTag';
+import type { TestCaseDraft } from '@entities/rag-eval';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatPercent, formatTimestamp } from '@entities/rag-eval';
 
@@ -31,8 +30,6 @@ export function DraftTable({
 }: DraftTableProps) {
   const columns: ColumnsType<TestCaseDraft> = [
     { title: '查询', dataIndex: 'query', width: 220, ellipsis: true },
-    { title: '领域', dataIndex: 'domain', width: 100, render: (d: TestDomain) => <DomainTag domain={d} /> },
-    { title: '年龄段', dataIndex: 'age_stage_label', width: 90 },
     {
       title: '忠实度',
       dataIndex: 'faithfulness_score',

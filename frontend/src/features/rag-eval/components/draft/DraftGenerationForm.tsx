@@ -1,18 +1,12 @@
 import { Form, Select, InputNumber, Button, Space, Card, Typography } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
-import type { TestDomain } from '@entities/rag-eval';
-import { DOMAIN_MAP, AGE_STAGES } from '@entities/rag-eval';
 
 const { Title } = Typography;
-
-const domainOptions = Object.entries(DOMAIN_MAP).map(([value, label]) => ({ value, label }));
 
 interface DraftGenerationFormValues {
   document_id: string;
   max_qa_per_chunk: number;
   min_qa_per_chunk: number;
-  age_ranges: string[];
-  domains: TestDomain[];
 }
 
 interface DraftGenerationFormProps {
@@ -38,8 +32,6 @@ export function DraftGenerationForm({ documents, loading, onSubmit }: DraftGener
         initialValues={{
           max_qa_per_chunk: 3,
           min_qa_per_chunk: 1,
-          age_ranges: ['1-2岁', '2-3岁'],
-          domains: ['gross_motor', 'fine_motor', 'language', 'cognitive', 'social_emotional', 'sensory_integration'],
         }}
         onFinish={onSubmit}
       >
@@ -76,18 +68,6 @@ export function DraftGenerationForm({ documents, loading, onSubmit }: DraftGener
             <InputNumber min={1} max={20} style={{ width: '100%' }} />
           </Form.Item>
         </Space>
-
-        <Form.Item label="年龄段范围" name="age_ranges">
-          <Select
-            mode="multiple"
-            placeholder="选择年龄段"
-            options={AGE_STAGES.map((s) => ({ value: s, label: s }))}
-          />
-        </Form.Item>
-
-        <Form.Item label="目标领域" name="domains">
-          <Select mode="multiple" placeholder="选择领域" options={domainOptions} />
-        </Form.Item>
 
         <Button type="primary" htmlType="submit" loading={loading} icon={<RocketOutlined />} block>
           开始生成
