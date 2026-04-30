@@ -34,14 +34,10 @@ export interface SourceDocument {
 export interface TestCaseDraft {
   id: string;
   query: string;
-  age: number;
-  age_stage_label: string;
-  domain: TestDomain;
   description: string | null;
   difficulty_level: string | null;
   expected_knowledge_ids: string[];
   expected_keywords: string[];
-  answer_points_summary: string | null;
   answer_points: string | null;
   professional_terms: string[];
   source_document_id: string | null;
@@ -56,15 +52,11 @@ export interface TestCaseDraft {
 export interface DraftGenerationConfig {
   max_qa_per_chunk?: number;
   min_qa_per_chunk?: number;
-  age_ranges?: string[];
-  domains?: TestDomain[];
-  difficulty_overrides?: Record<string, string>;
 }
 
 // 草稿筛选（本地使用）
 export interface DraftFilters {
   status?: DraftStatus;
-  domain?: TestDomain;
   search?: string;
   page?: number;
   page_size?: number;
