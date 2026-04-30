@@ -5,10 +5,10 @@
 替代原有 O(n²) 的 SequenceMatcher 比较。
 """
 
-import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from src.utils.hash_utils import content_hash
 from src.utils.logger import logger
 
 try:
@@ -179,8 +179,8 @@ class DedupEngine:
             return items
 
     def _compute_hash(self, content: str) -> str:
-        """计算内容 MD5 哈希"""
-        return hashlib.md5(content.encode("utf-8")).hexdigest()
+        """计算内容 SHA-256 哈希（统一使用 hash_utils.content_hash）"""
+        return content_hash(content)
 
     def _compute_minhash(self, content: str) -> "MinHash":
         """计算内容 MinHash 签名"""

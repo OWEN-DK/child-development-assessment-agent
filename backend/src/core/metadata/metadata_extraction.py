@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import time
 from typing import Callable, List, Optional
 
 from llama_index.core.schema import Node
@@ -43,12 +44,20 @@ class MetadataExtractionService:
         """标准处理方式：每个节点都提取元数据"""
         total = total_chunks or len(nodes)
         processed_count = 0
+        llm_total_time = 0.0
+        llm_call_count = 0
 
         async def process_single(node: Node) -> Optional[Node]:
-            nonlocal processed_count
+            nonlocal processed_count, llm_total_time, llm_call_count
             async with self.semaphore:
                 try:
+                    t0 = time.monotonic()
                     meta = await MetadataExtractor.extract(node.get_content())
+                    dt = time.monotonic() - t0
+                    llm_total_time += dt
+                    llm_call_count += 1
+                    if llm_call_count <= 3 or llm_call_count % 20 == 0:
+                        logger.info(f"[PERF] LLM extract #{llm_call_count}: {dt:.2f}s (avg: {llm_total_time/llm_call_count:.2f}s)")
                     meta_dict = meta.model_dump()
                     serialize_list_fields(meta_dict)
                     node.metadata.update(meta_dict)
@@ -62,6 +71,7 @@ class MetadataExtractionService:
 
         results = await asyncio.gather(*(process_single(n) for n in nodes))
         processed = [n for n in results if n is not None]
+        logger.info(f"[PERF] process_standard total: {llm_call_count} LLM calls, avg {llm_total_time/max(llm_call_count,1):.2f}s/call, total_llm_time={llm_total_time:.2f}s")
         log_standard_stats(processed)
         return processed
 
@@ -76,27 +86,43 @@ class MetadataExtractionService:
         """分层元数据提取策略：文档级 + 关键块 LLM + 普通块规则"""
         total = total_chunks or len(nodes)
         processed_count = 0
+        llm_total_time = 0.0
+        llm_call_count = 0
+        rule_total_time = 0.0
+        rule_call_count = 0
 
         if doc_level_metadata is None:
+            t0 = time.monotonic()
             doc_level_metadata = await self._extract_doc_metadata(nodes)
+            logger.info(f"[PERF] doc_level_metadata extraction: {time.monotonic() - t0:.2f}s")
 
         key_indices = identify_key_chunks(nodes)
         logger.info(f"Identified {len(key_indices)} key chunks out of {total}")
 
         async def process_single(node: Node, idx: int) -> Optional[Node]:
-            nonlocal processed_count
+            nonlocal processed_count, llm_total_time, llm_call_count, rule_total_time, rule_call_count
             async with self.semaphore:
                 try:
                     if idx in key_indices:
+                        t0 = time.monotonic()
                         meta = await MetadataExtractor.extract(
                             node.get_content(), use_cache=True
                         )
+                        dt = time.monotonic() - t0
+                        llm_total_time += dt
+                        llm_call_count += 1
+                        if llm_call_count <= 3 or llm_call_count % 10 == 0:
+                            logger.info(f"[PERF] LLM key_chunk #{llm_call_count}: {dt:.2f}s (avg: {llm_total_time/max(llm_call_count,1):.2f}s)")
                         meta_dict = meta.model_dump()
                         node.metadata["metadata_source"] = "llm_key_chunk"
                     else:
+                        t0 = time.monotonic()
                         from src.core.metadata_extractor import _rule_extractor
 
                         meta_dict = _rule_extractor.extract(node.get_content()).model_dump()
+                        dt = time.monotonic() - t0
+                        rule_total_time += dt
+                        rule_call_count += 1
                         self._inherit_doc_metadata(meta_dict, doc_level_metadata)
                         node.metadata["metadata_source"] = "rule_based"
 
@@ -114,6 +140,10 @@ class MetadataExtractionService:
             *(process_single(n, i) for i, n in enumerate(nodes))
         )
         processed = [n for n in results if n is not None]
+        logger.info(
+            f"[PERF] process_hierarchical: {llm_call_count} LLM calls ({llm_total_time:.2f}s), "
+            f"{rule_call_count} rule calls ({rule_total_time:.2f}s)"
+        )
         log_hierarchical_stats(processed)
         return processed
 

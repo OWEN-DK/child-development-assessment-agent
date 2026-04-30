@@ -14,17 +14,24 @@ import { getDraftStatusLabel } from '@entities/rag-eval';
 import { formatPercent, formatTimestamp } from '@entities/rag-eval';
 import { ProgressList } from '../../../components/progress';
 import { draftGenerationConfig } from '../../../components/progress/configs/draftGeneration';
+import { usePagination } from '@shared/hooks/usePagination';
 
 const { Title, Text, Paragraph } = Typography;
 
 export function DraftPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [searchText, setSearchText] = useState('');
+  const { currentPage, pageSize, total, setCurrentPage, setPageSize, setTotal } = usePagination();
 
   const { data, isLoading, isError } = useDrafts({
     status: statusFilter as 'pending' | 'approved' | 'rejected' | undefined,
-    page_size: 20,
+    page: currentPage,
+    page_size: pageSize,
   });
+
+  // 同步服务端返回的 total
+  const serverTotal = data?.total ?? 0;
+  if (serverTotal !== total) setTotal(serverTotal);
 
   const { data: sourceDocsData } = useSourceDocuments();
   const sourceDocuments = sourceDocsData?.items || [];
@@ -43,6 +50,17 @@ export function DraftPage() {
     if (!searchText) return true;
     return d.query.toLowerCase().includes(searchText.toLowerCase());
   });
+
+  const handlePageChange = useCallback((page: number, size: number) => {
+    setCurrentPage(page);
+    if (size !== pageSize) setPageSize(size);
+  }, [pageSize, setCurrentPage, setPageSize]);
+
+  // 状态筛选变更时重置到第一页
+  const handleStatusChange = useCallback((value: string | undefined) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  }, [setCurrentPage]);
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -71,10 +89,27 @@ export function DraftPage() {
     });
   }, [selectedRowKeys, deleteMutation]);
 
-  const handleBatchImport = useCallback(async () => {
+  const handleBatchApprove = useCallback(async () => {
     if (selectedRowKeys.length === 0) return;
-    message.info('批量导入用例功能开发中');
-  }, [selectedRowKeys]);
+    Modal.confirm({
+      title: '批量通过',
+      content: `确定要通过选中的 ${selectedRowKeys.length} 个草稿吗？`,
+      onOk: async () => {
+        // 后端仅支持单个审核，逐个调用
+        const results = await Promise.allSettled(
+          selectedRowKeys.map(id => reviewMutation.mutateAsync({ id, status: 'approved' })),
+        );
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+        setSelectedRowKeys([]);
+        if (failed > 0) {
+          message.warning(`通过 ${succeeded} 个，失败 ${failed} 个`);
+        } else {
+          message.success(`已通过 ${succeeded} 个草稿`);
+        }
+      },
+    });
+  }, [selectedRowKeys, reviewMutation]);
 
   const handleGenerate = useCallback(
     async (values: { document_id: string; max_qa_per_chunk: number; min_qa_per_chunk: number }) => {
@@ -120,14 +155,14 @@ export function DraftPage() {
           <Input.Search placeholder="搜索查询..." allowClear onSearch={setSearchText} style={{ width: '100%' }} />
         </Col>
         <Col xs={12} sm={6}>
-          <Select placeholder="状态筛选" allowClear value={statusFilter} onChange={setStatusFilter}
+          <Select placeholder="状态筛选" allowClear value={statusFilter} onChange={handleStatusChange}
             options={['pending', 'generating', 'generated', 'approved', 'rejected', 'archived', 'imported'].map((s) => ({ value: s, label: getDraftStatusLabel(s as never) }))}
             style={{ width: '100%' }} />
         </Col>
         <Col xs={24} sm={10}>
           <Space>
+            <Button disabled={selectedRowKeys.length === 0} onClick={handleBatchApprove}>批量通过</Button>
             <Button danger disabled={selectedRowKeys.length === 0} onClick={handleBatchDelete} loading={deleteMutation.isPending}>批量删除</Button>
-            <Button disabled={selectedRowKeys.length === 0} onClick={handleBatchImport}>批量导入用例</Button>
           </Space>
         </Col>
       </Row>
@@ -142,6 +177,7 @@ export function DraftPage() {
       <DraftTable
         drafts={filteredDrafts}
         loading={isLoading}
+        pagination={{ current: currentPage, pageSize, total, onPageChange: handlePageChange }}
         onView={setDetailDraft}
         onApprove={handleApprove}
         onReject={handleReject}

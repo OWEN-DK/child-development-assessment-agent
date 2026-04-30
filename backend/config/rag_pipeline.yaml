@@ -26,7 +26,7 @@ pipelines:
         bm25_top_k: 10
         vector_top_k: 10
         bm25_weight: 0.5
-        vector_weight: 0.5
+        # vector_weight 由代码自动计算 (1 - bm25_weight)
         fusion_mode: "reciprocal_rank"
     
     - name: reranking
@@ -64,19 +64,13 @@ pipelines:
         min_length: 2
         max_length: 10
     
-    - name: age_filter
-      enabled: true
-      config:
-        strictness: 0.7
-        tolerance: 2
-    
     - name: hybrid_retrieval
       enabled: true
       config:
         bm25_top_k: 10
         vector_top_k: 10
         bm25_weight: 0.5
-        vector_weight: 0.5
+        # vector_weight 由代码自动计算 (1 - bm25_weight)
         fusion_mode: "reciprocal_rank"
     
     - name: reranking

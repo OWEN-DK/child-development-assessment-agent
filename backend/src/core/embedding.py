@@ -151,6 +151,21 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
         elif len(query) > self.max_text_length:
             logger.warning(f"Query too long ({len(query)} chars), truncating.")
             query = query[: self.max_text_length]
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = super().get_query_embedding(query)
+                if result and len(result) > 0:
+                    return result
+            except Exception as e:
+                error_msg = str(e)
+                non_transient = ["InvalidApiKey", "401", "403", "AccessDenied"]
+                if any(err in error_msg for err in non_transient):
+                    raise
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(2 ** attempt)
         return super().get_query_embedding(query)
 
     async def aget_text_embedding_batch(
@@ -212,4 +227,19 @@ class SafeDashScopeEmbedding(DashScopeEmbedding):
         elif len(query) > self.max_text_length:
             logger.warning(f"Query too long ({len(query)} chars), truncating.")
             query = query[: self.max_text_length]
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = await super().aget_query_embedding(query)
+                if result and len(result) > 0:
+                    return result
+            except Exception as e:
+                error_msg = str(e)
+                non_transient = ["InvalidApiKey", "401", "403", "AccessDenied"]
+                if any(err in error_msg for err in non_transient):
+                    raise
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(2 ** attempt)
         return await super().aget_query_embedding(query)

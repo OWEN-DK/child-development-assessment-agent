@@ -84,7 +84,6 @@ class Settings(
                 "rag_search_",
                 "rag_cache_",
                 "rag_reranker_",
-                "rag_age_filter_",
                 "query_router_",
                 "fusion_",
                 "rag_similarity_threshold",
@@ -169,7 +168,6 @@ class Settings(
             "rag_reranker_",
             "rag_similarity_threshold",
             "rag_min_result_count",
-            "rag_age_filter_",
             "query_router_",
             "fusion_",
             "rag_layered_content_",
@@ -228,8 +226,6 @@ class Settings(
             components.append("Embedding模型")
         if "cache" in field_name:
             components.append("缓存系统")
-        if "age_filter" in field_name:
-            components.append("年龄过滤")
         if "pageindex" in field_name:
             components.append("PageIndex服务")
         if "query_router" in field_name or "fusion" in field_name:

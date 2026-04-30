@@ -93,10 +93,10 @@ export interface TestCaseFormValues
 export interface TestSet {
   id: string;
   name: string;
-  description: string | null;
+  description: string;
+  source_type: string;
+  case_count: number;
   case_ids: string[];
-  test_case_count: number;
-  domains: TestDomain[];
   created_at: string;
   updated_at: string;
 }

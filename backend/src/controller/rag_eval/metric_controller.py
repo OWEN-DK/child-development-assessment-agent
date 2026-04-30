@@ -44,9 +44,9 @@ class MetricController:
     async def evaluate(self, run_id: str = Path(...)):
         """触发双轨评估 — 调用 MetricEngine 计算并回写 test_runs"""
         run = await self._run.get_run(run_id)
-        # 收集执行结果用于指标计算（简化实现）
-        results = []
-        metrics, diagnosis = await self._metric.calculate_and_diagnose(run_id, results)
+        results = await self._run.get_run_results(run_id)
+        metrics, diagnosis = await self._metric.calculate_and_diagnose(run_id, results, run_data=run)
+        await self._run.save_evaluation(run_id, metrics, diagnosis)
         return APIResponse.success({
             "metrics": metrics.model_dump(mode="json") if metrics else None,
             "diagnosis": diagnosis.model_dump(mode="json") if diagnosis else None,

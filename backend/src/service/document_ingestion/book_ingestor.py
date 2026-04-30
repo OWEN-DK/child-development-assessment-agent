@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
@@ -118,8 +119,11 @@ class BookIngestor:
 
     async def _ingest_book_with_state(self, task_id: str, file_path: str, file_name: str, file_hash: str, task_state: Optional[TaskState] = None, progress_callback: Callable[[str, float, str], None] = None):
         task_state_service = get_task_state_service()
+        t_total_start = time.monotonic()
         try:
+            t_start = time.monotonic()
             actual_total_pages = self.parser.get_actual_total_pages(file_path)
+            logger.info(f"[PERF] get_total_pages: {time.monotonic() - t_start:.2f}s")
             if progress_callback:
                 await _safe_call_callback(progress_callback, "parsing", 10.0, "正在解析文件")
             await task_state_service.update(
@@ -135,24 +139,32 @@ class BookIngestor:
                     if asyncio.iscoroutine(res):
                         asyncio.run_coroutine_threadsafe(res, loop)
 
+            t_start = time.monotonic()
             documents, parser_cls = await asyncio.to_thread(
                 self.parser.parse_document, file_path, page_progress_callback
             )
+            logger.info(f"[PERF] parse_document: {time.monotonic() - t_start:.2f}s, got {len(documents)} chunks")
             # 使用线程池执行同步的 VL 解析检查，避免阻塞事件循环
+            t_start = time.monotonic()
             documents = await asyncio.to_thread(
                 self.parser.check_vl_parsing, file_path, documents, parser_cls
             )
+            logger.info(f"[PERF] check_vl_parsing: {time.monotonic() - t_start:.2f}s")
             if not documents:
                 raise ValueError("无法从文件中提取文本。该文件可能是扫描版PDF或空文件，且无法使用VL模型识别。")
             logger.info(f"Parsed {len(documents)} document chunks/pages.")
 
             # 使用线程池执行同步的章节计算和文档清理，避免阻塞事件循环
+            t_start = time.monotonic()
             chapter_count = await asyncio.to_thread(
                 self.parser.calculate_chapter_count, file_path, documents
             )
+            logger.info(f"[PERF] calculate_chapter_count: {time.monotonic() - t_start:.2f}s")
+            t_start = time.monotonic()
             documents = await asyncio.to_thread(
                 self.parser.clean_documents, documents, file_name
             )
+            logger.info(f"[PERF] clean_documents: {time.monotonic() - t_start:.2f}s")
             if not documents:
                 logger.error(f"No valid content found in {file_name} after cleaning")
                 raise ValueError(f"文件 {file_name} 中未找到有效内容，请检查文件内容是否正常")
@@ -186,6 +198,7 @@ class BookIngestor:
                 task_id=task_id, task_type=TASK_TYPE,
                 updates={"progress": 100.0, "message": "文档导入完成"}
             )
+            logger.info(f"[PERF] TOTAL ingest_book: {time.monotonic() - t_total_start:.2f}s")
         except TaskCancelledException:
             logger.info(f"Task cancelled for {file_name}. Cleaning up...")
             if await document_manager.exists(file_hash):

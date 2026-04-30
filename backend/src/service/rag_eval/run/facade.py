@@ -108,6 +108,29 @@ class RunEngineFacade:
             raise TestRunNotFoundException(run_id)
         return self._mapper.to_read(orm_obj, TestRunRead)
 
+    async def get_run_results(self, run_id: str) -> list[TestRunResultItem]:
+        """获取测试运行的全部结果项"""
+        orm_results = await self._result_repo.get_by_run_id(run_id)
+        return [TestRunResultItem.model_validate(r) for r in orm_results]
+
+    async def save_evaluation(
+        self,
+        run_id: str,
+        metrics: "RunMetrics | None" = None,
+        diagnosis: "DiagnosisResult | None" = None,
+    ) -> None:
+        """将评估结果回写到 test_runs 表"""
+        update_data: dict = {}
+        if metrics is not None:
+            update_data["l1_metrics_json"] = metrics.l1.model_dump(mode="json")
+            update_data["l2_metrics_json"] = metrics.l2.model_dump(mode="json")
+            update_data["l3_metrics_json"] = metrics.l3.model_dump(mode="json")
+            update_data["overall_score"] = metrics.overall_score
+        if diagnosis is not None:
+            update_data["diagnosis_json"] = diagnosis.model_dump(mode="json")
+        if update_data:
+            await self._run_repo.update(run_id, update_data)
+
     async def list_runs(self, status: str | None = None, test_set_id: str | None = None,
                         page: int = 1, page_size: int = 20) -> TestRunList:
         """列出测试运行，支持按 status 过滤和分页"""

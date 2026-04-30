@@ -26,7 +26,6 @@ class QueryRewriteStep(PipelineStep):
         # 构建提示词
         prompt = f"""请优化以下用户查询，使其更适合用于知识检索，保留原始语义：
 查询：{context.query}
-用户儿童年龄：{context.age}岁
 
 要求：
 1. 补充查询中缺失的相关领域术语

@@ -29,6 +29,7 @@ class MetricInput(BaseModel):
     execution_time_ms: Optional[int] = None
     token_count: Optional[int] = None
     cost_usd: Optional[float] = None
+    details: dict[str, Any] = {}
 
 
 class MetricOutput(BaseModel):

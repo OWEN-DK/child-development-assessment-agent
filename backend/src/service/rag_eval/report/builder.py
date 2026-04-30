@@ -44,13 +44,15 @@ class ReportBuilder:
         if run is None:
             raise TestRunNotFoundException(run_id)
 
-        metrics_json = run.metrics_json or {}
-        l1_json = metrics_json.get("l1", {}) if isinstance(metrics_json, dict) else {}
-        l2_json = metrics_json.get("l2", {}) if isinstance(metrics_json, dict) else {}
-        l3_json = metrics_json.get("l3", {}) if isinstance(metrics_json, dict) else {}
+        l1_json = run.l1_metrics_json or {}
+        l2_json = run.l2_metrics_json or {}
+        l3_json = run.l3_metrics_json or {}
         diag_json = run.diagnosis_json or {}
 
-        metrics = self._parse_metrics(l1_json, l2_json, l3_json, metrics_json)
+        metrics = self._parse_metrics(l1_json, l2_json, l3_json, {
+            "overall_score": run.overall_score,
+            "weights": {"l1": 0.4, "l2": 0.4, "l3": 0.2},
+        })
         bad_cases = self._build_bad_cases(await self._result_repo.get_failed_results_by_run(run_id))
         tuning = self._build_tuning(await self._suggestion_repo.get_by_run_id(run_id))
 
@@ -95,7 +97,7 @@ class ReportBuilder:
             critical_issues=diag_json.get("critical_issues", 0) if isinstance(diag_json, dict) else 0,
             run_name=run.name, total_cases=run.total_test_cases or 0,
             passed_cases=run.passed_test_cases or 0,
-            duration_ms=getattr(run, "duration_ms", None),
+            duration_ms=self._calc_duration_ms(run),
         )
 
     def _build_dashboard(self, l1, l2, l3) -> ScoringDashboard:
@@ -185,3 +187,10 @@ class ReportBuilder:
         severity_order = {"critical": 0, "warning": 1, "info": 2}
         entries.sort(key=lambda e: severity_order.get(e.severity, 99))
         return entries
+
+    @staticmethod
+    def _calc_duration_ms(run) -> int | None:
+        if run.started_at and run.completed_at:
+            delta = run.completed_at - run.started_at
+            return int(delta.total_seconds() * 1000)
+        return None

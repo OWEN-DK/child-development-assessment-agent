@@ -4,12 +4,21 @@ import { EyeOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-
 import type { TestCaseDraft } from '@entities/rag-eval';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatPercent, formatTimestamp } from '@entities/rag-eval';
+import { PAGE_SIZE_OPTIONS } from '@shared/lib/constants';
 
 const { Text } = Typography;
+
+interface PaginationState {
+  current: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number, pageSize: number) => void;
+}
 
 interface DraftTableProps {
   drafts: TestCaseDraft[];
   loading?: boolean;
+  pagination: PaginationState;
   onView: (draft: TestCaseDraft) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -21,6 +30,7 @@ interface DraftTableProps {
 export function DraftTable({
   drafts,
   loading,
+  pagination,
   onView,
   onApprove,
   onReject,
@@ -64,7 +74,16 @@ export function DraftTable({
       loading={loading}
       size="small"
       rowSelection={onSelectChange ? { selectedRowKeys, onChange: (keys) => onSelectChange(keys as string[]) } : undefined}
-      pagination={{ pageSize: 20, showSizeChanger: true }}
+      pagination={{
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+        total: pagination.total,
+        showSizeChanger: true,
+        pageSizeOptions: PAGE_SIZE_OPTIONS.map(String),
+        onChange: pagination.onPageChange,
+        onShowSizeChange: pagination.onPageChange,
+        showTotal: (total) => `共 ${total} 条`,
+      }}
       scroll={{ x: 900 }}
     />
   );

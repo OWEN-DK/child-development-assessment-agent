@@ -1,7 +1,8 @@
 """DraftEngineFacade - 草稿引擎门面"""
 
 import asyncio
-from typing import Optional
+import re
+from typing import ClassVar, Optional
 
 from src.schemas.rag_eval.draft import (
     DraftGenerationConfig, DraftList, DraftRead, DraftReview, DraftUpdate,
@@ -24,6 +25,11 @@ from src.utils.orm_mapper import OrmMapper
 
 class DraftEngineFacade:
     """草稿引擎门面——流水线化生成与忠诚度检查"""
+
+    _SKIP_PATTERNS: ClassVar[list[str]] = [
+        "目录", "版权", "版权所有", "出版信息", "前言", "序言",
+        "ISBN", "责任编辑", "封面设计", "版次", "印次",
+    ]
 
     def __init__(
         self, draft_generator: DraftGenerator, faithfulness_checker: FaithfulnessChecker,
@@ -56,6 +62,7 @@ class DraftEngineFacade:
         try:
             doc = await self._load_doc(source_document_id)
             chunks = await self._load_chunks(doc.file_hash)
+            chunks = self._filter_chunks(chunks)
             await pub("generation_started", "开始", document_id=source_document_id)
             meta = await self._analyzer.analyze(
                 title=doc.title or "",
@@ -269,6 +276,30 @@ class DraftEngineFacade:
         if not o:
             raise ValueError(f"源文档不存在: {doc_id}")
         return OrmMapper.to_read(o, SourceDocumentRead)
+
+    def _filter_chunks(self, chunks: list[dict]) -> list[dict]:
+        """过滤掉不适合生成测试用例的分块（过短、无实质内容、非正文）"""
+        min_length = self._config.get_config_value(
+            "rag.eval.draft.min_chunk_length", 100,
+        )
+        filtered = []
+        for c in chunks:
+            content = c.get("content", "")
+            # 过短
+            if len(content) < min_length:
+                continue
+            # 去除空白和标点后实质内容过少（纯数字/符号分隔线等）
+            text = re.sub(r"[\s\d\W_]+", "", content)
+            if len(text) < min_length * 0.3:
+                continue
+            # 短内容匹配非正文模式（目录/版权页等），仅对 <300 字符检查避免误杀正文
+            if len(content) < 300 and any(p in content for p in self._SKIP_PATTERNS):
+                continue
+            filtered.append(c)
+        skipped = len(chunks) - len(filtered)
+        if skipped:
+            logger.info(f"分块预过滤: {len(chunks)} → {len(filtered)} (跳过 {skipped})")
+        return filtered
 
     async def _load_chunks(self, file_hash: str) -> list[dict]:
         """按 file_hash 从向量库加载文档的所有分块"""

@@ -72,8 +72,6 @@ def test_scores_are_independent(retrieval_service):
             metadata={
                 "content": "适合 3 岁儿童的精细动作训练方法",
                 "file_name": "测试书籍.pdf",
-                "target_age_min": 3,
-                "target_age_max": 4,
                 "topics": ["精细动作"],
                 "brain_regions": [],
                 "benefits": [],
@@ -106,8 +104,6 @@ def test_sorting_by_relevance_score_only(retrieval_service):
                 metadata={
                     "content": "内容 1",
                     "file_name": "书",
-                    "target_age_min": 0,
-                    "target_age_max": 18,
                     "topics": [],
                     "brain_regions": [],
                     "benefits": [],
@@ -122,8 +118,6 @@ def test_sorting_by_relevance_score_only(retrieval_service):
                 metadata={
                     "content": "内容 2",
                     "file_name": "书",
-                    "target_age_min": 0,
-                    "target_age_max": 18,
                     "topics": [],
                     "brain_regions": [],
                     "benefits": [],
@@ -138,8 +132,6 @@ def test_sorting_by_relevance_score_only(retrieval_service):
                 metadata={
                     "content": "内容 3",
                     "file_name": "书",
-                    "target_age_min": 0,
-                    "target_age_max": 18,
                     "topics": [],
                     "brain_regions": [],
                     "benefits": [],
@@ -171,8 +163,6 @@ def test_backward_compatibility():
         "score": 85.0,
         "raw_score": 0.85,
         "source_book": "测试书籍",
-        "target_age_min": 3,
-        "target_age_max": 4,
         "topics": [],
         "brain_regions": [],
         "file_hash": "abc123",

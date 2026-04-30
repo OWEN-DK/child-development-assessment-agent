@@ -54,15 +54,11 @@ const mockTestCasesResponse = {
   total: 1, page: 1, page_size: 20,
 };
 
-const mockTestSetsResponse = {
-  items: [{
-    id: 'set-1', name: '测试集A', description: '描述',
-    case_ids: ['case-1'], test_case_count: 1,
-    domains: ['cognitive' as const],
-    created_at: '2026-04-28T00:00:00Z', updated_at: '2026-04-28T00:00:00Z',
-  }],
-  total: 1, page: 1, page_size: 20,
-};
+const mockTestSetsResponse = [{
+  id: 'set-1', name: '测试集A', description: '描述',
+  source_type: 'manual', case_count: 1, case_ids: ['case-1'],
+  created_at: '2026-04-28T00:00:00Z', updated_at: '2026-04-28T00:00:00Z',
+}];
 
 const mockRunsResponse = {
   items: [{
@@ -326,8 +322,8 @@ describe('useTestSets', () => {
   it('加载完成后返回测试集列表', async () => {
     const { result } = renderHook(() => useTestSets(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.items).toHaveLength(1);
-    expect(result.current.data?.items[0].name).toBe('测试集A');
+    expect(result.current.data).toHaveLength(1);
+    expect(result.current.data?.[0].name).toBe('测试集A');
   });
 });
 
@@ -335,7 +331,7 @@ describe('useTestSet', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('传入有效 ID 时获取测试集详情', async () => {
-    vi.mocked(casesApi.getTestSet).mockResolvedValue(mockTestSetsResponse.items[0]);
+    vi.mocked(casesApi.getTestSet).mockResolvedValue(mockTestSetsResponse[0]);
     const { result } = renderHook(() => useTestSet('set-1'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.id).toBe('set-1');
@@ -351,7 +347,7 @@ describe('useCreateTestSet', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('mutate 时调用 createTestSet', async () => {
-    vi.mocked(casesApi.createTestSet).mockResolvedValue(mockTestSetsResponse.items[0]);
+    vi.mocked(casesApi.createTestSet).mockResolvedValue(mockTestSetsResponse[0]);
     const { result } = renderHook(() => useCreateTestSet(), { wrapper: createWrapper() });
     result.current.mutate({ name: '测试集A', description: '描述', case_ids: ['case-1'] });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -404,9 +400,9 @@ describe('useCreateRun', () => {
   it('mutate 时调用 createRun', async () => {
     vi.mocked(runsApi.createRun).mockResolvedValue(mockRunsResponse.items[0]);
     const { result } = renderHook(() => useCreateRun(), { wrapper: createWrapper() });
-    result.current.mutate({ name: '运行1', testSetId: 'set-1' });
+    result.current.mutate({ name: '运行1', test_set_ids: ['set-1'] });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(runsApi.createRun).toHaveBeenCalledWith({ name: '运行1', testSetId: 'set-1' });
+    expect(runsApi.createRun).toHaveBeenCalledWith({ name: '运行1', test_set_ids: ['set-1'] });
   });
 });
 

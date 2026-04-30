@@ -25,7 +25,10 @@ from src.service.rag_eval.metrics.scoring.calculators.groundedness_calc import \
     GroundednessCalculator
 from src.service.rag_eval.metrics.scoring.calculators.mrr_ndcg import MRR, NDCG
 from src.service.rag_eval.metrics.scoring.calculators.precision_recall import (
-    ContextRecall, NoiseSensitivity, PrecisionAtK,
+    ContextRecall, NoiseSensitivity, PrecisionAtK, RuleComplianceCalculator,
+)
+from src.service.rag_eval.metrics.scoring.system import (
+    ConfigStabilityCalculator, CostEfficiencyCalculator, RegressionScoreCalculator,
 )
 from src.service.rag_eval.metrics.scoring.facade import ScoringFacade
 from src.service.rag_eval.metrics.scoring.generation import GenerationScorer
@@ -274,6 +277,26 @@ class RagEvalModule(Module):
 
     @singleton
     @provider
+    def provide_rule_compliance_calculator(self) -> RuleComplianceCalculator:
+        return RuleComplianceCalculator()
+
+    @singleton
+    @provider
+    def provide_regression_score_calculator(self) -> RegressionScoreCalculator:
+        return RegressionScoreCalculator()
+
+    @singleton
+    @provider
+    def provide_cost_efficiency_calculator(self) -> CostEfficiencyCalculator:
+        return CostEfficiencyCalculator()
+
+    @singleton
+    @provider
+    def provide_config_stability_calculator(self) -> ConfigStabilityCalculator:
+        return ConfigStabilityCalculator()
+
+    @singleton
+    @provider
     def provide_metric_registry(
         self,
         precision_at_k: PrecisionAtK,
@@ -284,6 +307,10 @@ class RagEvalModule(Module):
         faithfulness_calculator: FaithfulnessCalculator,
         answer_relevancy_calculator: AnswerRelevancyCalculator,
         groundedness_calculator: GroundednessCalculator,
+        rule_compliance_calculator: RuleComplianceCalculator,
+        regression_score_calculator: RegressionScoreCalculator,
+        cost_efficiency_calculator: CostEfficiencyCalculator,
+        config_stability_calculator: ConfigStabilityCalculator,
     ) -> MetricRegistry:
         registry = MetricRegistry()
         registry.register(precision_at_k)
@@ -294,6 +321,10 @@ class RagEvalModule(Module):
         registry.register(faithfulness_calculator)
         registry.register(answer_relevancy_calculator)
         registry.register(groundedness_calculator)
+        registry.register(rule_compliance_calculator)
+        registry.register(regression_score_calculator)
+        registry.register(cost_efficiency_calculator)
+        registry.register(config_stability_calculator)
         return registry
 
     # ── Phase 1: MetricEngine 三层门面 ──────────────
@@ -450,12 +481,16 @@ class RagEvalModule(Module):
     def provide_batch_runner(
         self, test_case_executor: TestCaseExecutor, result_processor: ResultProcessor,
         test_run_repository: TestRunRepository, test_run_result_repository: TestRunResultRepository,
+        retrieval_service: IRetrievalService,
     ) -> BatchTestRunner:
+        from src.api.sse import SSEPublisher
         return BatchTestRunner(
             executor=test_case_executor,
             result_processor=result_processor,
             test_run_repository=test_run_repository,
             test_run_result_repository=test_run_result_repository,
+            sse_publisher=SSEPublisher,
+            retrieval_service=retrieval_service,
         )
 
     @singleton

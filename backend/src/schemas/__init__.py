@@ -17,7 +17,7 @@ from src.schemas.auth import User
 from src.schemas.common import APIResponse, HealthResponse, PaginatedResponse
 # 配置模块新增
 # 配置模块
-from src.schemas.config import (AgeFilterConfig, ApplyRequest, ApplyResponse,
+from src.schemas.config import (ApplyRequest, ApplyResponse,
                                 ConfigChangeSetRequest,
                                 ConfigChangeSetResponse, ConfigConflictRequest,
                                 ConfigExportResponse, ConfigGroupResponse,
@@ -192,7 +192,6 @@ __all__ = [
     "DiagnosticSuggestion",
     "HealthDiagnosticResponse",
     "LLMProviderConfig",
-    "AgeFilterConfig",
     "PreviewRequest",
     "PreviewResponse",
     "ApplyRequest",

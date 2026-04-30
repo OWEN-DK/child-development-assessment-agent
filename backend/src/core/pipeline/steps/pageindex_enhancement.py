@@ -24,10 +24,8 @@ class PageIndexEnhancementStep(PipelineStep):
         pageindex = PageIndexWrapper()
 
         try:
-            pageindex_results = await pageindex.search(
+            pageindex_results = await pageindex.query(
                 query=context.query,
-                age=context.age,
-                limit=self.config.get("limit", 5),
             )
 
             # 融合结果

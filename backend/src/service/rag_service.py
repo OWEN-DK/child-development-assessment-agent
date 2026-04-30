@@ -23,7 +23,8 @@ class RagService:
 
         # Initialize PageIndex hybrid architecture components
         from src.core.pageindex_wrapper import PageIndexWrapper
-        from src.core.query_router import QueryRouter, QueryType
+        from src.schemas.query import QueryType
+        from src.core.query_router import QueryRouter
         from src.core.result_fusion import ResultFusion
 
         self.query_router = QueryRouter()
@@ -41,7 +42,7 @@ class RagService:
         return self.index_manager.get_index()
 
     async def retrieve_knowledge(
-        self, query: str, age: int, limit: int = 3, user_id: str = None
+        self, query: str, limit: int = 3, user_id: str = None
     ):
         """检索知识点（增强：支持 PageIndex 混合架构）"""
         start_time = time.time()
@@ -56,7 +57,7 @@ class RagService:
         import asyncio
 
         hybrid_task = self.retrieval_service.retrieve_knowledge(
-            query, age, limit, user_id
+            query, limit, user_id
         )
 
         if (
@@ -110,9 +111,12 @@ class RagService:
         self, file_path: str, original_filename: str = None, progress_callback=None, task_id: str = None
     ):
         """导入书籍（原有接口）"""
-        return await self.document_ingestion_service.ingest_book(
+        result = await self.document_ingestion_service.ingest_book(
             file_path, original_filename, progress_callback, task_id
         )
+        # 文档导入成功后刷新检索器，否则首次上传时检索器为 None 导致搜索无结果
+        self.retrieval_service.reload_retrievers()
+        return result
 
     async def delete_document(self, file_name: str) -> bool:
         """删除文档"""

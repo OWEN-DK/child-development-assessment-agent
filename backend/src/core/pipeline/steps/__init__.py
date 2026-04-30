@@ -1,4 +1,3 @@
-from .age_filter import AgeFilterStep
 from .cache_check import CacheCheckStep
 from .deduplication import DeduplicationStep
 from .hybrid_retrieval import HybridRetrievalStep
@@ -14,7 +13,6 @@ __all__ = [
     "CacheCheckStep",
     "QueryRewriteStep",
     "SynonymExpansionStep",
-    "AgeFilterStep",
     "HybridRetrievalStep",
     "RerankingStep",
     "DeduplicationStep",

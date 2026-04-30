@@ -23,14 +23,18 @@ class RunController:
         router.add_api_route("/runs/{run_id}", self.get_run, methods=["GET"])
         router.add_api_route("/runs/{run_id}", self.delete_run, methods=["DELETE"])
         router.add_api_route("/runs/batch", self.batch_delete_runs, methods=["DELETE"])
+        router.add_api_route("/runs/{run_id}/execute", self.execute_run, methods=["POST"])
         router.add_api_route("/runs/{run_id}/execute/{case_id}", self.execute_single, methods=["POST"])
         router.add_api_route("/runs/{run_id}/stream", self.stream_run, methods=["GET"])
         router.add_api_route("/runs/compare", self.compare_runs, methods=["GET"])
 
     async def create_run(self, body: TestRunCreate = Body(...)):
         result = await self._engine.create_run(body)
-        task_id = await self._engine.start_run(result.id)
-        return APIResponse.success({"run": result.model_dump(mode="json"), "task_id": task_id})
+        return APIResponse.success(result.model_dump(mode="json"))
+
+    async def execute_run(self, run_id: str = Path(...)):
+        task_id = await self._engine.start_run(run_id)
+        return APIResponse.success({"task_id": task_id})
 
     async def list_runs(
         self,
@@ -51,7 +55,7 @@ class RunController:
         return APIResponse.success(None)
 
     async def batch_delete_runs(self, body: dict = Body(...)):
-        run_ids = body.get("run_ids", [])
+        run_ids = body.get("run_ids") or body.get("ids", [])
         if not run_ids:
             raise AppException(400, 13016, "run_ids 不能为空", "INVALID_TEST_CASE_FORMAT")
         await self._engine.batch_delete_runs(run_ids)
@@ -68,8 +72,8 @@ class RunController:
 
     async def compare_runs(
         self,
-        run_id_1: str = Query(...),
-        run_id_2: str = Query(...),
+        run_id_1: str = Query(..., alias="run1"),
+        run_id_2: str = Query(..., alias="run2"),
     ):
         result = await self._engine.compare_runs(run_id_1, run_id_2)
         return APIResponse.success(result.model_dump(mode="json"))

@@ -1,45 +1,83 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   Space, Button, Table, Modal, message, Typography, Alert, Row, Col, Select, Form, Input, Progress, Popconfirm,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TestRun, TestRunStatus, TestSet } from '@entities/rag-eval';
-import { useTestRuns, useCreateRun, useDeleteRun, useBatchDeleteRuns } from '../hooks/useTestRuns';
+import { useTestRuns, useCreateRun, useExecuteRun, useDeleteRun, useBatchDeleteRuns } from '../hooks/useTestRuns';
 import { useTriggerEvaluation } from '../hooks/useMetrics';
 import { useTestSets } from '../hooks/useTestSets';
-import { useSSEProgress } from '../hooks/useSSEProgress';
+import { createSSEConnection } from '../utils/sse';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { getRunStatusLabel } from '@entities/rag-eval';
 import { formatPercent, formatDuration, formatTimestamp } from '@entities/rag-eval';
 
 const { Title, Text } = Typography;
 
+const TERMINAL_EVENTS = new Set(['run_completed', 'run_failed', 'complete', 'error']);
+
 export function RunPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [progressModalOpen, setProgressModalOpen] = useState(false);
-  const [sseUrl, setSseUrl] = useState<string | null>(null);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [form] = Form.useForm<{ name: string; test_set_ids: string[] }>();
+  const [sseProgress, setSseProgress] = useState<Record<string, { current: number; total: number }>>({});
 
   const { data, isLoading, isError, refetch } = useTestRuns({ status: statusFilter });
   const { data: testSetsData } = useTestSets();
   const createMutation = useCreateRun();
+  const executeMutation = useExecuteRun();
   const triggerEvalMutation = useTriggerEvaluation();
   const deleteMutation = useDeleteRun();
   const batchDeleteMutation = useBatchDeleteRuns();
 
-  const { events: sseEvents, status: sseStatus } = useSSEProgress(sseUrl);
+  const sseAbortRef = useRef<AbortController | null>(null);
+  const progressRef = useRef<Record<string, { current: number; total: number }>>({});
 
-  const testSets = testSetsData?.items || [];
+  const testSets = testSetsData || [];
+
+  const startSSE = useCallback((runId: string) => {
+    sseAbortRef.current?.abort();
+    const controller = new AbortController();
+    sseAbortRef.current = controller;
+
+    progressRef.current[runId] = { current: 0, total: 0 };
+    setSseProgress({ ...progressRef.current });
+
+    createSSEConnection(`/api/v1/rag/eval/runs/${runId}/stream`, controller.signal, {
+      onOpen: () => {},
+      onMessage: (raw: string) => {
+        try {
+          const event = JSON.parse(raw);
+          if (event.type === 'heartbeat') return;
+          if (event.type === 'case_started' && event.data) {
+            const idx = event.data.index ?? 0;
+            const total = event.data.total ?? 0;
+            progressRef.current[runId] = { current: idx + 1, total };
+            setSseProgress({ ...progressRef.current });
+          }
+          if (TERMINAL_EVENTS.has(event.type)) {
+            delete progressRef.current[runId];
+            setSseProgress({ ...progressRef.current });
+            refetch();
+          }
+        } catch {
+          // ignore
+        }
+      },
+      onError: () => {
+        delete progressRef.current[runId];
+        setSseProgress({ ...progressRef.current });
+      },
+    });
+  }, [refetch]);
 
   const handleCreate = useCallback(async () => {
     const values = await form.validateFields();
     await createMutation.mutateAsync({
       name: values.name,
-      testSetId: values.test_set_ids[0],
+      test_set_ids: values.test_set_ids,
     });
     setCreateModalOpen(false);
     form.resetFields();
@@ -47,12 +85,16 @@ export function RunPage() {
     refetch();
   }, [form, createMutation, refetch]);
 
-  const handleStartEvaluation = useCallback(async (id: string) => {
-    await triggerEvalMutation.mutateAsync(id);
-    setActiveRunId(id);
-    setSseUrl(`/rag/eval/runs/${id}/stream`);
-    setProgressModalOpen(true);
-  }, [triggerEvalMutation]);
+  const handleStartEvaluation = useCallback(async (id: string, status?: string) => {
+    if (status === 'completed') {
+      await triggerEvalMutation.mutateAsync(id);
+    } else if (status === 'pending') {
+      await executeMutation.mutateAsync(id);
+      startSSE(id);
+    } else {
+      startSSE(id);
+    }
+  }, [startSSE, executeMutation, triggerEvalMutation]);
 
   const handleDelete = useCallback((id: string) => {
     Modal.confirm({
@@ -74,7 +116,19 @@ export function RunPage() {
   const columns: ColumnsType<TestRun> = [
     { title: '名称', dataIndex: 'name', width: 160, ellipsis: true },
     { title: '状态', dataIndex: 'status', width: 90, render: (s: TestRunStatus) => <StatusBadge status={s} /> },
-    { title: '进度', dataIndex: 'progress', width: 120, render: (p: number) => <Progress percent={Math.round(p)} size="small" /> },
+    {
+      title: '进度', width: 140,
+      render: (_, r: TestRun) => {
+        const sse = sseProgress[r.id];
+        if (sse && sse.total > 0) {
+          const pct = Math.round((sse.current / sse.total) * 100);
+          return <Progress percent={pct} size="small" format={() => `${sse.current}/${sse.total}`} />;
+        }
+        const p = (r as any).progress;
+        if (p != null) return <Progress percent={Math.round(p)} size="small" />;
+        return <Text type="secondary">-</Text>;
+      },
+    },
     { title: '通过/总数', width: 100, render: (_, r) => <Text>{r.passed_test_cases}/{r.total_test_cases}</Text> },
     { title: '综合得分', dataIndex: 'overall_score', width: 100,
       render: (s: number | null) => s != null ? <Text strong style={{ color: s >= 0.7 ? '#52c41a' : s >= 0.5 ? '#faad14' : '#ff4d4f' }}>{formatPercent(s, 1)}</Text> : '-',
@@ -92,8 +146,14 @@ export function RunPage() {
       title: '操作', width: 180,
       render: (_, record) => (
         <Space size="small">
-          {(record.status === 'pending' || record.status === 'completed') && (
-            <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id)}>评估</Button>
+          {record.status === 'pending' && (
+            <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)} loading={executeMutation.isPending}>执行</Button>
+          )}
+          {record.status === 'running' && (
+            <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>查看进度</Button>
+          )}
+          {record.status === 'completed' && (
+            <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>重新评估</Button>
           )}
           <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -134,27 +194,6 @@ export function RunPage() {
             <Select mode="multiple" placeholder="选择测试集" options={testSets.map((s: TestSet) => ({ value: s.id, label: s.name }))} />
           </Form.Item>
         </Form>
-      </Modal>
-
-      <Modal title={`运行进度 ${activeRunId || ''}`} open={progressModalOpen} onCancel={() => { setProgressModalOpen(false); setSseUrl(null); refetch(); }} footer={null} width={500}>
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          {sseStatus === 'connecting' && <Typography.Text>连接中...</Typography.Text>}
-          {sseStatus === 'connected' && <Typography.Text>运行中... ({sseEvents.length} 条事件)</Typography.Text>}
-          {sseStatus === 'done' && <Alert type="success" message="运行已完成" showIcon />}
-          {sseStatus === 'error' && <Alert type="error" message="连接异常" showIcon />}
-        </div>
-        {sseEvents.length > 0 && (
-          <div style={{ maxHeight: 300, overflow: 'auto' }}>
-            {sseEvents.map((event, i) => (
-              <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
-                <Text code style={{ fontSize: 11 }}>{event.type}</Text>
-                {event.type === 'progress' && event.data && (
-                  <Progress percent={Math.round((event.data.progress as number) || 0)} size="small" />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </Modal>
     </div>
   );

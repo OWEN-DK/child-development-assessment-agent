@@ -1,20 +1,11 @@
 import re
 from typing import Dict, List, Optional
 
+import jieba
 import numpy as np
 from llama_index.core.schema import NodeWithScore
 
 from src.utils.logger import logger
-
-try:
-    from sklearn.metrics.pairwise import cosine_similarity
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
-    logger.warning(
-        "scikit-learn not installed. ContextCompressor deduplication will be unavailable. "
-        "Install with: pip install scikit-learn"
-    )
 
 
 class ContextCompressor:
@@ -79,14 +70,10 @@ class ContextCompressor:
         )
         
         if not filtered_nodes:
-            return nodes[:5]  # 如果过滤后为空，返回前 5 个
+            return []  # 过滤后为空，返回空列表
         
         # 2. 去重（语义相似度）
-        if SKLEARN_AVAILABLE:
-            deduped_nodes = self._deduplicate(filtered_nodes)
-        else:
-            deduped_nodes = filtered_nodes
-            logger.debug("Skipping deduplication: scikit-learn not available")
+        deduped_nodes = self._deduplicate(filtered_nodes)
         
         logger.debug(
             f"After deduplication: {len(filtered_nodes)} -> {len(deduped_nodes)} nodes"
@@ -155,22 +142,16 @@ class ContextCompressor:
         Returns:
             相似度分数（0-1 之间）
         """
-        # 分词（中文按字符，英文按单词）
-        def tokenize(text: str) -> set:
-            # 提取中文字符和英文单词
-            chinese_chars = set(re.findall(r'[\u4e00-\u9fa5]', text))
-            english_words = set(re.findall(r'[a-zA-Z]+', text.lower()))
-            return chinese_chars | english_words
-        
-        set1 = tokenize(text1)
-        set2 = tokenize(text2)
-        
-        if not set1 or not set2:
+        # jieba 分词 Jaccard 相似度
+        words1 = set(jieba.lcut(text1))
+        words2 = set(jieba.lcut(text2))
+
+        if not words1 or not words2:
             return 0.0
-        
-        intersection = len(set1 & set2)
-        union = len(set1 | set2)
-        
+
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+
         return intersection / union if union > 0 else 0.0
     
     def _truncate_by_tokens(self, nodes: List[NodeWithScore]) -> List[NodeWithScore]:

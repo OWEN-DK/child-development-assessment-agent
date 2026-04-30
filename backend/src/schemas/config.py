@@ -181,14 +181,6 @@ class LLMProviderConfig(BaseModel):
     enabled: bool = True
 
 
-class AgeFilterConfig(BaseModel):
-    """年龄过滤配置"""
-
-    tolerance: int = 1
-    strictness: float = 0.5
-    weight: float = 1.0
-
-
 # --------------------------
 # 调参建议相关
 # --------------------------

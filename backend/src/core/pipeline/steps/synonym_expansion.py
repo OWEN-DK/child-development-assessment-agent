@@ -28,7 +28,6 @@ class SynonymExpansionStep(PipelineStep):
         # 构建提示词
         prompt = f"""请为以下查询生成相关的同义词和相关术语，用于儿童发展领域的知识检索：
 查询：{context.query}
-儿童年龄：{context.age}岁
 
 要求：
 1. 生成{max_synonyms}个以内的同义词或相关术语

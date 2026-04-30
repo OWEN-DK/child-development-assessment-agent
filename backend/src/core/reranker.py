@@ -1,3 +1,4 @@
+import math
 from typing import List, Optional
 
 from llama_index.core.schema import NodeWithScore
@@ -140,7 +141,7 @@ class CrossEncoderReranker:
             improvement_rate = 0.0
 
             for node, score in zip(nodes, scores):
-                node.score = float(score)
+                node.score = 1.0 / (1.0 + math.exp(-float(score)))  # sigmoid → (0, 1)
 
             nodes.sort(key=lambda x: x.score or 0, reverse=True)
 

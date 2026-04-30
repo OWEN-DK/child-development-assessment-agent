@@ -7,22 +7,22 @@
 import json
 import os
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Set
 
 from src.config import settings
+from src.schemas.query import QueryType
 from src.utils.logger import logger
 
 
-class QueryType(Enum):
-    """查询类型枚举"""
-
-    SHORT = "short"  # 短查询 (<5 字)
-    TERMINOLOGY = "terminology"  # 专业术语查询
-    DESCRIPTIVE = "descriptive"  # 描述性查询 (含疑问词)
-    COMPLEX = "complex"  # 复杂查询 (含连接词)
-    DEFAULT = "default"  # 默认
+# 内部详细类型到统一 QueryType 的映射
+_INTERNAL_TYPE_MAP = {
+    "SHORT": QueryType.DEFAULT,
+    "TERMINOLOGY": QueryType.DEFAULT,
+    "DESCRIPTIVE": QueryType.SIMPLE,
+    "COMPLEX": QueryType.COMPLEX,
+    "DEFAULT": QueryType.DEFAULT,
+}
 
 
 @dataclass
@@ -168,17 +168,20 @@ class QueryAnalyzer:
         has_question = any(w in stripped_query for w in self._question_words)
         has_conjunction = any(w in stripped_query for w in self._conjunction_words)
 
-        # 判定逻辑（优先级从高到低）
+        # 内部详细分类（用于权重选择）
         if char_length > 15 and has_conjunction:
-            query_type = QueryType.COMPLEX
+            _internal_type = "COMPLEX"
         elif matched_terms and 3 <= char_length <= 8:
-            query_type = QueryType.TERMINOLOGY
+            _internal_type = "TERMINOLOGY"
         elif char_length < 5:
-            query_type = QueryType.SHORT
+            _internal_type = "SHORT"
         elif 5 <= char_length <= 15 and has_question:
-            query_type = QueryType.DESCRIPTIVE
+            _internal_type = "DESCRIPTIVE"
         else:
-            query_type = QueryType.DEFAULT
+            _internal_type = "DEFAULT"
+
+        # 映射到统一 QueryType
+        query_type = _INTERNAL_TYPE_MAP[_internal_type]
 
         # 计算置信度
         confidence = self._calculate_confidence(
@@ -204,31 +207,14 @@ class QueryAnalyzer:
         has_question: bool,
         has_conjunction: bool,
     ) -> float:
-        """计算分类置信度 (0-1)
+        """计算分类置信度 (0-1)，基于特征匹配强度"""
+        confidence = 0.5
 
-        基于特征匹配强度计算置信度。
-        """
-        confidence = 0.5  # 基础置信度
-
-        if query_type == QueryType.SHORT:
-            # 短查询：字符数越少，置信度越高
-            confidence = 0.9 if char_length <= 2 else 0.8
-        elif query_type == QueryType.TERMINOLOGY:
-            # 专业术语：匹配术语越多、越长，置信度越高
-            base_conf = 0.7
-            if matched_terms:
-                max_term_len = max(len(t) for t in matched_terms)
-                base_conf += min(0.2, max_term_len * 0.05)
-                base_conf += min(0.1, len(matched_terms) * 0.05)
-            confidence = min(1.0, base_conf)
-        elif query_type == QueryType.DESCRIPTIVE:
-            # 描述性查询：含疑问词且长度适中，置信度高
-            confidence = 0.85 if has_question and 5 <= char_length <= 15 else 0.7
-        elif query_type == QueryType.COMPLEX:
-            # 复杂查询：同时满足长度和连接词，置信度高
+        if query_type == QueryType.COMPLEX:
             confidence = 0.9 if char_length > 15 and has_conjunction else 0.7
+        elif query_type == QueryType.SIMPLE:
+            confidence = 0.85 if has_question and 5 <= char_length <= 15 else 0.7
         else:
-            # 默认：置信度较低
             confidence = 0.5
 
         return round(confidence, 2)
