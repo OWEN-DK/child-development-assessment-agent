@@ -133,7 +133,7 @@ describe('useSSEProgress', () => {
 
     const { rerender, unmount } = renderHook(
       ({ url }: { url: string | null }) => useSSEProgress(url),
-      { initialProps: { url: '/api/sse' } },
+      { initialProps: { url: '/api/sse' as string | null } },
     );
 
     expect(mockCreateConnection).toHaveBeenCalledTimes(1);
