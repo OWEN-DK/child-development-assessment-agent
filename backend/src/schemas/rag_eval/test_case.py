@@ -12,8 +12,8 @@ class TestCaseCreate(BaseModel):
     """测试用例创建请求"""
 
     query: str
-    age: float
-    domain: TestDomain
+    age: Optional[float] = None
+    domain: Optional[TestDomain] = None
     description: Optional[str] = None
     expected_knowledge_ids: list[str] = []
     expected_keywords: list[str] = []
@@ -66,8 +66,8 @@ class TestCaseImportItem(BaseModel):
     """单个导入项，字段比 TestCaseCreate 更宽松"""
 
     query: str
-    age: float  # 岁，如 1.5
-    domain: str  # 字符串，校验时转为 TestDomain
+    age: Optional[float] = None  # 岁，如 1.5
+    domain: Optional[str] = None  # 字符串，校验时转为 TestDomain
     description: Optional[str] = None
     expected_knowledge_ids: list[str] = []
     expected_keywords: list[str] = []

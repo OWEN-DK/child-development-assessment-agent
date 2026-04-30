@@ -6,8 +6,7 @@ from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Integer, String, Text,
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
-from src.models.rag_eval.enums import (DifficultyLevel, TestCaseStatus,
-                                       TestDomain)
+from src.models.rag_eval.enums import (DifficultyLevel, TestCaseStatus)
 
 
 class TestCaseDraft(Base):
@@ -18,18 +17,6 @@ class TestCaseDraft(Base):
         String(64), index=True, comment="来源文档 ID"
     )
     query: Mapped[str] = mapped_column(Text, nullable=False, comment="测试问题")
-    age: Mapped[float] = mapped_column(
-        DECIMAL(4, 1), nullable=False, comment="年龄（岁，如 1.5）"
-    )
-    age_stage_label: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="", comment="年龄段标签(0-6m/1-2y等)"
-    )
-    domain: Mapped[TestDomain] = mapped_column(
-        Enum(TestDomain, values_callable=lambda obj: [e.value for e in obj]),
-        nullable=False,
-        index=True,
-        comment="测试领域",
-    )
     description: Mapped[str | None] = mapped_column(Text, comment="期望答案描述")
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(
         JSON, comment="期望检索的知识片段 ID 列表"
