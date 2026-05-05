@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { message } from 'antd';
 import * as reportsApi from '@/api/rag-eval/reports';
+import { downloadBlob } from '@/features/rag-eval/utils/export';
 
 /** 报告列表筛选参数 */
 export interface ReportFilters {
@@ -38,11 +40,41 @@ export function useGenerateReport() {
   });
 }
 
+/** 删除单个报告 */
+export function useDeleteReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => reportsApi.deleteReport(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rag-eval', 'reports'] });
+    },
+  });
+}
+
+/** 批量删除报告 */
+export function useBatchDeleteReports() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => reportsApi.batchDeleteReports(ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rag-eval', 'reports'] });
+    },
+  });
+}
+
 /** 导出报告（JSON / CSV / PDF） */
 export function useExportReport() {
   return useMutation({
     mutationFn: (params: { reportId: string; format: 'json' | 'csv' | 'pdf' }) =>
       reportsApi.exportReport(params.reportId, params.format),
+    onSuccess: (blob, variables) => {
+      const ext = variables.format;
+      downloadBlob(blob, `report-${variables.reportId}.${ext}`);
+      message.success('导出成功');
+    },
+    onError: () => {
+      message.error('导出失败');
+    },
   });
 }
 

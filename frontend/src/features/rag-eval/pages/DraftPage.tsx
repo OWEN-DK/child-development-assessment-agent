@@ -21,12 +21,16 @@ const { Title, Text, Paragraph } = Typography;
 export function DraftPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [searchText, setSearchText] = useState('');
+  const [sortBy, setSortBy] = useState<string | undefined>();
+  const [sortOrder, setSortOrder] = useState<string | undefined>();
   const { currentPage, pageSize, total, setCurrentPage, setPageSize, setTotal } = usePagination();
 
   const { data, isLoading, isError } = useDrafts({
     status: statusFilter as 'pending' | 'approved' | 'rejected' | undefined,
     page: currentPage,
     page_size: pageSize,
+    sort_by: sortBy,
+    sort_order: sortOrder,
   });
 
   // 同步服务端返回的 total
@@ -59,6 +63,12 @@ export function DraftPage() {
   // 状态筛选变更时重置到第一页
   const handleStatusChange = useCallback((value: string | undefined) => {
     setStatusFilter(value);
+    setCurrentPage(1);
+  }, [setCurrentPage]);
+
+  const handleSortChange = useCallback((by?: string, order?: string) => {
+    setSortBy(by);
+    setSortOrder(order);
     setCurrentPage(1);
   }, [setCurrentPage]);
 
@@ -178,6 +188,8 @@ export function DraftPage() {
         drafts={filteredDrafts}
         loading={isLoading}
         pagination={{ current: currentPage, pageSize, total, onPageChange: handlePageChange }}
+        sort={{ sortBy, sortOrder }}
+        onSortChange={handleSortChange}
         onView={setDetailDraft}
         onApprove={handleApprove}
         onReject={handleReject}

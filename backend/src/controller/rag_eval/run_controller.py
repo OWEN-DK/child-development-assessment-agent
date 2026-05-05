@@ -18,15 +18,17 @@ class RunController:
         self._engine = run_engine
 
     def register(self, router: APIRouter) -> None:
+        # 固定路由必须在参数路由之前注册
         router.add_api_route("/runs", self.create_run, methods=["POST"])
         router.add_api_route("/runs", self.list_runs, methods=["GET"])
+        router.add_api_route("/runs/batch", self.batch_delete_runs, methods=["DELETE"])
+        router.add_api_route("/runs/compare", self.compare_runs, methods=["GET"])
         router.add_api_route("/runs/{run_id}", self.get_run, methods=["GET"])
         router.add_api_route("/runs/{run_id}", self.delete_run, methods=["DELETE"])
-        router.add_api_route("/runs/batch", self.batch_delete_runs, methods=["DELETE"])
         router.add_api_route("/runs/{run_id}/execute", self.execute_run, methods=["POST"])
+        router.add_api_route("/runs/{run_id}/cancel", self.cancel_run, methods=["POST"])
         router.add_api_route("/runs/{run_id}/execute/{case_id}", self.execute_single, methods=["POST"])
         router.add_api_route("/runs/{run_id}/stream", self.stream_run, methods=["GET"])
-        router.add_api_route("/runs/compare", self.compare_runs, methods=["GET"])
 
     async def create_run(self, body: TestRunCreate = Body(...)):
         result = await self._engine.create_run(body)
@@ -35,6 +37,10 @@ class RunController:
     async def execute_run(self, run_id: str = Path(...)):
         task_id = await self._engine.start_run(run_id)
         return APIResponse.success({"task_id": task_id})
+
+    async def cancel_run(self, run_id: str = Path(...)):
+        await self._engine.cancel_run(run_id)
+        return APIResponse.success(None)
 
     async def list_runs(
         self,

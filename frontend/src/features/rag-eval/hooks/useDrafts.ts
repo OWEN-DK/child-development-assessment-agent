@@ -7,6 +7,8 @@ export interface DraftFilters {
   status?: 'pending' | 'approved' | 'rejected';
   page?: number;
   page_size?: number;
+  sort_by?: string;
+  sort_order?: string;
 }
 
 /** 获取草稿列表 */

@@ -33,6 +33,9 @@ class TestRun(Base):
     previous_config_version_id: Mapped[str | None] = mapped_column(
         String(64), comment="前一配置版本 ID"
     )
+    task_id: Mapped[str | None] = mapped_column(
+        String(64), index=True, comment="异步任务 ID，用于取消运行"
+    )
     status: Mapped[TestRunStatus] = mapped_column(
         Enum(TestRunStatus, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,

@@ -28,6 +28,7 @@ class TestRunRead(BaseModel):
     snapshot_id: Optional[str] = None
     config_version_id: Optional[str] = None
     config_snapshot: Optional[dict] = None
+    task_id: Optional[str] = None
     status: str
     total_test_cases: int
     passed_test_cases: int

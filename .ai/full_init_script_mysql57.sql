@@ -241,6 +241,7 @@ CREATE TABLE `test_runs` (
     `config_version_id` VARCHAR(64) COMMENT '配置版本 ID',
     `config_snapshot` JSON COMMENT '配置快照',
     `previous_config_version_id` VARCHAR(64) COMMENT '前一配置版本 ID',
+    `task_id` VARCHAR(64) COMMENT '异步任务 ID，用于取消运行',
     `status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/completed/failed/cancelled',
     `total_test_cases` INT NOT NULL DEFAULT 0,
     `passed_test_cases` INT NOT NULL DEFAULT 0,
@@ -259,7 +260,8 @@ CREATE TABLE `test_runs` (
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_status` (`status`),
     INDEX `idx_snapshot_id` (`snapshot_id`),
-    INDEX `idx_config_version_id` (`config_version_id`)
+    INDEX `idx_config_version_id` (`config_version_id`),
+    INDEX `idx_task_id` (`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------

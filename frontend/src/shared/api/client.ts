@@ -27,6 +27,11 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response) => {
+    // blob 响应直接透传，不做 JSON 解包
+    if (response.config.responseType === 'blob') {
+      return response;
+    }
+
     // 解包统一响应格式 {code, message, data}
     const { code, message: msg, data } = response.data;
     

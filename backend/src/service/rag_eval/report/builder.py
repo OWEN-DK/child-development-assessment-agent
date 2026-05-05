@@ -1,5 +1,7 @@
 """报告构建器——整合双轨评估结果为EvalReportData"""
 
+from datetime import datetime, timezone
+
 from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.repository.rag_eval.test_run_result_repository import TestRunResultRepository
 from src.repository.rag_eval.tuning_suggestion_repository import TuningSuggestionRepository
@@ -50,7 +52,7 @@ class ReportBuilder:
         diag_json = run.diagnosis_json or {}
 
         metrics = self._parse_metrics(l1_json, l2_json, l3_json, {
-            "overall_score": run.overall_score,
+            "overall_score": run.overall_score or 0.0,
             "weights": {"l1": 0.4, "l2": 0.4, "l3": 0.2},
         })
         bad_cases = self._build_bad_cases(await self._result_repo.get_failed_results_by_run(run_id))
@@ -82,7 +84,7 @@ class ReportBuilder:
                              config_stability=_ms(l3.get("config_stability", {}))),
             overall_score=float(all_json.get("overall_score", 0.0)),
             weights=all_json.get("weights", {"l1": 0.4, "l2": 0.4, "l3": 0.2}),
-            calculated_at=None,
+            calculated_at=datetime.now(timezone.utc),
         )
 
     def _build_summary(self, run, metrics, diag_json) -> OverallSummary:

@@ -211,19 +211,90 @@ export interface DiagnosisResult {
 
 // ─── 报告 ───────────────────────────────────────────
 
+/** 指标卡片（后端 ScoringDashboard 中的元素） */
+export interface MetricCard {
+  name: string;
+  value: number;
+  passed: boolean;
+  threshold: number;
+  details: Record<string, unknown>;
+  delta?: number | null;
+}
+
+/** 诊断层 Section（后端 diagnosis_details 数组元素） */
+export interface DiagnosisSection {
+  layer: number;
+  name: string;
+  status: string;
+  score: number;
+  issues: LayerIssue[];
+  suggestions: string[];
+}
+
+/** 坏案条目（后端 bad_cases 数组元素） */
+export interface BadCaseEntry {
+  case_id: string;
+  query: string;
+  domain?: string | null;
+  age?: number | null;
+  expected_keywords: string[];
+  actual_answer?: string | null;
+  precision?: number | null;
+  recall?: number | null;
+  error_message?: string | null;
+}
+
+/** 调优建议条目（后端 tuning_suggestions 数组元素） */
+export interface TuningEntry {
+  suggestion_id: string;
+  category: string;
+  severity: string;
+  title: string;
+  description: string;
+  current_value?: unknown;
+  suggested_value?: unknown;
+  expected_impact?: string | null;
+  conflict_with?: string | null;
+}
+
+/** 三层指标看板 */
+export interface ScoringDashboardData {
+  l1: MetricCard[];
+  l2: MetricCard[];
+  l3: MetricCard[];
+}
+
 export interface EvalReport {
   id: string;
   run_id: string;
+  test_set_id?: string | null;
+  status: string;
+  // 嵌入的报告数据
+  summary: {
+    overall_score: number;
+    l1_score: number;
+    l2_score: number;
+    l3_score: number;
+    diagnosis_health: number;
+    total_issues: number;
+    critical_issues: number;
+    run_name: string;
+    total_cases: number;
+    passed_cases: number;
+    duration_ms?: number | null;
+  };
+  scoring_dashboard: ScoringDashboardData;
+  diagnosis_details: DiagnosisSection[];
+  bad_cases: BadCaseEntry[];
+  tuning_suggestions: TuningEntry[];
+  markdown_content?: string | null;
+  created_at: string;
+  // 扁平化访问字段（后端 model_post_init 填充）
   run_name: string;
   overall_score: number;
-  status: TestRunStatus;
-  metrics: RunMetrics | null;
-  diagnosis: DiagnosisResult | null;
-  markdown_content: string;
   total_test_cases: number;
   passed_test_cases: number;
   duration_seconds: number;
-  created_at: string;
 }
 
 export interface TrendData {

@@ -15,6 +15,7 @@ import {
   TestSetPage,
   RunPage,
   ReportPage,
+  ReportDetailPage,
   TuningPage,
 } from '@features/rag-eval/pages';
 
@@ -58,6 +59,7 @@ export const router = createBrowserRouter([
           { path: 'sets', element: <TestSetPage /> },
           { path: 'runs', element: <RunPage /> },
           { path: 'reports', element: <ReportPage /> },
+          { path: 'reports/:reportId', element: <ReportDetailPage /> },
           { path: 'tuning', element: <TuningPage /> },
         ],
       },

@@ -108,7 +108,33 @@ class EvalReportRead(BaseModel):
     markdown_content: Optional[str] = None
     created_at: datetime
 
+    # 前端扁平化访问字段（从 summary 提取）
+    run_name: str = ""
+    overall_score: float = 0.0
+    total_test_cases: int = 0
+    passed_test_cases: int = 0
+    duration_seconds: float = 0.0
+
     model_config = ConfigDict(from_attributes=True)
+
+    def model_post_init(self, __context) -> None:
+        """从 summary 填充扁平化字段"""
+        if self.summary:
+            self.run_name = self.summary.run_name
+            self.overall_score = self.summary.overall_score
+            self.total_test_cases = self.summary.total_cases
+            self.passed_test_cases = self.summary.passed_cases
+            if self.summary.duration_ms is not None:
+                self.duration_seconds = self.summary.duration_ms / 1000.0
+
+
+class EvalReportList(BaseModel):
+    """报告分页列表"""
+
+    items: list[EvalReportRead]
+    total: int
+    page: int
+    page_size: int
 
 
 class TrendData(BaseModel):

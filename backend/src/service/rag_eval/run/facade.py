@@ -76,6 +76,9 @@ class RunEngineFacade:
         run = await self._run_repo.get_by_id(run_id)
         if not run:
             raise TestRunNotFoundException(run_id)
+        # 如果已在运行中，拒绝重复启动
+        if self._mapper.safe_enum_value(run.status) == "running":
+            raise AppException(409, 13021, "测试运行已在执行中", "RUN_ALREADY_RUNNING")
         case_ids = set(run.custom_case_ids or [])
         for set_id in run.test_set_ids or []:
             try:
@@ -90,9 +93,12 @@ class RunEngineFacade:
                 continue
         if not test_cases:
             raise AppException(400, 13019, "测试集为空", "TEST_SET_EMPTY")
-        return await self._task_manager.start_task(
+        task_id = await self._task_manager.start_task(
             task_type="test_run", task_func=self._batch_runner.execute_run,
             run_id=run_id, test_cases=test_cases)
+        # 存储 task_id 用于后续取消
+        await self._run_repo.update(run_id, {"task_id": task_id})
+        return task_id
 
     async def execute_single(self, run_id: str, case_id: str) -> TestRunResultItem:
         """执行单个测试用例"""
@@ -112,6 +118,10 @@ class RunEngineFacade:
         """获取测试运行的全部结果项"""
         orm_results = await self._result_repo.get_by_run_id(run_id)
         return [TestRunResultItem.model_validate(r) for r in orm_results]
+
+    async def update_status(self, run_id: str, status: str) -> None:
+        """更新测试运行状态"""
+        await self._run_repo.update(run_id, {"status": status})
 
     async def save_evaluation(
         self,
@@ -148,13 +158,29 @@ class RunEngineFacade:
             items=self._mapper.to_read_list(items, TestRunRead),
             total=total, page=page, page_size=page_size)
 
-    async def delete_run(self, run_id: str) -> None:
-        """删除测试运行，running 状态不可删除"""
+    async def cancel_run(self, run_id: str) -> None:
+        """取消正在运行的测试"""
         run = await self._run_repo.get_by_id(run_id)
         if not run:
             raise TestRunNotFoundException(run_id)
+        status = self._mapper.safe_enum_value(run.status)
+        if status != "running":
+            raise AppException(409, 13022, "仅 running 状态的测试可取消", "RUN_NOT_RUNNING")
+        task_id = run.task_id
+        if not task_id:
+            # 无 task_id 直接标记为取消
+            await self._run_repo.update(run_id, {"status": "cancelled"})
+            return
+        await self._task_manager.cancel_task(task_id, "test_run")
+
+    async def delete_run(self, run_id: str) -> None:
+        """删除测试运行，running 状态先取消再删除"""
+        run = await self._run_repo.get_by_id(run_id)
+        if not run:
+            raise TestRunNotFoundException(run_id)
+        # running 状态先取消
         if self._mapper.safe_enum_value(run.status) == "running":
-            raise AppException(409, 13020, "运行中的测试不可删除", "RUN_IN_PROGRESS")
+            await self.cancel_run(run_id)
         results = await self._result_repo.get_by_run_id(run_id)
         for r in results:
             await self._result_repo.delete(r.id)

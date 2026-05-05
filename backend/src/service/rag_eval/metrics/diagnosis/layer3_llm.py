@@ -2,7 +2,7 @@
 
 仅对失败用例（passed=False）使用 LLM 深度分析：
 偏离分析、幻觉检测、相关性判断。
-llm_factory 为 None 或配置禁用时返回 skip。
+通过配置禁用时返回 skip。
 """
 
 import json
@@ -27,9 +27,8 @@ _MAX_CASES = 10
 class Layer3LLM(DiagnosisLayer):
     """LLM 深度诊断层——仅对失败用例执行偏离分析和幻觉检测"""
 
-    def __init__(self, llm_factory=None, prompt_manager: Optional[PromptManagerImpl] = None,
+    def __init__(self, prompt_manager: Optional[PromptManagerImpl] = None,
                  config_cache: Optional[ConfigCache] = None):
-        self._llm = llm_factory
         self._pm = prompt_manager or PromptManagerImpl()
         self._config_cache = config_cache or ConfigCache.get_instance()
 
@@ -50,15 +49,6 @@ class Layer3LLM(DiagnosisLayer):
                 issues=[LayerIssue(severity="info", category="disabled",
                          description="LLM 诊断已通过配置禁用", affected_items=[run_id])],
                 details={"reason": "config_disabled"},
-                execution_time_ms=int((time.time() - start) * 1000))
-
-        if self._llm is None:
-            return LayerResult(
-                layer=self.layer_number, name=self.name, status="skip", score=1.0,
-                issues=[LayerIssue(severity="info", category="no_llm",
-                         description="llm_factory 未配置，跳过 LLM 诊断", affected_items=[run_id],
-                         suggestion="配置 LLM 服务后重试")],
-                details={"reason": "llm_factory_none"},
                 execution_time_ms=int((time.time() - start) * 1000))
 
         failed = [r for r in results if not r.passed]
@@ -87,13 +77,17 @@ class Layer3LLM(DiagnosisLayer):
             execution_time_ms=int((time.time() - start) * 1000))
 
     async def _analyze_deviation(self, case: TestRunResultItem, cid: str) -> list[LayerIssue]:
+        from src.schemas.llm import LLMMessage, LLMRequest
         try:
             prompt = await self._pm.get_prompt(_PROMPT_DEV, variables={
                 "query": case.query, "actual_answer": case.actual_answer or "",
                 "expected_knowledge_ids": json.dumps(case.expected_knowledge_ids or [])})
-            llm = LLMServiceFactoryCompat.create(factory=self._llm, scene="validation",
-                                                   framework="langchain")
-            analysis = _parse_json(await llm.ainvoke(prompt), cid)
+            llm = LLMServiceFactoryCompat.create()
+            resp = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                model_name=llm.get_model_name(),
+            ))
+            analysis = _parse_json(resp.content, cid)
             if analysis.get("has_deviation"):
                 return [LayerIssue(
                     severity=analysis.get("severity", "warning"), category="answer_deviation",
@@ -104,12 +98,16 @@ class Layer3LLM(DiagnosisLayer):
         return []
 
     async def _detect_hallucination(self, case: TestRunResultItem, cid: str) -> list[LayerIssue]:
+        from src.schemas.llm import LLMMessage, LLMRequest
         try:
             prompt = await self._pm.get_prompt(_PROMPT_HAL, variables={
                 "query": case.query, "actual_answer": case.actual_answer or ""})
-            llm = LLMServiceFactoryCompat.create(factory=self._llm, scene="validation",
-                                                   framework="langchain")
-            analysis = _parse_json(await llm.ainvoke(prompt), cid)
+            llm = LLMServiceFactoryCompat.create()
+            resp = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                model_name=llm.get_model_name(),
+            ))
+            analysis = _parse_json(resp.content, cid)
             if analysis.get("has_hallucination"):
                 return [LayerIssue(
                     severity=analysis.get("severity", "critical"), category="hallucination",

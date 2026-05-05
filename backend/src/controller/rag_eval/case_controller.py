@@ -18,14 +18,14 @@ class CaseController:
         self._engine = case_engine
 
     def register(self, router: APIRouter) -> None:
-        # 测试用例
+        # 测试用例（固定路由必须在参数路由之前注册）
         router.add_api_route("/test-cases", self.list_cases, methods=["GET"])
         router.add_api_route("/test-cases", self.create_case, methods=["POST"])
+        router.add_api_route("/test-cases/batch", self.batch_delete_cases, methods=["DELETE"])
+        router.add_api_route("/test-cases/import", self.import_cases, methods=["POST"])
         router.add_api_route("/test-cases/{case_id}", self.get_case, methods=["GET"])
         router.add_api_route("/test-cases/{case_id}", self.update_case, methods=["PUT"])
         router.add_api_route("/test-cases/{case_id}", self.delete_case, methods=["DELETE"])
-        router.add_api_route("/test-cases/batch", self.batch_delete_cases, methods=["DELETE"])
-        router.add_api_route("/test-cases/import", self.import_cases, methods=["POST"])
         # 测试集
         router.add_api_route("/test-sets", self.list_sets, methods=["GET"])
         router.add_api_route("/test-sets", self.create_set, methods=["POST"])

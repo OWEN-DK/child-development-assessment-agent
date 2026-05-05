@@ -25,16 +25,38 @@ class CacheCore:
         self.tag_map = defaultdict(set)
         self.default_ttl = settings.rag_config["cache"]["ttl_seconds"]
 
+    @staticmethod
+    def _json_serializer(obj):
+        """JSON 序列化器：正确处理 Pydantic v2 模型和 datetime 对象"""
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump(mode="json")
+        return str(obj)
+
+    @staticmethod
+    def _normalize_key(key) -> str:
+        """将 tuple 等非字符串缓存 key 转为 Redis 兼容的字符串"""
+        if isinstance(key, str):
+            return key
+        if isinstance(key, tuple):
+            import hashlib
+            import json
+            key_str = json.dumps(key, sort_keys=True, ensure_ascii=False, default=CacheCore._json_serializer)
+            return f"rag:cache:{hashlib.md5(key_str.encode()).hexdigest()}"
+        return str(key)
+
     def _get_cache_key(self, key_prefix: str, args: tuple, kwargs: dict) -> str:
         import hashlib
         import json
         key_parts = args + tuple(sorted(kwargs.items()))
-        key_hash = hashlib.md5(json.dumps(key_parts, sort_keys=True, ensure_ascii=False, default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj)).encode()).hexdigest()
+        key_hash = hashlib.md5(json.dumps(key_parts, sort_keys=True, ensure_ascii=False, default=CacheCore._json_serializer).encode()).hexdigest()
         return f"rag:cache:{key_prefix}:{key_hash}"
 
-    async def get(self, key: str, default: Any = None) -> Any:
+    async def get(self, key, default: Any = None) -> Any:
         if not self.enabled:
             return default
+        key = self._normalize_key(key)
         if key in self.memory_cache:
             logger.debug(f"内存缓存命中: {key}")
             return self.memory_cache[key]
@@ -52,15 +74,16 @@ class CacheCore:
             return value
         return default
 
-    async def set(self, key: str, value: Any, expire: int = None, doc_hashes: Optional[List[str]] = None, tags: Optional[List[str]] = None, is_hot: bool = False):
+    async def set(self, key, value: Any, expire: int = None, doc_hashes: Optional[List[str]] = None, tags: Optional[List[str]] = None, is_hot: bool = False):
         if not self.enabled:
             return
+        key = self._normalize_key(key)
         expire = expire or self.default_ttl
         expire += int(time.time()) % 60
         self.memory_cache[key] = value
         self.disk_cache.set(key, value)
         import json
-        serialized = json.dumps(value, ensure_ascii=False, default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj))
+        serialized = json.dumps(value, ensure_ascii=False, default=CacheCore._json_serializer)
         await self.redis_cache.set(key, serialized, expire)
         if doc_hashes:
             for doc_hash in doc_hashes:
@@ -79,7 +102,8 @@ class CacheCore:
         actual_ttl = max(60, actual_ttl)
         await self.set(key, value, expire=actual_ttl, tags=tags)
 
-    async def delete(self, key: str) -> None:
+    async def delete(self, key) -> None:
+        key = self._normalize_key(key)
         if key in self.memory_cache:
             del self.memory_cache[key]
         self.disk_cache.delete(key)

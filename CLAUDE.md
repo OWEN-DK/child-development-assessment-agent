@@ -27,7 +27,7 @@
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
-| **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、18张业务建表语句（无外键约束，采用弱关联） |
+| **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |
 | **RAG 知识库检索** | `.ai/rag_pipeline.md` | RAG 核心模块、双流水线解析、向量库(Chroma)检索策略、API端点 |
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
@@ -48,7 +48,12 @@
 - **核心编排**: LangGraph 1.1.0, LangChain 1.2.11, LlamaIndex 0.14.16
 - **大模型支持**: DashScope, OpenAI, Anthropic, DeepSeek, Ollama
 - **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送, Prometheus 指标收集
-- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, Zustand 5, React Router 7, TanStack Query 5
+- **ML/评分**: XGBoost, SHAP, scikit-learn (AHP+ML 融合评分)
+- **NLP**: jieba (中文分词), datasketch (MinHash 去重)
+- **文档解析**: PyMuPDF, EbookLib, BeautifulSoup, WeasyPrint (PDF 报告生成)
+- **DI/调度**: injector (依赖注入), APScheduler (定时任务)
+- **缓存/过滤**: cachetools (LRU), pybloom-live (布隆过滤器)
+- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components, @ant-design/charts, Zustand 5, React Router 7, TanStack Query 5
 - **包管理**: uv (后端), npm (前端)
 - **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
 
@@ -59,7 +64,7 @@
 - **前端测试**: `cd frontend && npm run test`
 - **前端类型检查**: `cd frontend && npm run typecheck`
 - **前端代码规范**: `cd frontend && npm run lint`
-- **Docker 部署**: `docker-compose up -d`（后端容器，端口 51002，使用 `backend/Dockerfile` 两阶段构建）
+- **Docker 部署**: `docker-compose up -d`（后端容器，端口 **51002**，使用 `backend/Dockerfile` 两阶段构建，资源限制 4GB/2CPU）
 
 ---
 

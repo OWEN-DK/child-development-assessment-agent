@@ -16,6 +16,8 @@ export async function getDrafts(params?: {
   page_size?: number;
   status?: string;
   document_id?: string;
+  sort_by?: string;
+  sort_order?: string;
 }): Promise<PaginatedResponse<TestCaseDraft>> {
   const res = await apiClient.get<PaginatedResponse<TestCaseDraft>>('/api/v1/rag/eval/drafts', { params });
   return res.data;

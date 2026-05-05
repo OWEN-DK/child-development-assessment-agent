@@ -14,6 +14,15 @@ class DiskCache:
     _instance = None
     _initialized = False
 
+    @staticmethod
+    def _json_serializer(obj):
+        """JSON 序列化器：正确处理 Pydantic v2 模型和 datetime 对象"""
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump(mode="json")
+        return str(obj)
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -96,7 +105,7 @@ class DiskCache:
         for key, value in self.disk_cache.items():
             expire_at = current_time + self.default_ttl
             persist_data[key] = {"value": value, "expire_at": expire_at, "updated_at": current_time}
-        json_str = json.dumps(persist_data, ensure_ascii=False, indent=2, default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj))
+        json_str = json.dumps(persist_data, ensure_ascii=False, indent=2, default=DiskCache._json_serializer)
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
                 f.write(json_str)

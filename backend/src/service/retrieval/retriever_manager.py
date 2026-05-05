@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import warnings
@@ -5,16 +6,31 @@ from typing import Optional
 
 import jieba
 from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import MetadataMode
 from llama_index.retrievers.bm25 import BM25Retriever
 
 from src.config import BASE_DIR, settings
-from src.core.reranker import CrossEncoderReranker
+from src.core.reranker import create_reranker
 from src.service.cache_service import CacheService
 from src.service.index_manager_service import IndexManagerService
 from src.utils.logger import logger
 
 # 抑制 llama_index BM25 tokenizer 弃用警告（该库使用 logger.warning 而非 warnings.warn）
 logging.getLogger("llama_index.retrievers.bm25.base").setLevel(logging.ERROR)
+
+
+class JiebaBM25Retriever(BaseRetriever):
+    """包装 BM25Retriever，对查询做 jieba 预分词后传入底层检索器"""
+
+    def __init__(self, inner: BM25Retriever):
+        super().__init__()
+        self._inner = inner
+
+    def _retrieve(self, query_bundle):
+        from llama_index.core.schema import QueryBundle
+        # 对查询文本做jieba分词，用空格拼接后传给底层BM25检索器
+        tokenized_query = " ".join(jieba.lcut(query_bundle.query_str))
+        return self._inner.retrieve(QueryBundle(query_str=tokenized_query))
 
 
 class RetrieverManager:
@@ -31,8 +47,8 @@ class RetrieverManager:
         self.vector_weight = 0.5
         self.merge_mode = "OR"
 
-        # 初始化 Cross-Encoder 重排序器
-        self.reranker = CrossEncoderReranker(
+        # 初始化重排序器（根据配置自动选择 DashScope 或本地 CrossEncoder）
+        self.reranker = create_reranker(
             model_name=settings.rag_reranker_model,
             initial_k=settings.rag_reranker_initial_k,
             final_k=settings.rag_reranker_final_k,
@@ -93,13 +109,26 @@ class RetrieverManager:
             self.bm25_retriever = None
             return
 
-        # 初始化BM25检索器（使用jieba分词）
+        # 初始化BM25检索器（使用jieba预分词，绕过已弃用的tokenizer参数）
         try:
-            self.bm25_retriever = BM25Retriever.from_defaults(
-                index=index, similarity_top_k=bm25_top_k, tokenizer=jieba.lcut
+            nodes = list(index.docstore.docs.values())
+            # 用jieba对语料预分词，将分词结果用空格拼接回节点内容
+            tokenized_nodes = []
+            for node in nodes:
+                tokenized_node = copy.deepcopy(node)
+                original_text = node.get_content(metadata_mode=MetadataMode.EMBED)
+                tokenized_node.text = " ".join(jieba.lcut(original_text))
+                tokenized_nodes.append(tokenized_node)
+
+            bm25_inner = BM25Retriever(
+                nodes=tokenized_nodes,
+                similarity_top_k=bm25_top_k,
+                skip_stemming=True,
+                token_pattern=r"\S+",
             )
+            self.bm25_retriever = JiebaBM25Retriever(bm25_inner)
             if not RetrieverManager._ever_initialized:
-                logger.info(f"BM25 retriever initialized: top_k={bm25_top_k}")
+                logger.info(f"BM25 retriever initialized with jieba tokenizer: top_k={bm25_top_k}")
         except Exception as e:
             logger.error(
                 f"Failed to initialize BM25 retriever: {e}. Falling back to vector-only retrieval."

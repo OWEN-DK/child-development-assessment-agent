@@ -57,7 +57,7 @@ class TestCaseExecutor:
                 nonlocal retrieved_ids, actual_answer
                 if retrieval_fn:
                     retrieved = await retrieval_fn(test_case.query, test_case.age, test_case.domain)
-                    retrieved_ids = [d.get("id", "") for d in (retrieved or [])]
+                    retrieved_ids = [(d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "") for d in (retrieved or [])]
                 if generation_fn and retrieved_ids:
                     actual_answer = await generation_fn(test_case.query, retrieved_ids)
 

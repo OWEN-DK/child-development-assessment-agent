@@ -4,7 +4,7 @@
 
 ## 4.1 RAG 测试与评估数据模型
 
-基于 MySQL 5.7 存储，所有主键统一采用 UUID `String(36)`，表之间通过弱引用关联，避免严格的外键约束。共 18 张表支持完整工作流与配置追踪。
+基于 MySQL 5.7 存储，所有主键统一采用 UUID `String(36)`，表之间通过弱引用关联，避免严格的外键约束。共 21 张表支持完整工作流与配置追踪。
 
 ### 评估工作流模型
 - **测试集 (TestSet)**: `id`, `name`, `description`, `source_type`
@@ -13,8 +13,22 @@
 - **测试草稿 (TestCaseDraft)**: LLM 自动提取的原始问题，经过人工审核后转化为 TestCase。
 - **运行记录 (TestRun)**: 批量测试的执行记录与状态跟踪，关联知识库快照、配置版本、模型版本。
 - **运行结果 (TestRunResult)**: 单条用例的测试明细与多维指标得分，包含6层校验引擎的完整诊断数据。
-- **评估报告 (TestReport)**: 汇总 TestRun 结果生成的结构化与 Markdown 报告，支持多版本对比和趋势分析。
+- **评估报告 (EvalReport)**: 汇总 TestRun 结果生成的结构化与 Markdown 报告，支持多版本对比和趋势分析。
 - **知识库快照 (KnowledgeSnapshot)**: 测试执行时的知识库完整镜像，保证测试可复现、可对比。
+- **调优建议 (TuningSuggestion)**: 6层校验引擎自动生成的智能调参建议，含类别、严重度、建议值。
+- **评估配置版本 (EvalConfigVersion)**: RAG 评估系统的版本化配置。
+- **评估配置变更集 (EvalConfigChangeSet)**: RAG 配置的原子变更记录。
+
+### 配置与监控模型
+- **配置版本 (ConfigVersion)**: 系统配置快照，支持版本回滚。
+- **配置审计日志 (ConfigAuditLog)**: 配置变更审计记录（UPDATE/ROLLBACK/RESET）。
+- **源文档 (SourceDocument)**: 知识库文件元数据、质量评分与章节结构。
+- **文档导入记录 (DocumentRecord)**: 文档导入进度与状态跟踪。
+- **LLM 调用日志 (LLMCallLog)**: 全链路 LLM 调用记录，含 token、耗时、成本、trace/span 关联。
+- **AB 测试指标 (ABTestMetrics)**: A/B 测试效果度量。
+- **提示词元数据 (PromptMetadata)**: 提示词分类、用途、变量定义。
+- **提示词版本 (PromptVersion)**: 提示词内容版本控制与变更影响分析。
+- **链路追踪 (Trace)**: 全链路追踪记录，含总耗时、总 token、总成本、状态。
 
 ## 4.2 6层校验引擎架构
 全链路诊断体系，从规则校验到效果验证，覆盖测试执行的完整生命周期：
@@ -48,12 +62,6 @@
 - **报告查看器**: 渲染 Markdown 报告和可视化图表
 - **状态管理**: 使用 Zustand 管理评估流程状态
 
-### 5.8 前端测试与类型安全
-- **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`
-- **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型
-- **代码规范**: ESLint + Prettier，`npm run lint` 自动修复
-- **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载
-
 ### 5.2 知识库管理 (Documents)
 - **文档上传**: 支持 PDF/EPUB/TXT 上传和导入进度跟踪
 - **文档列表**: 展示已索引文档和分块信息
@@ -82,6 +90,13 @@
 ### 5.7 LLM 监控与分析 (LLM Monitoring)
 - **总览仪表盘**: 全系统 LLM 调用统计、消耗趋势、错误率概览
 - **全链路追踪 (Tracing)**: 支持查看 LangGraph 到大模型底层调用的完整 Span 层级树，耗时与成本分析。
+
+### 5.8 前端测试与类型安全
+- **测试框架**: Vitest 4.1 + React Testing Library，测试文件位于 `src/**/*.test.tsx`
+- **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型
+- **代码规范**: ESLint 10 + Prettier，`npm run lint` 自动修复
+- **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载
+- **测试覆盖**: 当前 6 个测试文件集中在 `rag-eval` 特性和实体层，其他特性模块暂无测试覆盖
 
 ## 6. 核心基础设施
 
@@ -357,3 +372,28 @@ graph TB
 - **收集内容**: HTTP 请求耗时、LLM 调用延迟、缓存命中率、活跃任务数
 - **集成方式**: FastAPI 中间件嵌入 `prometheus_client` ASGI 应用
 - **Tracing 系统**: `core/tracing/` 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析
+
+### 6.14 ML 评分引擎
+
+- **技术栈**: XGBoost + SHAP + scikit-learn
+- **评分模式**: AHP (层次分析法) 基准评分 + ML 模型融合
+- **SHAP 解释**: 支持特征重要度分析，输出各维度贡献值
+- **模型管理**: `joblib` 序列化/反序列化，支持模型热更新
+- **代码入口**: `backend/src/core/nodes/scoring.py` (Agent 评分节点), `backend/src/schemas/ml.py` (输出模型)
+
+### 6.15 NLP 文本处理
+
+- **中文分词**: jieba 分词器，支持自定义词典 (`backend/src/data/jieba_custom_dict.txt`)
+- **去重引擎**: datasketch MinHash 实现近似去重 (`backend/src/core/rag/dedup_engine.py`)
+- **同义词扩展**: 基于 jieba 的本地同义词扩展 (`backend/src/core/rag/local_synonym_expander.py`)
+- **同义词校验**: 同义词质量校验 (`backend/src/core/rag/synonym_validator.py`)
+- **查询分析**: 中文查询类型分类 (`backend/src/core/rag/query_analyzer.py`)
+
+### 6.16 定时任务调度
+
+- **调度器**: APScheduler，进程内单例
+- **定时任务**:
+  - 02:00 -- 清理过期评估报告（30天）
+  - 03:00 -- 清理孤立草稿（7天）
+  - 04:00 -- 清理过期链路追踪（30天）
+- **代码入口**: `backend/src/core/scheduler.py`

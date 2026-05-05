@@ -9,6 +9,7 @@ from src.schemas.rag_eval.draft import (
 )
 from src.schemas.rag_eval.test_case import TestCaseRead
 from src.config.core.manager import ConfigManager
+from src.models.rag_eval.draft import TestCaseDraft
 from src.models.rag_eval.enums import TestCaseStatus
 from src.repository.rag_eval.draft_repository import DraftRepository
 from src.repository.rag_eval.test_case_repository import TestCaseRepository
@@ -164,15 +165,29 @@ class DraftEngineFacade:
 
     # ── CRUD ──
 
+    _ALLOWED_SORT_FIELDS: ClassVar[set[str]] = {
+        "faithfulness_score", "status", "created_at", "updated_at",
+    }
+
     async def get_drafts(self, page=1, page_size=20, status=None,
-                         source_document_id=None, batch_id=None) -> DraftList:
+                         source_document_id=None, batch_id=None,
+                         sort_by: Optional[str] = None,
+                         sort_order: Optional[str] = None) -> DraftList:
+        from sqlalchemy import asc, desc
         skip = (page - 1) * page_size
         f = {}
         for k, v in [("status", status), ("source_document_id", source_document_id), ("batch_id", batch_id)]:
             if v is not None:
                 f[k] = v
-        orms = await (self._draft_repo.get_all(skip=skip, limit=page_size) if not f
-                      else self._draft_repo.get_by_filter(**f, skip=skip, limit=page_size))
+
+        # 构建排序子句
+        order_by = None
+        if sort_by and sort_by in self._ALLOWED_SORT_FIELDS:
+            col = getattr(TestCaseDraft, sort_by)
+            order_by = desc(col) if sort_order == "desc" else asc(col)
+
+        orms = await (self._draft_repo.get_all(skip=skip, limit=page_size, order_by=order_by) if not f
+                      else self._draft_repo.get_by_filter(**f, skip=skip, limit=page_size, order_by=order_by))
         total = await (self._draft_repo.count_all() if not f else self._draft_repo.count_by_filter(**f))
         return DraftList(items=OrmMapper.to_read_list(orms, DraftRead), total=total, page=page, page_size=page_size)
 

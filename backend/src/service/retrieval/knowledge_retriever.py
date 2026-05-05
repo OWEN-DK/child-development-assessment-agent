@@ -169,6 +169,24 @@ class KnowledgeRetriever:
 
         return results
 
+    @staticmethod
+    def _ensure_knowledge_items(items: list) -> List[KnowledgeItem]:
+        """将缓存返回的 dict 列表转换为 KnowledgeItem 列表（防御性处理）"""
+        if not items:
+            return []
+        result = []
+        for item in items:
+            if isinstance(item, KnowledgeItem):
+                result.append(item)
+            elif isinstance(item, dict):
+                try:
+                    result.append(KnowledgeItem(**item))
+                except Exception:
+                    logger.warning(f"无法将 dict 转换为 KnowledgeItem: {str(item)[:100]}")
+            else:
+                logger.warning(f"缓存中存在非预期类型: {type(item).__name__}")
+        return result
+
     async def retrieve_knowledge(
         self, query: str, limit: int = 3, user_id: str = None
     ) -> List[KnowledgeItem]:
@@ -185,7 +203,7 @@ class KnowledgeRetriever:
         cache_key = self._get_cache_key(query, limit)
         cached_result = await self.cache_service.get(cache_key)
         if cached_result:
-            return cached_result
+            return self._ensure_knowledge_items(cached_result)
 
         # A/B 测试：根据变体选择不同的检索策略
         retrieval_variant = "control"

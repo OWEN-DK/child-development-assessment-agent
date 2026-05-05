@@ -23,11 +23,15 @@ class ResultProcessor:
         self._result_repo = test_run_result_repository
         self._mapper = orm_mapper
 
-    async def aggregate(self, run_id: str) -> None:
-        """汇总单次运行结果，更新 test_runs 扁平指标字段"""
+    async def aggregate(self, run_id: str) -> int:
+        """汇总单次运行结果，更新 test_runs 扁平指标字段
+
+        Returns:
+            通过的用例数
+        """
         results = await self._result_repo.get_by_run_id(run_id)
         if not results:
-            return
+            return 0
 
         passed = sum(1 for r in results if r.passed)
         total = len(results)
@@ -54,6 +58,7 @@ class ResultProcessor:
             update_data["overall_ndcg"] = sum(ndcg_vals) / len(ndcg_vals)
 
         await self._run_repo.update(run_id, update_data)
+        return passed
 
     async def compare(self, run_id_1: str, run_id_2: str) -> RunComparison:
         """比较两个测试运行，返回 RunComparison"""

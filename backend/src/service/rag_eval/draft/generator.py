@@ -185,5 +185,6 @@ class DraftGenerator:
                 difficulty_level=diff, source_chunk_id=chunk_id,
                 source_page=page, source_content_snippet=content[:500],
                 generation_params={"chunk_id": chunk_id},
+                expected_knowledge_ids=[chunk_id] if chunk_id else [],
             ))
         return drafts

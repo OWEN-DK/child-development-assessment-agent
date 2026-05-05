@@ -1,14 +1,14 @@
 from src.core.pipeline.orchestrator import PipelineContext, PipelineStep
-from src.core.reranker import CrossEncoderReranker as Reranker
+from src.core.reranker import create_reranker
 from src.utils.logger import logger
 
 
 class RerankingStep(PipelineStep):
-    """重排序步骤：使用CrossEncoder模型对检索结果重新排序"""
+    """重排序步骤：使用配置的重排序器对检索结果重新排序"""
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
-        self._reranker = Reranker()
+        self._reranker = create_reranker()
         self._initial_k = self.config.get("initial_k", 30)
         self._final_k = self.config.get("final_k", 5)
 

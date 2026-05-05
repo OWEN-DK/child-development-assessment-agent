@@ -174,7 +174,7 @@ class PipelineOrchestrator:
         """使用统一 QueryRouter 进行分类"""
         from src.core.query_router import QueryRouter
 
-        classification = self._query_router.classify(query)
+        classification = await self._query_router.classify_async(query)
         return classification.query_type.value
 
     def reload_config(self):

@@ -49,7 +49,7 @@ export async function deleteTestCase(id: string): Promise<void> {
 
 /** 批量删除测试用例 */
 export async function batchDeleteTestCases(ids: string[]): Promise<void> {
-  await apiClient.delete('/api/v1/rag/eval/test-cases', { data: { ids } });
+  await apiClient.delete('/api/v1/rag/eval/test-cases/batch', { data: { case_ids: ids } });
 }
 
 /** 从草稿导入为测试用例 */

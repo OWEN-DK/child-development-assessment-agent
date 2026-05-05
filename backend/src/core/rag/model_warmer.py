@@ -2,6 +2,7 @@
 模型预热器 (Phase D-3)
 
 服务启动时后台异步加载 Cross-Encoder 模型，消除懒加载延迟。
+DashScope API 模式下跳过预热（无需本地模型）。
 """
 
 import asyncio
@@ -12,10 +13,11 @@ from src.utils.logger import logger
 
 
 class ModelWarmer:
-    """Cross-Encoder 模型预热器"""
+    """Cross-Encoder 模型预热器（仅本地 provider 需要）"""
 
-    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3", provider: str = "dashscope"):
         self.model_name = model_name
+        self.provider = provider
         self._model = None
         self._is_warmed = False
         self._warmup_failed = False
@@ -23,12 +25,12 @@ class ModelWarmer:
         self._warmup_duration: Optional[float] = None
 
     async def warmup(self) -> bool:
-        """
-        后台异步预热模型
+        """后台异步预热模型（DashScope 模式自动跳过）"""
+        if self.provider == "dashscope":
+            self._is_warmed = True
+            logger.info("DashScope Reranker 模式，跳过本地模型预热")
+            return True
 
-        Returns:
-            bool: 是否成功
-        """
         if self._is_warmed or self._warmup_failed:
             return self._is_warmed
 
@@ -91,6 +93,7 @@ class ModelWarmer:
         """获取预热状态"""
         return {
             "model_name": self.model_name,
+            "provider": self.provider,
             "is_warmed": self._is_warmed,
             "warmup_failed": self._warmup_failed,
             "warmup_duration": self._warmup_duration,
@@ -100,15 +103,19 @@ class ModelWarmer:
 global_warmer: Optional[ModelWarmer] = None
 
 
-def get_model_warmer(model_name: str = "BAAI/bge-reranker-v2-m3") -> ModelWarmer:
+def get_model_warmer(
+    model_name: str = "qwen3-rerank", provider: str = "dashscope"
+) -> ModelWarmer:
     """获取全局模型预热器实例"""
     global global_warmer
     if global_warmer is None:
-        global_warmer = ModelWarmer(model_name=model_name)
+        global_warmer = ModelWarmer(model_name=model_name, provider=provider)
     return global_warmer
 
 
-async def warmup_reranker(model_name: str = "BAAI/bge-reranker-v2-m3") -> bool:
-    """预热重排序模型（供 FastAPI startup 调用）"""
-    warmer = get_model_warmer(model_name)
+async def warmup_reranker(
+    model_name: str = "qwen3-rerank", provider: str = "dashscope"
+) -> bool:
+    """预热重排序模型（供 FastAPI startup 调用，DashScope 模式自动跳过）"""
+    warmer = get_model_warmer(model_name, provider)
     return await warmer.warmup()

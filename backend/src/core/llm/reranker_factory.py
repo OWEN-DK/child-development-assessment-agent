@@ -60,10 +60,14 @@ class RerankerFactory:
 
             full_config = self.config_manager.get_full_config()
             retrieval_config = full_config.get("rag_retrieval", {})
-            provider = retrieval_config.get("reranker_provider", "local")
-            model = retrieval_config.get("reranker_model", "BAAI/bge-reranker-v2-m3")
+            provider = retrieval_config.get("reranker_provider", "dashscope")
+            model = retrieval_config.get("reranker_model", "qwen3-rerank")
 
-            if provider == "local":
+            if provider == "dashscope":
+                from src.core.reranker import DashScopeReranker
+
+                self._instance = DashScopeReranker(model_name=model)
+            elif provider == "local":
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 self._instance = await asyncio.to_thread(
                     self._load_cross_encoder, model

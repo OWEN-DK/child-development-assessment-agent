@@ -40,6 +40,11 @@ export async function executeRun(id: string): Promise<{ task_id: string }> {
   return res.data;
 }
 
+/** 取消运行 */
+export async function cancelRun(id: string): Promise<void> {
+  await apiClient.post(`/api/v1/rag/eval/runs/${id}/cancel`);
+}
+
 /** 删除运行 */
 export async function deleteRun(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/rag/eval/runs/${id}`);

@@ -133,14 +133,14 @@ class RagRetrievalSettings(BaseSettings):
 
     # 重排序相关
     rag_reranker_provider: str = Field(
-        default="local",
+        default="dashscope",
         validation_alias="RAG_RERANKER_PROVIDER",
-        description="Reranker 提供商（local/cohere/voyage）",
+        description="Reranker 提供商（dashscope/local）",
     )
     rag_reranker_model: str = Field(
-        default="BAAI/bge-reranker-v2-m3",
+        default="qwen3-rerank",
         validation_alias="RAG_RERANKER_MODEL",
-        description="重排序模型",
+        description="重排序模型（DashScope: qwen3-rerank, 本地: BAAI/bge-reranker-v2-m3）",
     )
     rag_reranker_initial_k: int = Field(
         default=30,

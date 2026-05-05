@@ -1,5 +1,5 @@
 import { Space, Typography, Descriptions } from 'antd';
-import type { EvalReport } from '@entities/rag-eval';
+import type { EvalReport, TestRunStatus } from '@entities/rag-eval';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatDuration, formatTimestamp } from '@entities/rag-eval';
 
@@ -14,7 +14,7 @@ export function ReportHeader({ report }: ReportHeaderProps) {
     <div>
       <Space align="center" style={{ marginBottom: 8 }}>
         <Title level={3} style={{ margin: 0 }}>{report.run_name}</Title>
-        <StatusBadge status={report.status} />
+        <StatusBadge status={report.status as TestRunStatus} />
       </Space>
       <Descriptions size="small" column={4}>
         <Descriptions.Item label="综合得分">

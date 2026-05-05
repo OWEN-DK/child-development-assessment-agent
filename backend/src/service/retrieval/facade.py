@@ -208,9 +208,9 @@ class RetrievalFacade:
 
         # 如果有 reranker，对去重结果精排
         try:
-            from src.core.reranker import CrossEncoderReranker
+            from src.core.reranker import create_reranker
 
-            reranker = CrossEncoderReranker()
+            reranker = create_reranker()
             nodes = [
                 NodeWithScore(
                     node=TextNode(
@@ -242,7 +242,7 @@ class RetrievalFacade:
             cached = await self.cache_service.get(cache_key)
             if cached:
                 logger.debug(f"Pipeline 检索命中缓存: {query[:30]}")
-                return cached
+                return self.knowledge_retriever._ensure_knowledge_items(cached)
         except Exception:
             pass  # 缓存查询失败不阻塞检索
 

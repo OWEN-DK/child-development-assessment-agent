@@ -484,6 +484,8 @@ class RagEvalModule(Module):
         retrieval_service: IRetrievalService,
     ) -> BatchTestRunner:
         from src.api.sse import SSEPublisher
+        from src.core.llm.factory import LLMServiceFactoryCompat
+        generation_llm = LLMServiceFactoryCompat.create(model_name="qwen-plus")
         return BatchTestRunner(
             executor=test_case_executor,
             result_processor=result_processor,
@@ -491,6 +493,7 @@ class RagEvalModule(Module):
             test_run_result_repository=test_run_result_repository,
             sse_publisher=SSEPublisher,
             retrieval_service=retrieval_service,
+            generation_service=generation_llm,
         )
 
     @singleton
@@ -556,6 +559,7 @@ class RagEvalModule(Module):
     def provide_report_engine_facade(
         self, report_builder: ReportBuilder, markdown_renderer: MarkdownRenderer, trend_analyzer: TrendAnalyzer,
         report_exporter: ReportExporter, report_repository: ReportRepository, test_run_repository: TestRunRepository, orm_mapper: OrmMapper,
+        metric_engine_facade: MetricEngineFacade, run_engine_facade: RunEngineFacade,
     ) -> ReportEngineFacade:
         return ReportEngineFacade(
             builder=report_builder,
@@ -565,6 +569,8 @@ class RagEvalModule(Module):
             report_repository=report_repository,
             test_run_repository=test_run_repository,
             orm_mapper=orm_mapper,
+            metric_engine=metric_engine_facade,
+            run_engine=run_engine_facade,
         )
 
     # ── Phase 6: TuningEngine 子组件 ──────────────────
@@ -612,8 +618,9 @@ class RagEvalModule(Module):
     def provide_rag_eval_orchestrator(
         self, draft_engine_facade: DraftEngineFacade, case_engine_facade: CaseEngineFacade, run_engine_facade: RunEngineFacade,
         metric_engine_facade: MetricEngineFacade, report_engine_facade: ReportEngineFacade, tuning_engine_facade: TuningEngineFacade,
+        batch_runner: BatchTestRunner,
     ) -> RagEvalOrchestrator:
-        return RagEvalOrchestrator(
+        orchestrator = RagEvalOrchestrator(
             draft_engine=draft_engine_facade,
             case_engine=case_engine_facade,
             run_engine=run_engine_facade,
@@ -621,6 +628,9 @@ class RagEvalModule(Module):
             report_engine=report_engine_facade,
             tuning_engine=tuning_engine_facade,
         )
+        # 延迟绑定：运行完成后自动触发评估+报告流水线
+        batch_runner._on_complete = orchestrator.post_run_pipeline
+        return orchestrator
 
     # ── Phase 7: 子控制器 ─────────────────────────────
 

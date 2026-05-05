@@ -19,7 +19,9 @@ class ReportController:
     def register(self, router: APIRouter) -> None:
         router.add_api_route("/reports", self.list_reports, methods=["GET"])
         router.add_api_route("/reports", self.generate_report, methods=["POST"])
+        router.add_api_route("/reports/batch", self.batch_delete_reports, methods=["DELETE"])
         router.add_api_route("/reports/{report_id}", self.get_report, methods=["GET"])
+        router.add_api_route("/reports/{report_id}", self.delete_report, methods=["DELETE"])
         router.add_api_route("/reports/{report_id}/export", self.export_report, methods=["GET"])
         router.add_api_route("/trends", self.get_trends, methods=["GET"])
 
@@ -29,7 +31,7 @@ class ReportController:
         page_size: int = Query(20, ge=1, le=100),
     ):
         result = await self._engine.list_reports(page, page_size)
-        return APIResponse.success([r.model_dump(mode="json") for r in result])
+        return APIResponse.success(result.model_dump(mode="json"))
 
     async def generate_report(self, body: dict = Body(...)):
         run_id = body.get("run_id", "")
@@ -41,6 +43,17 @@ class ReportController:
     async def get_report(self, report_id: str = Path(...)):
         result = await self._engine.get_report(report_id)
         return APIResponse.success(result.model_dump(mode="json"))
+
+    async def delete_report(self, report_id: str = Path(...)):
+        await self._engine.delete_report(report_id)
+        return APIResponse.success(None)
+
+    async def batch_delete_reports(self, body: dict = Body(...)):
+        ids = body.get("ids", [])
+        if not ids:
+            raise AppException(400, 13002, "ids 不能为空", "INVALID_PARAMS")
+        await self._engine.batch_delete_reports(ids)
+        return APIResponse.success(None)
 
     async def export_report(
         self,

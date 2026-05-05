@@ -83,11 +83,15 @@ const mockRunMetrics = {
 const mockReportsResponse = {
   items: [{
     id: 'rpt-1', run_id: 'run-1', run_name: '运行1',
-    overall_score: 0.82, status: 'completed' as const,
-    metrics: mockRunMetrics, diagnosis: null,
+    overall_score: 0.82, status: 'completed',
+    summary: { overall_score: 0.82, l1_score: 0.8, l2_score: 0.85, l3_score: 0.78, diagnosis_health: 0.9, total_issues: 2, critical_issues: 0, run_name: '运行1', total_cases: 10, passed_cases: 8, duration_ms: 60000 },
+    scoring_dashboard: { l1: [], l2: [], l3: [] },
+    diagnosis_details: [],
+    bad_cases: [],
+    tuning_suggestions: [],
     markdown_content: '# 报告', total_test_cases: 10,
     passed_test_cases: 8, duration_seconds: 60,
-    created_at: '2026-04-28T00:00:00Z',
+    test_set_id: null, created_at: '2026-04-28T00:00:00Z',
   }],
   total: 1, page: 1, page_size: 20,
 };

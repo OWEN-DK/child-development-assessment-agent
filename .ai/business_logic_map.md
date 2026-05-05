@@ -51,8 +51,8 @@
 
 | 模块 | 业务逻辑 | 核心页面 / 代码入口 |
 |---|---|---|
-| **儿童发展评估** | 表单输入与报告展示 | 收集儿童画像与运动计划，调用 Agent 接口，渲染 Markdown 报告及多维雷达图。 | `frontend/src/features/assessment/pages/HomePage.tsx`<br>`frontend/src/components/assessment/AssessmentForm.tsx` |
-| **知识库与检索** | 文档导入与智能搜索 | 管理 PDF/EPUB/TXT 知识文档的上传与分块；提供支持混合检索界面。 | `frontend/src/features/documents/pages/KnowledgeBasePage.tsx`<br>`frontend/src/features/knowledge/pages/KnowledgeSearchPage.tsx` |
+| **儿童发展评估** | 表单输入与报告展示 | 收集儿童画像与运动计划，调用 Agent 接口，渲染 Markdown 报告及多维雷达图。 | `frontend/src/features/assessment/HomePage.tsx`<br>`frontend/src/components/assessment/AssessmentForm.tsx` |
+| **知识库与检索** | 文档导入与智能搜索 | 管理 PDF/EPUB/TXT 知识文档的上传与分块；提供支持混合检索界面。 | `frontend/src/features/documents/KnowledgeBasePage.tsx`<br>`frontend/src/features/knowledge/KnowledgeSearchPage.tsx` |
 | **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/pages/`（DraftPage / TestCasePage / RunPage / ReportPage / TuningPage 等 11 个子页面） |
 | **系统配置页** | 多模式配置热更新 | 提供向导模式/专家模式，动态修改系统参数，提供冲突检测与原子保存。 | `frontend/src/pages/SystemConfigPage.tsx` |
 | **提示词与监控** | 沙箱测试与全链路追踪 | 在线编辑 Prompt 并进行沙箱预览；查看 LLM 调用的 Span 层级树、耗时与成本大盘。 | `frontend/src/features/rag-eval/pages/PromptListPage.tsx`<br>`frontend/src/features/rag-eval/pages/PromptEditPage.tsx`<br>`frontend/src/features/monitoring/LLMMonitoringDashboard.tsx` |

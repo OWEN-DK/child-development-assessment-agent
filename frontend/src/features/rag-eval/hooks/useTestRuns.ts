@@ -50,6 +50,17 @@ export function useExecuteRun() {
   });
 }
 
+/** 取消运行 */
+export function useCancelRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => runsApi.cancelRun(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
+    },
+  });
+}
+
 /** 删除单个运行 */
 export function useDeleteRun() {
   const qc = useQueryClient();

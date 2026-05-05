@@ -65,7 +65,7 @@ class AgentState(BaseModel):
 - **输入**: 所有前序状态 (`child_profile`, `proposed_plan`, `child_state`, `evaluation_result`, `retrieved_docs`, `is_streaming`)。
 - **输出**: `final_report` (Markdown + 结构化数据)。支持流式输出时会额外返回 `report_prompts`。
 
-## 4. 专家反馈循环 (异步 - 规划中)
-- **角色**: 人在回路审核员
-- **职责**: 事后审查分数以微调系统。
-- **动作**: 标记 Bad Case，提供修正分，更新金标准数据集。
+## 4. 专家反馈循环 (未实现 - 规划中)
+- **状态**: 尚未实现，当前图为纯线性 DAG，无反馈边。
+- **规划职责**: 人在回路审核员，事后审查分数以微调系统。
+- **规划动作**: 标记 Bad Case，提供修正分，更新金标准数据集。

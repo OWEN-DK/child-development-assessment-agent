@@ -1,104 +1,124 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Space, Button, Typography, Select, Spin, Alert, Empty, Row, Col, Card, Divider, message,
+  Space, Button, Typography, Alert, message, Table, Modal, Popconfirm,
 } from 'antd';
-import { FileMarkdownOutlined, FileTextOutlined, FileExcelOutlined } from '@ant-design/icons';
-import type { TestDomain } from '@entities/rag-eval';
-import { useReports, useReport, useExportReport } from '../hooks/useReports';
-import { useRunMetrics, useRunDiagnosis } from '../hooks/useMetrics';
-import { ScoringDashboard } from '../components/metrics/ScoringDashboard';
-import { DiagnosisPanel } from '../components/diagnosis/DiagnosisPanel';
-import { ReportHeader } from '../components/report/ReportHeader';
-import { BadCaseTable } from '../components/report/BadCaseTable';
-import { SuggestionPanel } from '../components/tuning/SuggestionPanel';
-import { useTuningSuggestions, useAdoptSuggestion, useRejectSuggestion, useIgnoreSuggestion } from '../hooks/useTuning';
+import type { ColumnsType } from 'antd/es/table';
+import { DeleteOutlined, EyeOutlined } from '@ant-design/icons';
+import type { EvalReport } from '@entities/rag-eval';
+import { useReports, useDeleteReport, useBatchDeleteReports } from '../hooks/useReports';
+import { formatPercent, formatDuration, formatTimestamp } from '@entities/rag-eval';
+import { useState } from 'react';
 
-const { Title } = Typography;
-
-const MOCK_BAD_CASES: Array<{ query: string; domain: TestDomain; age: number; precision: number; recall: number; error_message: string | null }> = [];
+const { Text } = Typography;
 
 export function ReportPage() {
-  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  const { data: reportsData, isLoading: reportsLoading, isError: reportsError } = useReports();
-  const { data: report, isLoading: reportLoading } = useReport(selectedReportId || '');
-  const { data: metrics } = useRunMetrics(selectedReportId || '');
-  const { data: diagnosis } = useRunDiagnosis(selectedReportId || '');
-  const { data: suggestionsData = [] } = useTuningSuggestions(selectedReportId || '');
-
-  const adoptMutation = useAdoptSuggestion();
-  const rejectMutation = useRejectSuggestion();
-  const ignoreMutation = useIgnoreSuggestion();
-  const exportMutation = useExportReport();
+  const { data: reportsData, isLoading, isError } = useReports({ page, page_size: pageSize });
+  const deleteMutation = useDeleteReport();
+  const batchDeleteMutation = useBatchDeleteReports();
 
   const reports = reportsData?.items || [];
-  const runId = report?.run_id || selectedReportId || '';
+  const total = reportsData?.total || 0;
 
-  const handleExport = useCallback((format: 'json' | 'csv' | 'pdf') => {
-    if (!selectedReportId) return;
-    exportMutation.mutate({ reportId: selectedReportId, format });
-    message.success('导出已开始');
-  }, [selectedReportId, exportMutation]);
+  const handleDelete = useCallback((id: string) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: '删除后不可恢复',
+      onOk: async () => {
+        await deleteMutation.mutateAsync(id);
+        message.success('已删除');
+      },
+    });
+  }, [deleteMutation]);
 
-  const handleAdopt = useCallback(async (id: string) => {
-    await adoptMutation.mutateAsync({ suggestionId: id, runId });
-    message.success('已采纳');
-  }, [adoptMutation, runId]);
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedRowKeys.length === 0) return;
+    Modal.confirm({
+      title: '批量删除',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个报告吗？`,
+      onOk: async () => {
+        await batchDeleteMutation.mutateAsync(selectedRowKeys);
+        setSelectedRowKeys([]);
+        message.success(`已删除 ${selectedRowKeys.length} 个报告`);
+      },
+    });
+  }, [selectedRowKeys, batchDeleteMutation]);
 
-  const handleRejectSuggestion = useCallback(async (id: string) => {
-    await rejectMutation.mutateAsync({ suggestionId: id, runId });
-    message.success('已驳回');
-  }, [rejectMutation, runId]);
+  const columns: ColumnsType<EvalReport> = [
+    { title: '运行名称', dataIndex: 'run_name', width: 160, ellipsis: true },
+    {
+      title: '综合得分', dataIndex: 'overall_score', width: 100,
+      render: (s: number) => (
+        <Text strong style={{ color: s >= 0.7 ? '#52c41a' : s >= 0.5 ? '#faad14' : '#ff4d4f' }}>
+          {formatPercent(s, 1)}
+        </Text>
+      ),
+    },
+    {
+      title: '通过/总数', width: 100,
+      render: (_, r) => <Text>{r.passed_test_cases}/{r.total_test_cases}</Text>,
+    },
+    {
+      title: '耗时', width: 100,
+      render: (_, r) => r.duration_seconds ? formatDuration(r.duration_seconds) : '-',
+    },
+    {
+      title: '状态', dataIndex: 'status', width: 90,
+      render: (s: string) => (
+        <Text type={s === 'completed' ? 'success' : s === 'superseded' ? 'secondary' : 'warning'}>{s}</Text>
+      ),
+    },
+    {
+      title: '创建时间', dataIndex: 'created_at', width: 150,
+      render: (t: string) => <Text style={{ fontSize: 12 }}>{formatTimestamp(t)}</Text>,
+    },
+    {
+      title: '操作', width: 160,
+      render: (_, record) => (
+        <Space size="small">
+          <Button size="small" type="primary" icon={<EyeOutlined />} onClick={() => navigate(`/rag-eval/reports/${record.id}`)}>查看</Button>
+          <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
-  const handleIgnoreSuggestion = useCallback(async (id: string) => {
-    await ignoreMutation.mutateAsync({ suggestionId: id, runId });
-    message.success('已忽略');
-  }, [ignoreMutation, runId]);
-
-  if (reportsError) return <Alert type="error" message="加载报告列表失败" showIcon />;
+  if (isError) return <Alert type="error" message="加载报告列表失败" showIcon />;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>评估报告</Title>
+        <Typography.Title level={4} style={{ margin: 0 }}>评估报告</Typography.Title>
         <Space>
-          <Select placeholder="选择报告" value={selectedReportId} onChange={setSelectedReportId} loading={reportsLoading} style={{ minWidth: 240 }}
-            showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-            options={reports.map((r) => ({ value: r.id, label: `${r.run_name} (${(r.overall_score * 100).toFixed(0)}%)` }))}
-            notFoundContent={reportsLoading ? <Spin size="small" /> : <Empty description="暂无报告" />} allowClear />
-          <Button icon={<FileMarkdownOutlined />} onClick={() => handleExport('pdf')} disabled={!selectedReportId}>Markdown</Button>
-          <Button icon={<FileTextOutlined />} onClick={() => handleExport('json')} disabled={!selectedReportId}>JSON</Button>
-          <Button icon={<FileExcelOutlined />} onClick={() => handleExport('csv')} disabled={!selectedReportId}>CSV</Button>
+          <Button danger icon={<DeleteOutlined />} disabled={selectedRowKeys.length === 0} onClick={handleBatchDelete} loading={batchDeleteMutation.isPending}>
+            批量删除
+          </Button>
         </Space>
       </div>
 
-      {!selectedReportId ? (
-        <Empty description="请选择一个报告查看" style={{ padding: 60 }} />
-      ) : reportLoading ? (
-        <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" tip="加载报告中..." /></div>
-      ) : !report ? (
-        <Alert type="warning" message="未找到该报告" showIcon />
-      ) : (
-        <div>
-          <ReportHeader report={report} />
-          <Divider />
-          {metrics ? <ScoringDashboard metrics={metrics} /> : <Card size="small" style={{ marginBottom: 16 }}><Alert type="info" message="暂无指标数据" /></Card>}
-          <Divider />
-          {diagnosis ? <DiagnosisPanel diagnosis={diagnosis} /> : <Card size="small" style={{ marginBottom: 16 }}><Alert type="info" message="暂无诊断数据" /></Card>}
-          <Divider />
-          <Row gutter={16}>
-            <Col xs={24} lg={12}>
-              <Title level={5}>Bad Cases</Title>
-              <BadCaseTable cases={MOCK_BAD_CASES} />
-            </Col>
-            <Col xs={24} lg={12}>
-              <Title level={5}>调优建议</Title>
-              <SuggestionPanel suggestions={suggestionsData as Parameters<typeof SuggestionPanel>[0]['suggestions']}
-                onAdopt={handleAdopt} onReject={handleRejectSuggestion} onIgnore={handleIgnoreSuggestion} />
-            </Col>
-          </Row>
-        </div>
-      )}
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={reports}
+        loading={isLoading}
+        size="small"
+        rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as string[]) }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+        }}
+        scroll={{ x: 800 }}
+      />
     </div>
   );
 }

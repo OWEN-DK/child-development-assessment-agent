@@ -226,6 +226,7 @@ class PromptStorage:
         from src.core.prompts_fallback import (
             ASSESSMENT_SYSTEM_PROMPT, CATEGORY_INFERENCE_PROMPT,
             DRAFT_GENERATION_RAG_PROMPT, INTENSITY_INFERENCE_PROMPT,
+            LAYER3_DEVIATION_ANALYSIS_PROMPT, LAYER3_HALLUCINATION_DETECTION_PROMPT,
             METADATA_EXTRACTION_PROMPT, QUERY_REWRITE_PROMPT, RAG_QUERY_TEMPLATE,
             REPORTING_SYSTEM_PROMPT, SCORING_SYSTEM_PROMPT, SYNONYM_EXPANSION_PROMPT,
             TEST_CASE_DRAFT_GENERATION_PROMPT, TEST_CASE_GENERATION_CHUNK_GROUNDED_PROMPT,
@@ -240,5 +241,7 @@ class PromptStorage:
             "assessment_system": ASSESSMENT_SYSTEM_PROMPT, "scoring": SCORING_SYSTEM_PROMPT,
             "scoring_system": SCORING_SYSTEM_PROMPT, "report_generation": REPORTING_SYSTEM_PROMPT,
             "reporting_system": REPORTING_SYSTEM_PROMPT, "draft_generation_rag": DRAFT_GENERATION_RAG_PROMPT,
+            "rag.eval.diagnosis.layer3.deviation_analysis": LAYER3_DEVIATION_ANALYSIS_PROMPT,
+            "rag.eval.diagnosis.layer3.hallucination_detection": LAYER3_HALLUCINATION_DETECTION_PROMPT,
         }
         return fallbacks.get(prompt_key, "You are a helpful assistant.")

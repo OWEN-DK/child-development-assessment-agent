@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import {
-  Space, Button, Table, Modal, message, Typography, Alert, Row, Col, Select, Form, Input, Progress, Popconfirm,
+  Space, Button, Table, Modal, message, Typography, Alert, Row, Col, Select, Form, Input, Progress, Popconfirm, Spin,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined, DeleteOutlined, FileTextOutlined, StopOutlined } from '@ant-design/icons';
 import type { TestRun, TestRunStatus, TestSet } from '@entities/rag-eval';
-import { useTestRuns, useCreateRun, useExecuteRun, useDeleteRun, useBatchDeleteRuns } from '../hooks/useTestRuns';
-import { useTriggerEvaluation } from '../hooks/useMetrics';
+import { useTestRuns, useCreateRun, useExecuteRun, useCancelRun, useDeleteRun, useBatchDeleteRuns } from '../hooks/useTestRuns';
+import { useGenerateReport } from '../hooks/useReports';
 import { useTestSets } from '../hooks/useTestSets';
 import { createSSEConnection } from '../utils/sse';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -15,7 +15,7 @@ import { formatPercent, formatDuration, formatTimestamp } from '@entities/rag-ev
 
 const { Title, Text } = Typography;
 
-const TERMINAL_EVENTS = new Set(['run_completed', 'run_failed', 'complete', 'error']);
+const TERMINAL_EVENTS = new Set(['run_completed', 'run_failed', 'run_cancelled', 'complete', 'error']);
 
 export function RunPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
@@ -28,9 +28,10 @@ export function RunPage() {
   const { data: testSetsData } = useTestSets();
   const createMutation = useCreateRun();
   const executeMutation = useExecuteRun();
-  const triggerEvalMutation = useTriggerEvaluation();
+  const cancelMutation = useCancelRun();
   const deleteMutation = useDeleteRun();
   const batchDeleteMutation = useBatchDeleteRuns();
+  const generateReportMutation = useGenerateReport();
 
   const sseAbortRef = useRef<AbortController | null>(null);
   const progressRef = useRef<Record<string, { current: number; total: number }>>({});
@@ -42,19 +43,24 @@ export function RunPage() {
     const controller = new AbortController();
     sseAbortRef.current = controller;
 
-    progressRef.current[runId] = { current: 0, total: 0 };
-    setSseProgress({ ...progressRef.current });
-
     createSSEConnection(`/api/v1/rag/eval/runs/${runId}/stream`, controller.signal, {
       onOpen: () => {},
       onMessage: (raw: string) => {
         try {
           const event = JSON.parse(raw);
           if (event.type === 'heartbeat') return;
-          if (event.type === 'case_started' && event.data) {
-            const idx = event.data.index ?? 0;
-            const total = event.data.total ?? 0;
-            progressRef.current[runId] = { current: idx + 1, total };
+          // 用 run_started 初始化进度（支持重连后恢复 total）
+          if (event.type === 'run_started' && event.data) {
+            const total = event.data.total_cases ?? 0;
+            const prev = progressRef.current[runId];
+            progressRef.current[runId] = { current: prev?.current ?? 0, total };
+            setSseProgress({ ...progressRef.current });
+          }
+          // 基于实际完成数追踪进度（case_completed 和 case_failed 都算完成）
+          if ((event.type === 'case_completed' || event.type === 'case_failed') && event.data) {
+            const completedCount = event.data.completed_count ?? 0;
+            const total = event.data.total ?? progressRef.current[runId]?.total ?? 0;
+            progressRef.current[runId] = { current: completedCount, total };
             setSseProgress({ ...progressRef.current });
           }
           if (TERMINAL_EVENTS.has(event.type)) {
@@ -86,15 +92,22 @@ export function RunPage() {
   }, [form, createMutation, refetch]);
 
   const handleStartEvaluation = useCallback(async (id: string, status?: string) => {
-    if (status === 'completed') {
-      await triggerEvalMutation.mutateAsync(id);
-    } else if (status === 'pending') {
+    if (status === 'completed' || status === 'pending') {
       await executeMutation.mutateAsync(id);
       startSSE(id);
     } else {
       startSSE(id);
     }
-  }, [startSSE, executeMutation, triggerEvalMutation]);
+  }, [startSSE, executeMutation]);
+
+  const handleGenerateReport = useCallback(async (runId: string) => {
+    try {
+      await generateReportMutation.mutateAsync(runId);
+      message.success('报告已生成，可在报告页查看');
+    } catch {
+      message.error('报告生成失败');
+    }
+  }, [generateReportMutation]);
 
   const handleDelete = useCallback((id: string) => {
     Modal.confirm({
@@ -102,6 +115,13 @@ export function RunPage() {
       onOk: async () => { await deleteMutation.mutateAsync(id); message.success('已删除'); },
     });
   }, [deleteMutation]);
+
+  const handleCancel = useCallback((id: string) => {
+    Modal.confirm({
+      title: '确认取消', content: '取消后已完成的用例结果会保留，未执行的用例将跳过',
+      onOk: async () => { await cancelMutation.mutateAsync(id); message.success('已取消'); },
+    });
+  }, [cancelMutation]);
 
   const handleBatchDelete = useCallback(async () => {
     if (selectedRowKeys.length === 0) return;
@@ -126,6 +146,7 @@ export function RunPage() {
         }
         const p = (r as any).progress;
         if (p != null) return <Progress percent={Math.round(p)} size="small" />;
+        if (r.status === 'running') return <Spin size="small" />;
         return <Text type="secondary">-</Text>;
       },
     },
@@ -150,10 +171,18 @@ export function RunPage() {
             <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)} loading={executeMutation.isPending}>执行</Button>
           )}
           {record.status === 'running' && (
-            <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>查看进度</Button>
+            <>
+              <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>查看进度</Button>
+              <Popconfirm title="确认取消运行？" onConfirm={() => handleCancel(record.id)}>
+                <Button size="small" danger icon={<StopOutlined />} loading={cancelMutation.isPending}>取消</Button>
+              </Popconfirm>
+            </>
           )}
           {record.status === 'completed' && (
-            <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>重新评估</Button>
+            <>
+              <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleStartEvaluation(record.id, record.status)}>重新评估</Button>
+              <Button size="small" icon={<FileTextOutlined />} onClick={() => handleGenerateReport(record.id)} loading={generateReportMutation.isPending}>生成报告</Button>
+            </>
           )}
           <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />

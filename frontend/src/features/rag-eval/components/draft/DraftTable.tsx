@@ -1,5 +1,6 @@
 import { Table, Space, Button, Tooltip, Typography } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import type { SorterResult } from 'antd/es/table/interface';
 import { EyeOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TestCaseDraft } from '@entities/rag-eval';
 import { StatusBadge } from '../common/StatusBadge';
@@ -7,6 +8,11 @@ import { formatPercent, formatTimestamp } from '@entities/rag-eval';
 import { PAGE_SIZE_OPTIONS } from '@shared/lib/constants';
 
 const { Text } = Typography;
+
+interface SortState {
+  sortBy?: string;
+  sortOrder?: string;
+}
 
 interface PaginationState {
   current: number;
@@ -19,6 +25,8 @@ interface DraftTableProps {
   drafts: TestCaseDraft[];
   loading?: boolean;
   pagination: PaginationState;
+  sort?: SortState;
+  onSortChange?: (sortBy?: string, sortOrder?: string) => void;
   onView: (draft: TestCaseDraft) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -31,6 +39,8 @@ export function DraftTable({
   drafts,
   loading,
   pagination,
+  sort,
+  onSortChange,
   onView,
   onApprove,
   onReject,
@@ -38,17 +48,40 @@ export function DraftTable({
   selectedRowKeys,
   onSelectChange,
 }: DraftTableProps) {
+  const getSortOrder = (field: string) => {
+    if (sort?.sortBy !== field) return undefined;
+    return sort.sortOrder === 'asc' ? 'ascend' : sort.sortOrder === 'desc' ? 'descend' : undefined;
+  };
+
   const columns: ColumnsType<TestCaseDraft> = [
     { title: '查询', dataIndex: 'query', width: 220, ellipsis: true },
     {
       title: '忠实度',
       dataIndex: 'faithfulness_score',
       width: 100,
+      sorter: true,
+      sortOrder: getSortOrder('faithfulness_score'),
       render: (v: number | null) =>
         v != null ? <Text type={v >= 0.7 ? 'success' : v >= 0.5 ? 'warning' : 'danger'}>{formatPercent(v, 1)}</Text> : '-',
     },
-    { title: '状态', dataIndex: 'status', width: 90, render: (s) => <StatusBadge status={s} type="draft" /> },
-    { title: '更新时间', dataIndex: 'updated_at', width: 140, render: (t: string) => <Text style={{ fontSize: 12 }}>{formatTimestamp(t)}</Text> },
+    {
+      title: '状态', dataIndex: 'status', width: 90,
+      sorter: true,
+      sortOrder: getSortOrder('status'),
+      render: (s) => <StatusBadge status={s} type="draft" />,
+    },
+    {
+      title: '创建时间', dataIndex: 'created_at', width: 140,
+      sorter: true,
+      sortOrder: getSortOrder('created_at'),
+      render: (t: string) => <Text style={{ fontSize: 12 }}>{formatTimestamp(t)}</Text>,
+    },
+    {
+      title: '更新时间', dataIndex: 'updated_at', width: 140,
+      sorter: true,
+      sortOrder: getSortOrder('updated_at'),
+      render: (t: string) => <Text style={{ fontSize: 12 }}>{formatTimestamp(t)}</Text>,
+    },
     {
       title: '操作', width: 180, key: 'actions',
       render: (_, record) => (
@@ -66,6 +99,20 @@ export function DraftTable({
     },
   ];
 
+  const handleTableChange = (
+    _pagination: TablePaginationConfig,
+    _filters: Record<string, unknown>,
+    sorter: SorterResult<TestCaseDraft> | SorterResult<TestCaseDraft>[],
+  ) => {
+    if (!onSortChange) return;
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s.field && s.order) {
+      onSortChange(s.field as string, s.order === 'ascend' ? 'asc' : 'desc');
+    } else {
+      onSortChange(undefined, undefined);
+    }
+  };
+
   return (
     <Table
       rowKey="id"
@@ -73,6 +120,7 @@ export function DraftTable({
       dataSource={drafts}
       loading={loading}
       size="small"
+      onChange={handleTableChange}
       rowSelection={onSelectChange ? { selectedRowKeys, onChange: (keys) => onSelectChange(keys as string[]) } : undefined}
       pagination={{
         current: pagination.current,

@@ -186,6 +186,39 @@ Chunk ID: {chunk_id}
 仅返回 JSON，不要包含任何解释性文字。
 """
 
+ANSWER_GENERATION_SYSTEM_PROMPT = "你是一个专业的儿童发展评估助手，请基于检索上下文回答问题。"
+
+LAYER3_DEVIATION_ANALYSIS_PROMPT = """\
+你是 RAG 系统质量诊断专家。请分析以下测试用例的回答是否偏离了期望。
+
+查询：{query}
+实际回答：{actual_answer}
+期望知识片段 ID：{expected_knowledge_ids}
+
+请判断回答是否存在偏离，并返回严格的 JSON：
+{{"has_deviation": true/false, "severity": "critical/warning/info", "description": "偏离描述", "suggestion": "改进建议"}}
+
+仅返回 JSON，不要其他内容。"""
+
+LAYER3_HALLUCINATION_DETECTION_PROMPT = """\
+你是 RAG 系统幻觉检测专家。请判断以下回答是否存在幻觉（即回答中包含无法从检索上下文验证的内容）。
+
+查询：{query}
+实际回答：{actual_answer}
+
+请判断是否存在幻觉，并返回严格的 JSON：
+{{"has_hallucination": true/false, "severity": "critical/warning/info", "description": "幻觉描述", "suggestion": "改进建议"}}
+
+仅返回 JSON，不要其他内容。"""
+
+ANSWER_GENERATION_USER_PROMPT = """\
+问题：{query}
+
+检索上下文：
+{context}
+
+请基于以上检索上下文，给出专业、准确的回答。"""
+
 DRAFT_GENERATION_RAG_PROMPT = """\
 你是 RAG 系统测试用例设计师。以下是一段文档原文。
 请从中提取 {max_qa} 个可直接回答的测试问题。
