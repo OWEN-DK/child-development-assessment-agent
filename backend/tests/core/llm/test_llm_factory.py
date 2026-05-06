@@ -29,7 +29,7 @@ def mock_config_manager():
                 "presence_penalty": 0.0,
                 "frequency_penalty": 0.0,
             },
-            "llm_llm_providers": {
+            "llm_providers": {
                 "dashscope": {
                     "api_key": "test-api-key",
                     "base_url": None,

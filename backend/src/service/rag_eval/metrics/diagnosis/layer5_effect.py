@@ -10,7 +10,7 @@ from src.core.config.cache import ConfigCache
 from src.schemas.rag_eval.diagnosis import LayerIssue, LayerResult
 from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.diagnosis.diagnosis_utils import (
-    calculate_layer_score, determine_layer_status)
+    calculate_layer_score, count_affected_cases, determine_layer_status)
 from src.service.rag_eval.metrics.diagnosis.orchestrator import DiagnosisLayer
 from src.utils.embedding_helper import EmbeddingHelper
 from src.utils.logger import logger
@@ -40,11 +40,15 @@ class Layer5Effect(DiagnosisLayer):
         issues.extend(await self._check_embedding(results))
         issues.extend(self._check_patterns(results))
 
+        total = len(results)
         return LayerResult(
             layer=self.layer_number, name=self.name,
             status=determine_layer_status(issues),
-            score=calculate_layer_score(issues), issues=issues,
-            details={"total_results": len(results),
+            score=calculate_layer_score(issues, total),
+            total_cases=total,
+            affected_cases=count_affected_cases(issues),
+            issues=issues,
+            details={"total_results": total,
                      "failed_count": sum(1 for r in results if not r.passed)},
             execution_time_ms=int((time.time() - start) * 1000))
 

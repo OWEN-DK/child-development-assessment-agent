@@ -46,13 +46,11 @@ class ReportExporter:
 
         writer.writerow([])
         writer.writerow(["=== 坏案分析 ==="])
-        writer.writerow(["问题", "领域", "年龄", "精确率", "召回率", "错误信息"])
+        writer.writerow(["问题", "精确率", "召回率", "错误信息"])
 
         for c in report.bad_cases:
             writer.writerow([
                 c.query,
-                c.domain or "",
-                c.age if c.age is not None else "",
                 f"{c.precision:.4f}" if c.precision is not None else "",
                 f"{c.recall:.4f}" if c.recall is not None else "",
                 c.error_message or "",

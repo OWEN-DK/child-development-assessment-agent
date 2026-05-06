@@ -149,7 +149,6 @@ class ReportBuilder:
             if hasattr(rc, "__dict__"):
                 entries.append(BadCaseEntry(
                     case_id=getattr(rc, "test_case_id", ""), query=getattr(rc, "query", ""),
-                    domain=getattr(rc, "domain", None) or "", age=(lambda v: float(v) if v is not None else None)(getattr(rc, "age", None)),
                     expected_keywords=getattr(rc, "expected_knowledge_ids", []) or [],
                     actual_answer=getattr(rc, "actual_answer", None),
                     precision=getattr(rc, "precision", None),
@@ -158,7 +157,6 @@ class ReportBuilder:
             else:
                 entries.append(BadCaseEntry(
                     case_id=rc.get("test_case_id", ""), query=rc.get("query", ""),
-                    domain=rc.get("domain") or "", age=(lambda v: float(v) if v is not None else None)(rc.get("age")),
                     expected_keywords=rc.get("expected_knowledge_ids", []) or [],
                     actual_answer=rc.get("actual_answer"),
                     precision=rc.get("precision"), recall=rc.get("recall"),

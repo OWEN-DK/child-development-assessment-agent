@@ -15,7 +15,7 @@ from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.schemas.rag_eval.diagnosis import LayerIssue, LayerResult
 from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.diagnosis.diagnosis_utils import (
-    calculate_layer_score, determine_layer_status)
+    calculate_layer_score, count_affected_cases, determine_layer_status)
 from src.service.rag_eval.metrics.diagnosis.orchestrator import DiagnosisLayer
 
 _REG_WARN = 0.05
@@ -56,11 +56,15 @@ class Layer6Regression(DiagnosisLayer):
         issues.extend(self._check_cross(run_data, results))
         issues.extend(self._check_cost(baseline, run_data, run_id))
 
+        total = len(results)
         return LayerResult(
             layer=self.layer_number, name=self.name,
             status=determine_layer_status(issues),
-            score=calculate_layer_score(issues), issues=issues,
-            details={"baseline_run_id": baseline.id, "total_results": len(results)},
+            score=calculate_layer_score(issues, total),
+            total_cases=total,
+            affected_cases=count_affected_cases(issues),
+            issues=issues,
+            details={"baseline_run_id": baseline.id, "total_results": total},
             execution_time_ms=int((time.time() - start) * 1000))
 
     def _check_global(self, baseline: TestRun, run_data: TestRunRead, run_id: str) -> list[LayerIssue]:

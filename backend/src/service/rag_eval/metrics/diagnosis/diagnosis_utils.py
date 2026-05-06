@@ -5,15 +5,24 @@
 
 from src.schemas.rag_eval.diagnosis import LayerIssue
 
-_PENALTY_MAP = {"critical": 0.3, "warning": 0.15, "info": 0.05}
 
+def calculate_layer_score(issues: list[LayerIssue], total_cases: int) -> float:
+    """按通过率计算健康度分数 0-1
 
-def calculate_layer_score(issues: list[LayerIssue]) -> float:
-    """根据 issue 严重程度计算健康度分数 0-1"""
+    通过率 = (总用例数 - 受影响用例数) / 总用例数
+    一个用例触发多条规则只算 1 个受影响用例。
+    """
+    if total_cases <= 0:
+        return 1.0
     if not issues:
         return 1.0
-    penalty = sum(_PENALTY_MAP.get(i.severity, 0.05) for i in issues)
-    return round(max(0.0, 1.0 - penalty), 4)
+    affected_cases = len({item for issue in issues for item in issue.affected_items})
+    return round(max(0.0, (total_cases - affected_cases) / total_cases), 4)
+
+
+def count_affected_cases(issues: list[LayerIssue]) -> int:
+    """统计受影响的唯一用例/实体数"""
+    return len({item for issue in issues for item in issue.affected_items})
 
 
 def determine_layer_status(issues: list[LayerIssue]) -> str:

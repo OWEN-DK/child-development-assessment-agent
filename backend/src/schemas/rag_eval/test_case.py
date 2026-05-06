@@ -5,15 +5,13 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from src.models.rag_eval.enums import DifficultyLevel, TestDomain
+from src.models.rag_eval.enums import DifficultyLevel
 
 
 class TestCaseCreate(BaseModel):
     """测试用例创建请求"""
 
     query: str
-    age: Optional[float] = None
-    domain: Optional[TestDomain] = None
     description: Optional[str] = None
     expected_knowledge_ids: list[str] = []
     expected_keywords: list[str] = []
@@ -25,9 +23,6 @@ class TestCaseRead(TestCaseCreate):
     """测试用例读取"""
 
     id: str
-    age_stage_label: str
-    min_age_requirement: Optional[float] = None
-    max_age_requirement: Optional[float] = None
     professional_terms: list[str] = []
     relevance_scores: Optional[dict[str, float]] = None
     source: str
@@ -44,8 +39,6 @@ class TestCaseUpdate(BaseModel):
     """测试用例更新"""
 
     query: Optional[str] = None
-    age: Optional[float] = None
-    domain: Optional[TestDomain] = None
     description: Optional[str] = None
     expected_knowledge_ids: Optional[list[str]] = None
     expected_keywords: Optional[list[str]] = None
@@ -66,8 +59,6 @@ class TestCaseImportItem(BaseModel):
     """单个导入项，字段比 TestCaseCreate 更宽松"""
 
     query: str
-    age: Optional[float] = None  # 岁，如 1.5
-    domain: Optional[str] = None  # 字符串，校验时转为 TestDomain
     description: Optional[str] = None
     expected_knowledge_ids: list[str] = []
     expected_keywords: list[str] = []

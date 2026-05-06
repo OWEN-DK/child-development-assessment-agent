@@ -1,5 +1,4 @@
 import type {
-  TestDomain,
   TestRunStatus,
   DraftStatus,
   LayerResultStatus,
@@ -67,9 +66,6 @@ export interface DraftFilters {
 export interface TestCase {
   id: string;
   query: string;
-  age: number;
-  age_stage_label: string;
-  domain: TestDomain;
   description: string | null;
   difficulty_level: string;
   expected_knowledge_ids: string[];
@@ -85,8 +81,8 @@ export interface TestCase {
 }
 
 export interface TestCaseFormValues
-  extends Pick<TestCase, 'query' | 'age' | 'domain' | 'expected_knowledge_ids' | 'expected_keywords'>,
-    Partial<Pick<TestCase, 'age_stage_label' | 'description' | 'answer_points_summary'>> {}
+  extends Pick<TestCase, 'query' | 'expected_knowledge_ids' | 'expected_keywords'>,
+    Partial<Pick<TestCase, 'description' | 'answer_points_summary'>> {}
 
 // ─── 测试集 ─────────────────────────────────────────
 
@@ -139,7 +135,6 @@ export interface TestRunResult {
   run_id: string;
   case_id: string;
   query: string;
-  domain: TestDomain;
   precision: number;
   recall: number;
   f1: number;
@@ -193,6 +188,8 @@ export interface LayerResult {
   name: string;
   status: LayerResultStatus;
   score: number;
+  total_cases: number;
+  affected_cases: number;
   issues: LayerIssue[];
   details: Record<string, unknown>;
 }
@@ -227,6 +224,8 @@ export interface DiagnosisSection {
   name: string;
   status: string;
   score: number;
+  total_cases: number;
+  affected_cases: number;
   issues: LayerIssue[];
   suggestions: string[];
 }
@@ -235,8 +234,6 @@ export interface DiagnosisSection {
 export interface BadCaseEntry {
   case_id: string;
   query: string;
-  domain?: string | null;
-  age?: number | null;
   expected_keywords: string[];
   actual_answer?: string | null;
   precision?: number | null;
@@ -359,8 +356,6 @@ export interface KnowledgeSnapshot {
 // ─── 筛选 ───────────────────────────────────────────
 
 export interface TestCaseFilters {
-  domain?: TestDomain;
-  age_stage_label?: string;
   source?: TestCaseSource;
   search?: string;
   page?: number;

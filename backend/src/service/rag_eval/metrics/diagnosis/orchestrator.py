@@ -64,6 +64,7 @@ class DiagnosisOrchestrator:
                 logger.error(f"诊断层 {layer_num} 执行异常: {e}")
                 result = LayerResult(
                     layer=layer_num, name=f"Layer{layer_num}", status="error", score=0.0,
+                    total_cases=len(results), affected_cases=0,
                     issues=[LayerIssue(
                         severity="critical", category="execution_error",
                         description=f"层 {layer_num} 执行异常: {str(e)}", affected_items=[run_id],
@@ -104,4 +105,5 @@ def _get_layer(layer_results: list[LayerResult], layer_num: int) -> LayerResult:
         if r.layer == layer_num:
             return r
     return LayerResult(layer=layer_num, name=f"Layer{layer_num}", status="skip", score=1.0,
+                       total_cases=0, affected_cases=0,
                        issues=[], details={}, execution_time_ms=0)

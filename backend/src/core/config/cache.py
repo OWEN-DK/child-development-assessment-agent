@@ -154,6 +154,33 @@ class ConfigCache:
             return None
         return self.get_config(self._latest_config_id)
 
+    def get_value(self, key: str, default: Any = None) -> Any:
+        """从最新配置快照中读取指定键的值"""
+        config = self.get_latest_config()
+        if config is None:
+            return default
+        return config.get(key, default)
+
+    def get_int(self, key: str, default: int = 0) -> int:
+        """从最新配置快照中读取整数值"""
+        val = self.get_value(key)
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                pass
+        return default
+
+    def get_str(self, key: str, default: str = "") -> str:
+        """从最新配置快照中读取字符串值"""
+        val = self.get_value(key)
+        if val is not None:
+            try:
+                return str(val)
+            except (ValueError, TypeError):
+                pass
+        return default
+
     async def _listen_config_changes(self) -> None:
         """后台任务：监听 Redis 配置变更事件
         收到 config_changed 事件后自动重新加载配置。

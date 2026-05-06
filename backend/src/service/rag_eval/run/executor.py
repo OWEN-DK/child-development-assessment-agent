@@ -2,11 +2,11 @@
 
 import asyncio
 
-from src.core.config.cache import ConfigCache
 from src.repository.rag_eval.test_run_result_repository import TestRunResultRepository
 from src.schemas.rag_eval.test_run import RetrievalMetrics, TestRunResultItem
 from src.utils.exceptions import AppException
 from src.utils.id_generator import generate_id
+from src.utils.logger import logger
 
 
 class TestCaseExecutor:
@@ -18,10 +18,8 @@ class TestCaseExecutor:
     def __init__(
         self,
         test_run_result_repository: TestRunResultRepository,
-        config_cache: ConfigCache | None = None,
     ):
         self._result_repo = test_run_result_repository
-        self._config = config_cache or ConfigCache.get_instance()
 
     async def execute(
         self,
@@ -39,39 +37,74 @@ class TestCaseExecutor:
         3. 计算检索指标
         4. 保存结果到 test_run_results
         5. 返回 TestRunResultItem
-        """
-        if timeout_ms is None:
-            timeout_ms = self._get_config_int("rag.eval.run.timeout_ms", 30000)
 
+        Args:
+            timeout_ms: 超时时间（毫秒），默认 300000ms（300秒）
+        """
         result_id = generate_id()
         start_time = asyncio.get_event_loop().time()
+        timeout_sec = (timeout_ms or 300_000) / 1000.0
 
         retrieved_ids = []
         actual_answer = None
         error_msg = None
         passed = False
+        failure_stage = None
+        retrieval_raw_count = 0
 
         try:
-            # 检索 + 生成，带超时控制
+            # 检索 + 生成（RAG 流水线内部已有步骤级超时保护，外层仅保留安全网）
             async def _retrieve_and_generate():
-                nonlocal retrieved_ids, actual_answer
+                nonlocal retrieved_ids, actual_answer, failure_stage, retrieval_raw_count
                 if retrieval_fn:
-                    retrieved = await retrieval_fn(test_case.query, test_case.age, test_case.domain)
-                    retrieved_ids = [(d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "") for d in (retrieved or [])]
+                    retrieved = await retrieval_fn(test_case.query)
+                    retrieval_raw_count = len(retrieved or [])
+                    retrieved_ids = [
+                        (d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "")
+                        for d in (retrieved or [])
+                        if (d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "")
+                    ]
+                    if not retrieved_ids:
+                        failure_stage = "retrieval_empty"
+                        logger.warning(
+                            f"[RAG-EVAL] 用例 {test_case.id} 检索返回空结果 "
+                            f"(原始结果数={retrieval_raw_count}), query='{test_case.query[:80]}'"
+                        )
+                        return
                 if generation_fn and retrieved_ids:
                     actual_answer = await generation_fn(test_case.query, retrieved_ids)
+                    if not actual_answer:
+                        failure_stage = "generation_empty"
+                        logger.warning(
+                            f"[RAG-EVAL] 用例 {test_case.id} 生成返回空答案 "
+                            f"(检索到 {len(retrieved_ids)} 个片段), query='{test_case.query[:80]}'"
+                        )
+                elif not retrieved_ids:
+                    failure_stage = "no_retrieval_fn_or_empty"
 
+            # 安全网超时，防止协程泄漏；正常执行由子系统自行管理超时
             await asyncio.wait_for(
                 _retrieve_and_generate(),
-                timeout=timeout_ms / 1000.0,
+                timeout=timeout_sec,
             )
-            passed = True
+            passed = actual_answer is not None
         except asyncio.TimeoutError:
-            error_msg = f"单用例执行超时 ({timeout_ms}ms)"
+            error_msg = f"单用例执行超时 ({timeout_ms or 300_000}ms)"
+            failure_stage = "timeout"
         except AppException:
             raise
         except Exception as e:
             error_msg = str(e)
+            failure_stage = "exception"
+
+        if failure_stage:
+            logger.info(
+                f"[RAG-EVAL] 用例 {test_case.id} 执行失败: "
+                f"stage={failure_stage}, retrieved={len(retrieved_ids)}, "
+                f"expected={getattr(test_case, 'expected_knowledge_ids', []) or []}"
+            )
+            if not error_msg:
+                error_msg = f"pipeline_failure:{failure_stage}"
 
         end_time = asyncio.get_event_loop().time()
         execution_time_ms = int((end_time - start_time) * 1000)
@@ -170,12 +203,3 @@ class TestCaseExecutor:
             actual_count=actual_count,
         )
 
-    def _get_config_int(self, key: str, default: int) -> int:
-        """从 ConfigCache 读取整数配置"""
-        try:
-            val = self._config.get(key)
-            if val is not None:
-                return int(val)
-        except Exception:
-            pass
-        return default

@@ -17,7 +17,7 @@ def mock_config_manager():
                 "batch_size": 10,
                 "max_length": 1536,
             },
-            "llm_llm_providers": {
+            "llm_providers": {
                 "dashscope": {
                     "api_key": "test-api-key",
                     "base_url": None,

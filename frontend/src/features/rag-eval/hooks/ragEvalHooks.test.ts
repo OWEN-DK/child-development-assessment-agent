@@ -44,8 +44,7 @@ const mockDraftsResponse = {
 
 const mockTestCasesResponse = {
   items: [{
-    id: 'case-1', query: '用例问题', age: 2, age_stage_label: '1-2y',
-    domain: 'cognitive' as const, description: null, difficulty_level: 'easy',
+    id: 'case-1', query: '用例问题', description: null, difficulty_level: 'easy',
     expected_knowledge_ids: ['k1', 'k2'], expected_keywords: ['认知'],
     answer_points_summary: '要点', professional_terms: [],
     source: 'manual' as const, source_draft_id: null, source_document_id: null,
@@ -275,11 +274,11 @@ describe('useTestCases', () => {
     const { result } = renderHook(() => useTestCases(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.items).toHaveLength(1);
-    expect(result.current.data?.items[0].domain).toBe('cognitive');
+    expect(result.current.data?.items[0].query).toBe('用例问题');
   });
 
   it('传递筛选参数', async () => {
-    const filters = { domain: 'cognitive', page: 1 };
+    const filters = { page: 1 };
     renderHook(() => useTestCases(filters), { wrapper: createWrapper() });
     await waitFor(() => expect(casesApi.getTestCases).toHaveBeenCalledWith(filters));
   });
@@ -293,7 +292,7 @@ describe('useCreateTestCase', () => {
     vi.mocked(casesApi.createTestCase).mockResolvedValue(newCase);
     const { result } = renderHook(() => useCreateTestCase(), { wrapper: createWrapper() });
     const input = {
-      query: '用例问题', age: 2, domain: 'cognitive' as const,
+      query: '用例问题',
       expected_knowledge_ids: ['k1'], expected_keywords: ['认知'],
       difficulty_level: 'easy' as const,
     };
@@ -453,12 +452,12 @@ describe('useRunDiagnosis', () => {
 
   it('传入有效 runId 时获取六层诊断', async () => {
     const mockDiagnosis = {
-      layer1: { layer: 1, name: '规则引擎', status: 'pass' as const, score: 1.0, issues: [], details: {} },
-      layer2: { layer: 2, name: '历史对比', status: 'pass' as const, score: 0.9, issues: [], details: {} },
-      layer3: { layer: 3, name: 'LLM 诊断', status: 'pass' as const, score: 0.85, issues: [], details: {} },
-      layer4: { layer: 4, name: '数据质量', status: 'pass' as const, score: 0.95, issues: [], details: {} },
-      layer5: { layer: 5, name: '效果评估', status: 'pass' as const, score: 0.88, issues: [], details: {} },
-      layer6: { layer: 6, name: '回归检测', status: 'pass' as const, score: 0.92, issues: [], details: {} },
+      layer1: { layer: 1, name: '规则引擎', status: 'pass' as const, score: 1.0, total_cases: 0, affected_cases: 0, issues: [], details: {} },
+      layer2: { layer: 2, name: '历史对比', status: 'pass' as const, score: 0.9, total_cases: 0, affected_cases: 0, issues: [], details: {} },
+      layer3: { layer: 3, name: 'LLM 诊断', status: 'pass' as const, score: 0.85, total_cases: 0, affected_cases: 0, issues: [], details: {} },
+      layer4: { layer: 4, name: '数据质量', status: 'pass' as const, score: 0.95, total_cases: 0, affected_cases: 0, issues: [], details: {} },
+      layer5: { layer: 5, name: '效果评估', status: 'pass' as const, score: 0.88, total_cases: 0, affected_cases: 0, issues: [], details: {} },
+      layer6: { layer: 6, name: '回归检测', status: 'pass' as const, score: 0.92, total_cases: 0, affected_cases: 0, issues: [], details: {} },
       overall_health: 0.92, total_issues: 0, critical_issues: 0,
     };
     vi.mocked(metricsApi.getRunDiagnosis).mockResolvedValue(mockDiagnosis);

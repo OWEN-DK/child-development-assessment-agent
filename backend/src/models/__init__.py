@@ -10,7 +10,7 @@ from .prompt_version import PromptVersion
 from .rag_eval import (DifficultyLevel, DocumentStatus as RagDocumentStatus,
                        EvalConfigChangeSet, EvalConfigVersion, EvalReport,
                        KnowledgeSnapshot, TestCase, TestCaseDraft,
-                       TestCaseStatus, TestDomain, TestRun, TestRunResult,
+                       TestCaseStatus, TestRun, TestRunResult,
                        TestRunStatus, TestSet, TestSetCase, TestSourceType,
                        TuningSuggestion)
 from .trace import Trace, TraceStatus
@@ -30,7 +30,6 @@ __all__ = [
     "TuningSuggestion",
     "EvalConfigVersion",
     "EvalConfigChangeSet",
-    "TestDomain",
     "DifficultyLevel",
     "TestCaseStatus",
     "TestRunStatus",

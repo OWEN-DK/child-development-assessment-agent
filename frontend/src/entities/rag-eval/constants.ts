@@ -1,32 +1,11 @@
 /** RAG 评估模块常量定义 —— 领域、状态映射等唯一真相源 */
 
 import type {
-  TestDomain,
   TestRunStatus,
   DraftStatus,
   LayerResultStatus,
   DifficultyLevel,
 } from './enums';
-
-/** 领域中文映射 */
-export const DOMAIN_MAP: Record<TestDomain, string> = {
-  gross_motor: '大运动',
-  fine_motor: '精细运动',
-  language: '语言',
-  cognitive: '认知',
-  social_emotional: '社交情感',
-  sensory_integration: '感觉统合',
-};
-
-/** 领域颜色映射 */
-export const DOMAIN_COLORS: Record<TestDomain, string> = {
-  gross_motor: 'blue',
-  fine_motor: 'cyan',
-  language: 'green',
-  cognitive: 'orange',
-  social_emotional: 'purple',
-  sensory_integration: 'red',
-};
 
 /** 运行状态映射 */
 export const RUN_STATUS_MAP: Record<TestRunStatus, { label: string; color: string }> = {
@@ -93,32 +72,3 @@ export const SOURCE_MAP: Record<string, string> = {
   mixed: '混合',
 };
 
-/** 年龄段列表 */
-export const AGE_STAGES = [
-  '0-1个月',
-  '1-3个月',
-  '3-6个月',
-  '6-12个月',
-  '1-2岁',
-  '2-3岁',
-  '3-4岁',
-  '4-5岁',
-  '5-6岁',
-  '6-7岁',
-];
-
-/** 兼容旧版本 */
-const AGE_STAGE_THRESHOLDS: { max: number; label: string }[] = [
-  { max: 6, label: '0-6m' },
-  { max: 12, label: '6-12m' },
-  { max: 24, label: '1-2y' },
-  { max: 36, label: '2-3y' },
-  { max: 48, label: '3-4y' },
-  { max: 72, label: '4-6y' },
-  { max: Infinity, label: '6+y' },
-];
-
-export function getAgeStage(ageMonths: number): string {
-  const stage = AGE_STAGE_THRESHOLDS.find((t) => ageMonths <= t.max);
-  return stage?.label ?? '6+y';
-}

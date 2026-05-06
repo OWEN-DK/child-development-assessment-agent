@@ -13,7 +13,7 @@ from src.repository.document_repository import SourceDocumentRepository
 from src.schemas.rag_eval.diagnosis import LayerIssue, LayerResult
 from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.diagnosis.diagnosis_utils import (
-    calculate_layer_score, determine_layer_status)
+    calculate_layer_score, count_affected_cases, determine_layer_status)
 from src.service.rag_eval.metrics.diagnosis.orchestrator import DiagnosisLayer
 from src.utils.logger import logger
 
@@ -60,10 +60,14 @@ class Layer4DataQuality(DiagnosisLayer):
         if doc_ids:
             issues.extend(await self._check_stale(doc_ids))
 
+        total = len(results)
         return LayerResult(
             layer=self.layer_number, name=self.name,
             status=determine_layer_status(issues),
-            score=calculate_layer_score(issues), issues=issues,
+            score=calculate_layer_score(issues, total),
+            total_cases=total,
+            affected_cases=count_affected_cases(issues),
+            issues=issues,
             details={"documents_involved": len(doc_ids), "golden_case_ids": golden},
             execution_time_ms=int((time.time() - start) * 1000))
 

@@ -55,7 +55,7 @@ class LLMRequest(BaseModel):
     """LLM 请求结构"""
 
     messages: list[LLMMessage]
-    model_name: str
+    model_name: str = ""
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9

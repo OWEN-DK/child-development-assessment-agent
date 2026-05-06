@@ -42,10 +42,12 @@ function sectionsToDiagnosis(sections: DiagnosisSection[], overallHealth: number
     name: s.name,
     status: s.status as LayerResult['status'],
     score: s.score,
+    total_cases: s.total_cases ?? 0,
+    affected_cases: s.affected_cases ?? 0,
     issues: s.issues,
     details: {},
   });
-  const empty: LayerResult = { layer: 0, name: '', status: 'skip', score: 0, issues: [], details: {} };
+  const empty: LayerResult = { layer: 0, name: '', status: 'skip', score: 0, total_cases: 0, affected_cases: 0, issues: [], details: {} };
   const byLayer: Record<number, LayerResult> = {};
   for (const s of sections) {
     byLayer[s.layer] = toLayerResult(s);
@@ -67,8 +69,6 @@ function sectionsToDiagnosis(sections: DiagnosisSection[], overallHealth: number
 function mapBadCases(cases: BadCaseEntry[]) {
   return cases.map((c) => ({
     query: c.query,
-    domain: (c.domain || '') as any,
-    age: c.age ?? 0,
     precision: c.precision ?? 0,
     recall: c.recall ?? 0,
     error_message: c.error_message ?? null,

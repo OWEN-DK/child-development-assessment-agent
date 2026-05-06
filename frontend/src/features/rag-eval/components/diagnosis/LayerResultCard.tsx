@@ -36,7 +36,9 @@ export function LayerResultCard({ result }: LayerResultCardProps) {
         <div>
           <Title level={5} style={{ margin: 0 }}>得分: {formatPercent(result.score, 1)}</Title>
           <Text type="secondary">
-            {result.issues.length} 个问题
+            {result.total_cases > 0
+              ? `受影响 ${result.affected_cases}/${result.total_cases} 用例`
+              : `${result.issues.length} 个问题`}
             {result.issues.filter((i) => i.severity === 'critical').length > 0 &&
               `（${result.issues.filter((i) => i.severity === 'critical').length} 严重）`}
           </Text>

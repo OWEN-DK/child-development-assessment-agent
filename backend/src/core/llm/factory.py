@@ -137,7 +137,12 @@ class LLMServiceFactory:
             full_config = self.config_manager.get_full_config()
             scene_config_data = full_config.get(f"llm_{scene}", {})
             if not scene_config_data:
-                raise ValueError(f"Unknown LLM scene: {scene}")
+                # 回退到 settings 中的 llm_scene_configs 属性
+                from src.config import settings as app_settings
+                scene_obj = app_settings.llm_scene_configs.get(scene)
+                if not scene_obj:
+                    raise ValueError(f"Unknown LLM scene: {scene}")
+                scene_config_data = scene_obj.model_dump()
 
             # 使用 Pydantic 校验（复用 LLMSceneConfig 的约束）
             from src.config.modules.models.llm import LLMSceneConfig
@@ -147,8 +152,8 @@ class LLMServiceFactory:
             except Exception as e:
                 raise ValueError(f"Invalid LLM config for scene {scene}: {e}")
 
-            # 获取提供商配置
-            llm_providers = full_config.get("llm_llm_providers", {})
+            # 获取提供商配置（config_snapshot 中键名为 llm_providers，非 llm_llm_providers）
+            llm_providers = full_config.get("llm_providers", {})
             provider_config = llm_providers.get(scene_config.provider)
             if not provider_config:
                 raise ValueError(f"Unknown LLM provider: {scene_config.provider}")
@@ -174,6 +179,11 @@ class LLMServiceFactory:
             }
             if provider_config.get("api_key"):
                 all_params["api_key"] = provider_config["api_key"]
+            elif scene_config.provider == "dashscope":
+                # 数据库 config_snapshot 中 llm_providers 可能缺少 api_key，回退到 .env
+                from src.config import settings as app_settings
+                if app_settings.dashscope_api_key:
+                    all_params["api_key"] = app_settings.dashscope_api_key
             if provider_config.get("base_url"):
                 all_params["base_url"] = provider_config["base_url"]
 
@@ -295,6 +305,7 @@ class LLMServiceFactory:
                     "content_generation",
                     "vl_parsing",
                     "ml_scoring",
+                    "rag_eval",
                 ]
 
                 from src.config.modules.models.llm import LLMSceneConfig

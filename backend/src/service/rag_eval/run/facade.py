@@ -1,5 +1,6 @@
 """运行引擎门面"""
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 from sqlalchemy import desc, func, select
@@ -7,6 +8,7 @@ from sqlalchemy import desc, func, select
 from src.core.async_task import AsyncTaskManager
 from src.core.config.cache import ConfigCache
 from src.core.database import async_session_factory
+from src.core.interfaces import IRetrievalService
 from src.models.rag_eval.test_run import TestRun
 from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.repository.rag_eval.test_run_result_repository import TestRunResultRepository
@@ -20,13 +22,15 @@ from src.service.rag_eval.run.result_processor import ResultProcessor
 from src.service.rag_eval.run.snapshot_manager import SnapshotManager
 from src.utils.exceptions import AppException, TestCaseNotFoundException, TestRunNotFoundException
 from src.utils.id_generator import generate_id
+from src.utils.logger import logger
 from src.utils.orm_mapper import OrmMapper
 
 
 class RunEngineFacade:
     """运行引擎门面"""
 
-    def __init__(        self,
+    def __init__(
+        self,
         executor: TestCaseExecutor,
         batch_runner: BatchTestRunner,
         result_processor: ResultProcessor,
@@ -34,6 +38,8 @@ class RunEngineFacade:
         test_run_repository: TestRunRepository,
         test_run_result_repository: TestRunResultRepository,
         case_engine: CaseEngineFacade,
+        retrieval_service: IRetrievalService | None = None,
+        generation_service=None,
         config_cache: ConfigCache | None = None,
         async_task_manager: AsyncTaskManager | None = None,
     ):
@@ -44,6 +50,8 @@ class RunEngineFacade:
         self._run_repo = test_run_repository
         self._result_repo = test_run_result_repository
         self._case_engine = case_engine
+        self._retrieval = retrieval_service
+        self._generation = generation_service
         self._config = config_cache or ConfigCache.get_instance()
         self._task_manager = async_task_manager or AsyncTaskManager()
         self._mapper = OrmMapper()
@@ -100,12 +108,103 @@ class RunEngineFacade:
         await self._run_repo.update(run_id, {"task_id": task_id})
         return task_id
 
+    def build_execution_functions(
+        self,
+    ) -> tuple[
+        Callable[[str], Awaitable[list[dict]]] | None,
+        Callable[[str, list[str]], Awaitable[str | None]] | None,
+    ]:
+        """构建检索和生成函数，供 execute_single 和 batch_runner 共用
+
+        两个闭包通过 _retrieved_items 共享检索结果：
+        retrieval_fn 填充内容，generation_fn 读取内容生成答案。
+        每次测试用例执行串行调用，不存在并发竞争。
+        """
+        _retrieved_items: list[dict] = []
+
+        retrieval_fn = None
+        if self._retrieval:
+            async def _retrieval(query: str):
+                results = await self._retrieval.retrieve_knowledge(query, limit=5)
+                items = []
+                for r in (results or []):
+                    if isinstance(r, dict):
+                        items.append({"id": r.get("id", ""), "content": r.get("content", "")})
+                    else:
+                        items.append({"id": getattr(r, "id", "") or "", "content": getattr(r, "content", "") or ""})
+                _retrieved_items.clear()
+                _retrieved_items.extend(items)
+                valid_items = [i for i in items if i.get("id")]
+                if not valid_items:
+                    logger.warning(
+                        f"[RAG-EVAL] 检索返回 {len(items)} 个结果但无有效ID, "
+                        f"query='{query[:80]}'"
+                    )
+                else:
+                    logger.info(
+                        f"[RAG-EVAL] 检索成功: {len(valid_items)} 个有效片段, "
+                        f"IDs={[i['id'][:12] for i in valid_items]}"
+                    )
+                return items
+            retrieval_fn = _retrieval
+
+        generation_fn = None
+        if self._generation:
+            async def _generation(query: str, retrieved_ids: list[str]):
+                from src.core.prompts_fallback import (
+                    ANSWER_GENERATION_SYSTEM_PROMPT,
+                    ANSWER_GENERATION_USER_PROMPT,
+                )
+                from src.schemas.llm import LLMMessage, LLMRequest
+
+                context = "\n\n".join(
+                    item.get("content", "") for item in _retrieved_items if item.get("content")
+                )
+                if not context:
+                    logger.warning(
+                        f"[RAG-EVAL] 生成阶段上下文为空，检索到 {len(retrieved_ids)} 个ID "
+                        f"但 _retrieved_items 中无有效内容 "
+                        f"(items={[item.get('id','?') for item in _retrieved_items]})"
+                    )
+                    return None
+
+                model = self._config.get_str("rag.eval.run.generation_model", "qwen-plus")
+                llm_timeout = self._config.get_int("rag.eval.run.llm_timeout", 120)
+                user_prompt = ANSWER_GENERATION_USER_PROMPT.format(
+                    query=query, context=context,
+                )
+                resp = await self._generation.chat_with_retry(LLMRequest(
+                    messages=[
+                        LLMMessage(role="system", content=ANSWER_GENERATION_SYSTEM_PROMPT),
+                        LLMMessage(role="user", content=user_prompt),
+                    ],
+                    model_name=model,
+                    temperature=0.3,
+                    max_tokens=2048,
+                    timeout=llm_timeout,
+                ))
+                answer = resp.content
+                if not answer:
+                    logger.warning(
+                        f"[RAG-EVAL] LLM 返回空答案, model={model}, "
+                        f"context_len={len(context)}, query='{query[:80]}'"
+                    )
+                return answer
+            generation_fn = _generation
+
+        return retrieval_fn, generation_fn
+
+
     async def execute_single(self, run_id: str, case_id: str) -> TestRunResultItem:
         """执行单个测试用例"""
         case = await self._case_engine.get_case(case_id)
         if not case:
             raise TestCaseNotFoundException(case_id)
-        return await self._executor.execute(test_case=case, run_id=run_id)
+        retrieval_fn, generation_fn = self.build_execution_functions()
+        return await self._executor.execute(
+            test_case=case, run_id=run_id,
+            retrieval_fn=retrieval_fn, generation_fn=generation_fn,
+        )
 
     async def get_run(self, run_id: str) -> TestRunRead:
         """获取测试运行详情"""

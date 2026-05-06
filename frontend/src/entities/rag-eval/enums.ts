@@ -1,14 +1,5 @@
 /** RAG 评估模块全部枚举类型 */
 
-/** 测试领域 */
-export type TestDomain =
-  | 'gross_motor'
-  | 'fine_motor'
-  | 'language'
-  | 'cognitive'
-  | 'social_emotional'
-  | 'sensory_integration';
-
 /** 测试运行状态 */
 export type TestRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 

@@ -65,6 +65,7 @@ class RetrieverManager:
 
         self.dashscope_available = bool(settings.dashscope_api_key)
         self._initialize_retrievers()
+        RetrieverManager._ever_initialized = True
 
     def _initialize_retrievers(self) -> None:
         """初始化BM25和向量检索器"""
@@ -141,7 +142,6 @@ class RetrieverManager:
         self.vector_weight = rag_config["vector_weight"]
         self.merge_mode = rag_config["merge_mode"]
         if not RetrieverManager._ever_initialized:
-            RetrieverManager._ever_initialized = True
             logger.info(
                 f"Hybrid retrieval enabled: BM25 weight={self.bm25_weight}, Vector weight={self.vector_weight}"
             )

@@ -274,7 +274,6 @@ class DraftEngineFacade:
     def _tc_dict(o, draft_id, source_document_id) -> dict:
         return dict(
             id=generate_prefixed_id("tc"), query=o.query,
-            age=None, age_stage_label="", domain=None,
             description=o.description,
             expected_knowledge_ids=o.expected_knowledge_ids or [],
             expected_keywords=o.expected_keywords or [],

@@ -1,5 +1,4 @@
 export type {
-  TestDomain,
   TestRunStatus,
   DraftStatus,
   LayerResultStatus,
@@ -45,19 +44,13 @@ export type {
 } from './types';
 
 export {
-  DOMAIN_MAP,
-  DOMAIN_COLORS,
   RUN_STATUS_MAP,
   DRAFT_STATUS_MAP,
   LAYER_STATUS_MAP,
   LAYER_NAMES,
-  AGE_STAGES,
 } from './constants';
 
 export {
-  formatDomain,
-  formatAge,
-  formatAgeRange,
   getRunStatusLabel,
   getRunStatusColor,
   getDraftStatusLabel,

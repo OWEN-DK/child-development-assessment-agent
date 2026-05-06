@@ -46,12 +46,4 @@ class DraftDeduplicator:
         # 基于 query 的文本相似度
         query_sim = difflib.SequenceMatcher(None, draft1.query, draft2.query).ratio()
 
-        # 如果领域不同，直接判定不相似
-        if draft1.domain != draft2.domain:
-            return query_sim * 0.5
-
-        # 如果年龄相差超过 6 个月，降低相似度
-        age_diff = abs(float(draft1.age) - float(draft2.age))
-        age_factor = max(0, 1 - age_diff / 12)
-
-        return query_sim * 0.7 + age_factor * 0.3
+        return query_sim

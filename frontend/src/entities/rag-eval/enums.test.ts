@@ -1,21 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { DOMAIN_MAP } from './constants';
 
 /**
  * 枚举类型本身是 TypeScript 联合类型，无法在运行时直接测试。
- * 通过常量数组验证值集合的完整性，并确保与 DOMAIN_MAP 等映射保持同步。
+ * 通过常量数组验证值集合的完整性。
  */
 
 /** 各枚举类型的完整值集合常量 */
-const TEST_DOMAIN_VALUES = [
-  'gross_motor',
-  'fine_motor',
-  'language',
-  'cognitive',
-  'social_emotional',
-  'sensory_integration',
-] as const;
-
 const TEST_RUN_STATUS_VALUES = [
   'pending',
   'running',
@@ -45,23 +35,6 @@ const TEST_CASE_SOURCE_VALUES = ['manual', 'draft', 'import'] as const;
 const DIFFICULTY_LEVEL_VALUES = ['easy', 'medium', 'hard'] as const;
 
 const DOCUMENT_STATUS_VALUES = ['uploaded', 'parsing', 'ready', 'archived'] as const;
-
-describe('TestDomain 枚举值', () => {
-  it('包含 6 个领域', () => {
-    expect(TEST_DOMAIN_VALUES).toHaveLength(6);
-  });
-
-  it('DOMAIN_MAP 的键与 TestDomain 值集合完全一致', () => {
-    const domainKeys = Object.keys(DOMAIN_MAP);
-    expect(domainKeys.sort()).toEqual([...TEST_DOMAIN_VALUES].sort());
-  });
-
-  it('所有值均为字符串', () => {
-    for (const val of TEST_DOMAIN_VALUES) {
-      expect(typeof val).toBe('string');
-    }
-  });
-});
 
 describe('TestRunStatus 枚举值', () => {
   it('包含 5 个状态', () => {

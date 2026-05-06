@@ -4,9 +4,7 @@ import type { TestCase } from '@entities/rag-eval';
 
 /** 用例列表筛选参数 */
 export interface TestCaseFilters {
-  domain?: string;
   source?: string;
-  age_stage?: string;
   search?: string;
   page?: number;
   page_size?: number;
@@ -35,8 +33,8 @@ export function useTestCase(id: string) {
 export function useCreateTestCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Pick<TestCase, 'query' | 'age' | 'domain' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> &
-      Partial<Pick<TestCase, 'age_stage_label' | 'description' | 'answer_points_summary'>>) =>
+    mutationFn: (data: Pick<TestCase, 'query' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> &
+      Partial<Pick<TestCase, 'description' | 'answer_points_summary'>>) =>
       casesApi.createTestCase(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rag-eval', 'test-cases'] });

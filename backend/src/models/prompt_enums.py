@@ -12,3 +12,4 @@ class PromptCategory(enum.Enum):
     SCORING = "scoring"
     REPORTING = "reporting"
     TEST_CASE_GENERATION = "test_case_generation"
+    RAG_EVAL = "rag_eval"

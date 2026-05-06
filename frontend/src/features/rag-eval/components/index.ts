@@ -1,4 +1,4 @@
-export { DomainTag, StatusBadge, MetricScoreCard, LayerStatusBadge, AgeStageTag } from './common';
+export { StatusBadge, MetricScoreCard, LayerStatusBadge } from './common';
 export { DiagnosisPanel, LayerResultCard, IssueList } from './diagnosis';
 export { ScoringDashboard, LayerScoreCard } from './metrics';
 export { ReportHeader, TrendChart, BadCaseTable } from './report';

@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Integer, String, Text,
+from sqlalchemy import (JSON, DateTime, Enum, Integer, String, Text,
                         func)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
-from src.models.rag_eval.enums import DifficultyLevel, TestDomain
+from src.models.rag_eval.enums import DifficultyLevel
 
 
 class TestCase(Base):
@@ -14,18 +14,6 @@ class TestCase(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     query: Mapped[str] = mapped_column(Text, nullable=False, comment="测试问题")
-    age: Mapped[float | None] = mapped_column(
-        DECIMAL(4, 1), nullable=True, comment="年龄（岁），从草稿提升时可留空"
-    )
-    age_stage_label: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="", comment="年龄段标签"
-    )
-    domain: Mapped[TestDomain | None] = mapped_column(
-        Enum(TestDomain, values_callable=lambda obj: [e.value for e in obj]),
-        nullable=True,
-        index=True,
-        comment="测试领域，从草稿提升时可留空",
-    )
     description: Mapped[str | None] = mapped_column(Text, comment="期望答案描述")
     expected_knowledge_ids: Mapped[list[str] | None] = mapped_column(
         JSON, comment="期望检索的知识片段 ID 列表"
@@ -35,12 +23,6 @@ class TestCase(Base):
     )
     answer_points_summary: Mapped[str | None] = mapped_column(
         Text, comment="答案要点摘要"
-    )
-    min_age_requirement: Mapped[float | None] = mapped_column(
-        DECIMAL(4, 1), comment="最小年龄要求"
-    )
-    max_age_requirement: Mapped[float | None] = mapped_column(
-        DECIMAL(4, 1), comment="最大年龄要求"
     )
     difficulty_level: Mapped[DifficultyLevel | None] = mapped_column(
         Enum(DifficultyLevel, values_callable=lambda obj: [e.value for e in obj]),

@@ -159,8 +159,6 @@ def create_serializer(
             {
                 "id": None,
                 "query": None,
-                "age": float,
-                "domain": safe_enum_value,
                 "created_at": safe_isoformat,
             }
         )

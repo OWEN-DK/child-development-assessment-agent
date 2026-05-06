@@ -3,7 +3,7 @@
 from sqlalchemy import desc, func, select
 
 from src.core.database import async_session_factory
-from src.models.rag_eval.enums import DifficultyLevel, TestDomain
+from src.models.rag_eval.enums import DifficultyLevel
 from src.models.rag_eval.test_case import TestCase
 from src.repository.rag_eval.test_case_repository import TestCaseRepository
 from src.repository.rag_eval.test_set_case_repository import TestSetCaseRepository
@@ -15,7 +15,6 @@ from src.schemas.rag_eval.test_case import (
     TestCaseRead,
     TestCaseUpdate,
 )
-from src.utils.age_stage import calculate_age_stage_label
 from src.utils.exceptions import (
     AppException,
     TestCaseNotFoundException,
@@ -38,11 +37,9 @@ class CaseService:
         self._mapper = orm_mapper
 
     async def create(self, data: TestCaseCreate) -> TestCaseRead:
-        """创建测试用例，自动计算 age_stage_label，source='manual'"""
-        age_stage_label = calculate_age_stage_label(data.age) if data.age is not None else ""
+        """创建测试用例，source='manual'"""
         obj_data = data.model_dump()
         obj_data["id"] = generate_id()
-        obj_data["age_stage_label"] = age_stage_label
         obj_data["source"] = "manual"
         orm_obj = await self._repo.create(obj_data)
         return self._mapper.to_read(orm_obj, TestCaseRead)
@@ -60,11 +57,6 @@ class CaseService:
         if not orm_obj:
             raise TestCaseNotFoundException(case_id)
         update_data = data.model_dump(exclude_none=True)
-        if "age" in update_data:
-            if update_data["age"] is not None:
-                update_data["age_stage_label"] = calculate_age_stage_label(update_data["age"])
-            else:
-                update_data["age_stage_label"] = ""
         update_data["version"] = (orm_obj.version or 0) + 1
         updated = await self._repo.update(case_id, update_data)
         return self._mapper.to_read(updated, TestCaseRead)
@@ -84,17 +76,11 @@ class CaseService:
         self,
         page: int,
         page_size: int,
-        domain: str | None = None,
-        age_stage_label: str | None = None,
         source: str | None = None,
     ) -> TestCaseList:
-        """分页查询测试用例，支持 domain / age_stage_label / source 过滤"""
+        """分页查询测试用例，支持 source 过滤"""
         async with async_session_factory() as session:
             base_query = select(TestCase)
-            if domain:
-                base_query = base_query.where(TestCase.domain == domain)
-            if age_stage_label:
-                base_query = base_query.where(TestCase.age_stage_label == age_stage_label)
             if source:
                 base_query = base_query.where(TestCase.source == source)
 
@@ -122,30 +108,19 @@ class CaseService:
             await self._repo.delete(case_id)
 
     async def import_from_json(self, data: TestCaseImportData) -> TestCaseList:
-        """从 JSON 批量导入，校验 domain 为合法枚举值，允许重复上传"""
+        """从 JSON 批量导入，允许重复上传"""
         created = []
         for item in data.cases:
             if not item.query:
                 continue
 
-            # 校验 domain 为合法 TestDomain 值（domain 可选，为 None 时跳过校验）
-            domain_value = None
-            if item.domain is not None:
-                domain_value = _parse_enum(item.domain, TestDomain)
-                if domain_value is None:
-                    continue
-
             difficulty_value = None
             if item.difficulty_level:
                 difficulty_value = _parse_enum(item.difficulty_level, DifficultyLevel)
 
-            age_stage = calculate_age_stage_label(item.age) if item.age is not None else ""
             obj_data = {
                 "id": generate_id(),
                 "query": item.query,
-                "age": item.age,
-                "age_stage_label": age_stage,
-                "domain": domain_value,
                 "description": item.description,
                 "expected_knowledge_ids": item.expected_knowledge_ids,
                 "expected_keywords": item.expected_keywords,

@@ -139,12 +139,10 @@ class RuleComplianceCalculator(MetricCalculator):
     规则集（共 8 条）:
     1. 查询非空且长度 > 0
     2. 答案非空且长度 > 0
-    3. 年龄在 [0, 12] 范围内
-    4. domain 为合法 TestDomain 枚举值
-    5. expected_knowledge_ids 非空
-    6. 检索指标在 [0, 1] 范围内
-    7. 无 error_message
-    8. execution_time_ms > 0 且 < 超时阈值
+    3. expected_knowledge_ids 非空
+    4. 检索指标在 [0, 1] 范围内
+    5. 无 error_message
+    6. execution_time_ms > 0 且 < 超时阈值
     """
 
     @property
@@ -161,7 +159,7 @@ class RuleComplianceCalculator(MetricCalculator):
 
     async def calculate(self, input_data: MetricInput) -> MetricOutput:
         threshold = await self._get_threshold()
-        rules_total = 8
+        rules_total = 6
         rules_passed = 0
 
         # 规则1: 查询非空且长度 > 0
@@ -172,21 +170,17 @@ class RuleComplianceCalculator(MetricCalculator):
         if input_data.actual_answer and len(input_data.actual_answer.strip()) > 0:
             rules_passed += 1
 
-        # 规则3-4: 年龄和 domain 从 MetricInput 不可直接获取，跳过（默认通过）
-        # 这些字段需要从 test_case 上下文获取，此处不阻塞
-        rules_passed += 2
-
-        # 规则5: expected_knowledge_ids 非空
+        # 规则3: expected_knowledge_ids 非空
         if input_data.expected_knowledge_ids:
             rules_passed += 1
 
-        # 规则6: 检索指标在合理范围内（由计算器保证，此处检查是否有明显异常）
+        # 规则4: 检索指标在合理范围内（由计算器保证，此处检查是否有明显异常）
         rules_passed += 1
 
-        # 规则7: 无错误（若无异常即通过）
+        # 规则5: 无错误（若无异常即通过）
         rules_passed += 1
 
-        # 规则8: execution_time_ms > 0 且合理
+        # 规则6: execution_time_ms > 0 且合理
         et = input_data.execution_time_ms
         if et is not None and et > 0:
             rules_passed += 1

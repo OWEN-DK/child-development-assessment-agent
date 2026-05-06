@@ -5,6 +5,7 @@ from typing import Optional
 
 from src.core.llm.factory import LLMServiceFactory
 from src.core.prompt_impl.facade import PromptManager
+from src.schemas.llm import LLMMessage, LLMRequest
 from src.schemas.rag_eval.metrics import MetricInput, MetricOutput
 from src.service.rag_eval.metrics.scoring.base import MetricCalculator
 from src.utils.embedding_helper import EmbeddingHelper
@@ -103,9 +104,12 @@ class AnswerRelevancyCalculator(MetricCalculator):
                 variables={"answer": answer},
             )
             llm = await self._llm_factory.create("rag_eval", "langchain")
-            response = await llm.chat(messages=[{"role": "user", "content": prompt}])
+            response = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                timeout=120,
+            ))
 
-            text = response.get("content", "") if isinstance(response, dict) else str(response)
+            text = response.content
             start = text.find("[")
             end = text.rfind("]") + 1
             if start >= 0 and end > start:

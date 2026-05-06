@@ -2,9 +2,12 @@ from collections.abc import Callable
 from injector import Injector, Module, provider, singleton
 
 from src.config import settings
+from src.config.core.manager import ConfigManager
 from src.core.database import async_session_factory
 from src.core.interfaces import (ICacheService, IDocumentIngestionService,
                                  IIndexManager, IRetrievalService)
+from src.core.llm.factory import LLMServiceFactory
+from src.core.llm.provider_registry import ProviderRegistry
 from src.repository import (ABTestMetricRepository, ConfigAuditLogRepository,
                             DocumentRecordRepository, LLMCallLogRepository,
                             SourceDocumentRepository)
@@ -14,7 +17,6 @@ from src.repository.rag_eval import (
     TestRunRepository, TestRunResultRepository, TestSetCaseRepository,
     TestSetRepository, TuningSuggestionRepository,
 )
-from src.utils.age_stage import calculate_age_stage_label
 from src.utils.embedding_helper import EmbeddingHelper
 from src.utils.orm_mapper import OrmMapper
 from src.service.rag_eval.metrics.scoring.calculators.answer_relevancy_calc import \
@@ -228,11 +230,6 @@ class RagEvalModule(Module):
 
     # ── 年龄工具 ────────────────────────────────────
 
-    @singleton
-    @provider
-    def provide_age_stage_calculator(self) -> Callable:
-        return calculate_age_stage_label
-
     # ── Phase 1: MetricEngine 三层指标计算器 ─────────
 
     @singleton
@@ -262,18 +259,26 @@ class RagEvalModule(Module):
 
     @singleton
     @provider
-    def provide_faithfulness_calculator(self) -> FaithfulnessCalculator:
-        return FaithfulnessCalculator()
+    def provide_llm_factory(self) -> LLMServiceFactory:
+        return LLMServiceFactory(
+            config_manager=ConfigManager(),
+            provider_registry=ProviderRegistry(),
+        )
 
     @singleton
     @provider
-    def provide_answer_relevancy_calculator(self) -> AnswerRelevancyCalculator:
-        return AnswerRelevancyCalculator()
+    def provide_faithfulness_calculator(self, llm_factory: LLMServiceFactory) -> FaithfulnessCalculator:
+        return FaithfulnessCalculator(llm_factory=llm_factory)
 
     @singleton
     @provider
-    def provide_groundedness_calculator(self) -> GroundednessCalculator:
-        return GroundednessCalculator()
+    def provide_answer_relevancy_calculator(self, llm_factory: LLMServiceFactory) -> AnswerRelevancyCalculator:
+        return AnswerRelevancyCalculator(llm_factory=llm_factory)
+
+    @singleton
+    @provider
+    def provide_groundedness_calculator(self, llm_factory: LLMServiceFactory) -> GroundednessCalculator:
+        return GroundednessCalculator(llm_factory=llm_factory)
 
     @singleton
     @provider
@@ -481,19 +486,14 @@ class RagEvalModule(Module):
     def provide_batch_runner(
         self, test_case_executor: TestCaseExecutor, result_processor: ResultProcessor,
         test_run_repository: TestRunRepository, test_run_result_repository: TestRunResultRepository,
-        retrieval_service: IRetrievalService,
     ) -> BatchTestRunner:
         from src.api.sse import SSEPublisher
-        from src.core.llm.factory import LLMServiceFactoryCompat
-        generation_llm = LLMServiceFactoryCompat.create(model_name="qwen-plus")
         return BatchTestRunner(
             executor=test_case_executor,
             result_processor=result_processor,
             test_run_repository=test_run_repository,
             test_run_result_repository=test_run_result_repository,
             sse_publisher=SSEPublisher,
-            retrieval_service=retrieval_service,
-            generation_service=generation_llm,
         )
 
     @singleton
@@ -508,9 +508,11 @@ class RagEvalModule(Module):
     def provide_run_engine_facade(
         self, test_case_executor: TestCaseExecutor, batch_runner: BatchTestRunner, result_processor: ResultProcessor,
         snapshot_manager: SnapshotManager, test_run_repository: TestRunRepository, test_run_result_repository: TestRunResultRepository,
-        case_engine_facade: CaseEngineFacade,
+        case_engine_facade: CaseEngineFacade, retrieval_service: IRetrievalService,
     ) -> RunEngineFacade:
-        return RunEngineFacade(
+        from src.core.llm.factory import LLMServiceFactoryCompat
+        generation_llm = LLMServiceFactoryCompat.create(model_name="qwen-plus")
+        facade = RunEngineFacade(
             executor=test_case_executor,
             batch_runner=batch_runner,
             result_processor=result_processor,
@@ -518,7 +520,12 @@ class RagEvalModule(Module):
             test_run_repository=test_run_repository,
             test_run_result_repository=test_run_result_repository,
             case_engine=case_engine_facade,
+            retrieval_service=retrieval_service,
+            generation_service=generation_llm,
         )
+        # batch_runner 通过 facade 引用获取检索/生成函数
+        batch_runner._facade = facade
+        return facade
 
     # ── Phase 5: ReportEngine 子组件 ──────────────────
 

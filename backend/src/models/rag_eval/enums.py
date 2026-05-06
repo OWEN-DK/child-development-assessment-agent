@@ -1,15 +1,6 @@
 import enum
 
 
-class TestDomain(str, enum.Enum):
-    GROSS_MOTOR = "gross_motor"
-    FINE_MOTOR = "fine_motor"
-    LANGUAGE = "language"
-    COGNITIVE = "cognitive"
-    SOCIAL_EMOTIONAL = "social_emotional"
-    SENSORY_INTEGRATION = "sensory_integration"
-
-
 class TestCaseStatus(str, enum.Enum):
     DRAFT = "draft"
     REVIEWED = "reviewed"

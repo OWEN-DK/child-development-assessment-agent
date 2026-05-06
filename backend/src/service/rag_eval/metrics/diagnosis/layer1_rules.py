@@ -11,7 +11,7 @@ from src.core.config.cache import ConfigCache
 from src.schemas.rag_eval.diagnosis import LayerIssue, LayerResult
 from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.diagnosis.diagnosis_utils import (
-    calculate_layer_score, determine_layer_status, count_by_severity)
+    calculate_layer_score, count_affected_cases, determine_layer_status, count_by_severity)
 from src.service.rag_eval.metrics.diagnosis.orchestrator import DiagnosisLayer
 
 
@@ -35,12 +35,15 @@ class Layer1Rules(DiagnosisLayer):
             issues.extend(self._check(item))
 
         crit, warn, _ = count_by_severity(issues)
+        total = len(results)
         return LayerResult(
             layer=self.layer_number, name=self.name,
             status=determine_layer_status(issues),
-            score=calculate_layer_score(issues),
+            score=calculate_layer_score(issues, total),
+            total_cases=total,
+            affected_cases=count_affected_cases(issues),
             issues=issues,
-            details={"total_items": len(results), "checked_rules": 8,
+            details={"total_items": total, "checked_rules": 8,
                      "critical_count": crit, "warning_count": warn},
             execution_time_ms=int((time.time() - start) * 1000),
         )

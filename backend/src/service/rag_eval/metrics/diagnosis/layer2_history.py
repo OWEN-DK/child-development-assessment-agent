@@ -17,7 +17,7 @@ from src.repository.rag_eval.test_run_result_repository import TestRunResultRepo
 from src.schemas.rag_eval.diagnosis import LayerIssue, LayerResult
 from src.schemas.rag_eval.test_run import TestRunRead, TestRunResultItem
 from src.service.rag_eval.metrics.diagnosis.diagnosis_utils import (
-    calculate_layer_score, determine_layer_status)
+    calculate_layer_score, count_affected_cases, determine_layer_status)
 from src.service.rag_eval.metrics.diagnosis.orchestrator import DiagnosisLayer
 
 _DEG_WARN = 0.05
@@ -59,13 +59,16 @@ class Layer2History(DiagnosisLayer):
         issues.extend(self._compare_metrics(baseline, run_data, run_id))
         issues.extend(await self._compare_failures(baseline.id, results))
 
+        total = len(results)
         return LayerResult(
             layer=self.layer_number, name=self.name,
             status=determine_layer_status(issues),
-            score=calculate_layer_score(issues),
+            score=calculate_layer_score(issues, total),
+            total_cases=total,
+            affected_cases=count_affected_cases(issues),
             issues=issues,
             details={"baseline_run_id": baseline.id, "baseline_run_name": baseline.name,
-                     "current_total": len(results)},
+                     "current_total": total},
             execution_time_ms=int((time.time() - start) * 1000))
 
     def _compare_metrics(self, baseline: TestRun, run_data: TestRunRead, run_id: str) -> list[LayerIssue]:

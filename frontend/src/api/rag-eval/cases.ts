@@ -9,8 +9,6 @@ import type { TestCase, TestSet, PaginatedResponse } from '@entities/rag-eval';
 export async function getTestCases(params?: {
   page?: number;
   page_size?: number;
-  domain?: string;
-  age_stage?: string;
   difficulty_level?: string;
   source?: string;
   keyword?: string;
@@ -27,7 +25,7 @@ export async function getTestCase(id: string): Promise<TestCase> {
 
 /** 手动创建测试用例 */
 export async function createTestCase(
-  data: Pick<TestCase, 'query' | 'age' | 'domain' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> & Partial<Pick<TestCase, 'description' | 'age_stage_label' | 'answer_points_summary' | 'professional_terms'>>,
+  data: Pick<TestCase, 'query' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> & Partial<Pick<TestCase, 'description' | 'answer_points_summary' | 'professional_terms'>>,
 ): Promise<TestCase> {
   const res = await apiClient.post<TestCase>('/api/v1/rag/eval/test-cases', data);
   return res.data;
@@ -36,7 +34,7 @@ export async function createTestCase(
 /** 更新测试用例 */
 export async function updateTestCase(
   id: string,
-  data: Partial<Pick<TestCase, 'query' | 'age' | 'domain' | 'description' | 'expected_knowledge_ids' | 'expected_keywords' | 'answer_points_summary' | 'difficulty_level' | 'professional_terms'>>,
+  data: Partial<Pick<TestCase, 'query' | 'description' | 'expected_knowledge_ids' | 'expected_keywords' | 'answer_points_summary' | 'difficulty_level' | 'professional_terms'>>,
 ): Promise<TestCase> {
   const res = await apiClient.put<TestCase>(`/api/v1/rag/eval/test-cases/${id}`, data);
   return res.data;

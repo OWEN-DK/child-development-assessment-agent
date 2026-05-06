@@ -1,8 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Modal, Transfer, message, Typography } from 'antd';
 import type { TransferProps } from 'antd';
-import type { TestCase } from '@entities/rag-eval';
-import { DomainTag } from '../common/DomainTag';
 import { useTestCases } from '../../hooks/useTestCases';
 import { useTestSet, useAddCasesToSet, useRemoveCasesFromSet } from '../../hooks/useTestSets';
 
@@ -17,7 +15,6 @@ interface CaseTransferModalProps {
 interface TransferItem {
   key: string;
   query: string;
-  domain: TestCase['domain'];
 }
 
 export function CaseTransferModal({ open, setId, onClose }: CaseTransferModalProps) {
@@ -33,7 +30,7 @@ export function CaseTransferModal({ open, setId, onClose }: CaseTransferModalPro
   const targetKeys = pendingTargetKeys ?? savedTargetKeys;
 
   const dataSource: TransferItem[] = useMemo(
-    () => allCases.map((c) => ({ key: c.id, query: c.query, domain: c.domain })),
+    () => allCases.map((c) => ({ key: c.id, query: c.query })),
     [allCases],
   );
 
@@ -81,12 +78,9 @@ export function CaseTransferModal({ open, setId, onClose }: CaseTransferModalPro
         listStyle={{ width: 380, height: 480 }}
         titles={['可添加', '已添加']}
         render={(item) => (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text ellipsis style={{ flex: 1, fontSize: 12 }} title={item.query}>
-              {item.query}
-            </Text>
-            <DomainTag domain={item.domain} />
-          </div>
+          <Text ellipsis style={{ flex: 1, fontSize: 12 }} title={item.query}>
+            {item.query}
+          </Text>
         )}
       />
     </Modal>

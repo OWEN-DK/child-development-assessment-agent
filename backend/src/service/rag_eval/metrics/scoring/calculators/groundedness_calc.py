@@ -5,6 +5,7 @@ from typing import Optional
 
 from src.core.llm.factory import LLMServiceFactory
 from src.core.prompt_impl.facade import PromptManager
+from src.schemas.llm import LLMMessage, LLMRequest
 from src.schemas.rag_eval.metrics import MetricInput, MetricOutput
 from src.service.rag_eval.metrics.scoring.base import MetricCalculator
 from src.utils.logger import logger
@@ -95,9 +96,12 @@ class GroundednessCalculator(MetricCalculator):
                 variables={"sentence": sentence, "contexts": contexts},
             )
             llm = await self._llm_factory.create("rag_eval", "langchain")
-            response = await llm.chat(messages=[{"role": "user", "content": prompt}])
+            response = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                timeout=120,
+            ))
 
-            text = response.get("content", "") if isinstance(response, dict) else str(response)
+            text = response.content
 
             # 尝试从响应中解析 0-1 分数
             # 匹配类似 "score: 0.8" 或 "得分: 0.75" 或纯数字

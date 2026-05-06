@@ -22,7 +22,9 @@ class LayerResult(BaseModel):
     layer: int  # 1-6
     name: str  # 层名称
     status: Literal["pass", "warn", "fail", "skip", "error"]
-    score: float  # 0-1，该层健康度
+    score: float  # 0-1，该层健康度（通过率）
+    total_cases: int = 0  # 总用例数
+    affected_cases: int = 0  # 受影响用例数
     issues: list[LayerIssue] = []
     details: dict[str, Any] = {}
     execution_time_ms: int = 0

@@ -1,12 +1,10 @@
 """批量测试运行器，使用 Semaphore 控制并发"""
 
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 from src.core.config.cache import ConfigCache
-from src.core.interfaces import IRetrievalService
 from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.repository.rag_eval.test_run_result_repository import TestRunResultRepository
 from src.service.rag_eval.run.executor import TestCaseExecutor
@@ -15,7 +13,18 @@ from src.utils.logger import logger
 
 
 class BatchTestRunner:
-    """批量测试运行器，使用 asyncio.Semaphore 控制并发"""
+    """批量测试运行器，使用 asyncio.Semaphore 控制并发
+
+    全局并发限制：通过类级别 Semaphore 限制同时运行的最大运行数，
+    防止多个运行同时执行时 LLM API 被限流。
+    """
+
+    # 类级别全局信号量（延迟初始化，避免模块加载时读取配置）
+    _global_semaphore: asyncio.Semaphore | None = None
+    _global_sem_lock: asyncio.Lock = asyncio.Lock()
+    # 当前正在运行的运行数
+    _running_count: int = 0
+    _running_count_lock: asyncio.Lock = asyncio.Lock()
 
     def __init__(
         self,
@@ -25,8 +34,7 @@ class BatchTestRunner:
         test_run_result_repository: TestRunResultRepository,
         config_cache: ConfigCache | None = None,
         sse_publisher=None,
-        retrieval_service: IRetrievalService | None = None,
-        generation_service=None,
+        facade=None,
         on_complete: Callable[[str], Awaitable[None]] | None = None,
     ):
         self._executor = executor
@@ -35,9 +43,21 @@ class BatchTestRunner:
         self._result_repo = test_run_result_repository
         self._config = config_cache or ConfigCache.get_instance()
         self._sse = sse_publisher
-        self._retrieval = retrieval_service
-        self._generation = generation_service
+        self._facade = facade
         self._on_complete = on_complete
+
+    async def _get_global_semaphore(self) -> asyncio.Semaphore:
+        """获取或创建全局运行信号量（延迟初始化）"""
+        if self._global_semaphore is None:
+            async with self._global_sem_lock:
+                if self._global_semaphore is None:
+                    max_concurrent = self._config.get_int("rag.eval.run.max_concurrent_runs", 2)
+                    self._global_semaphore = asyncio.Semaphore(max_concurrent)
+        return self._global_semaphore
+
+    def _reset_global_semaphore(self):
+        """重置全局信号量（配置变更时调用）"""
+        self._global_semaphore = None
 
     async def execute_run(
         self,
@@ -51,17 +71,44 @@ class BatchTestRunner:
         """执行完整测试运行
 
         流程：
-        1. 更新 run status → running
-        2. SSE: run_started
-        3. 获取并发配置，Semaphore 控制
-        4. 逐个提交执行（每个用例前检查取消信号）
-        5. 聚合结果
-        6. 更新 run status → completed
+        1. 获取全局并发信号量（限制同时运行的最大运行数）
+        2. 更新 run status → running
+        3. SSE: run_started
+        4. 获取单运行并发配置，Semaphore 控制
+        5. 逐个提交执行（每个用例前检查取消信号）
+        6. 聚合结果
+        7. 更新 run status → completed
 
         支持通过 cancellation_event 协作取消，或通过 asyncio.Task.cancel() 硬取消。
         """
         channel = f"test_run:{run_id}" if task_id else None
 
+        # 获取全局并发信号量，限制同时运行的最大运行数
+        global_sem = await self._get_global_semaphore()
+        async with global_sem:
+            async with self._running_count_lock:
+                BatchTestRunner._running_count += 1
+                current_running = BatchTestRunner._running_count
+            try:
+                await self._execute_run_inner(
+                    run_id, test_cases, task_id, current_running,
+                    progress_callback, cancellation_event, task_type, channel)
+            finally:
+                async with self._running_count_lock:
+                    BatchTestRunner._running_count -= 1
+
+    async def _execute_run_inner(
+        self,
+        run_id: str,
+        test_cases: list,
+        task_id: str,
+        current_running: int,
+        progress_callback=None,
+        cancellation_event: asyncio.Event | None = None,
+        task_type: str = None,
+        channel: str | None = None,
+    ) -> None:
+        """执行测试运行的内部实现（已持有全局信号量）"""
         try:
             # 更新状态为 running
             await self._run_repo.update(run_id, {
@@ -74,7 +121,7 @@ class BatchTestRunner:
             await self._push_event(channel, "run_started", {"run_id": run_id, "total_cases": total})
 
             # 读取并发配置
-            concurrency = self._get_config_int("rag.eval.run.concurrency", 3)
+            concurrency = self._config.get_int("rag.eval.run.concurrency", 3)
             sem = asyncio.Semaphore(concurrency)
 
             # 已完成用例计数器（线程安全）
@@ -94,7 +141,7 @@ class BatchTestRunner:
                         "index": index,
                         "total": total,
                     })
-                    result = await self._execute_with_semaphore(sem, case, run_id)
+                    result = await self._execute_with_semaphore(sem, case, run_id, current_running)
                     async with count_lock:
                         completed_count += 1
                         current_count = completed_count
@@ -186,68 +233,27 @@ class BatchTestRunner:
         sem: asyncio.Semaphore,
         case,
         run_id: str,
+        current_running: int = 1,
     ):
-        """带信号量控制的单用例执行"""
+        """带信号量控制的单用例执行
+
+        动态超时：基础超时 × 当前并发运行数，防止多运行并发时超时过短。
+        """
         async with sem:
-            timeout_ms = self._get_config_int("rag.eval.run.timeout_ms", 30000)
+            retrieval_fn, generation_fn = None, None
+            if self._facade:
+                retrieval_fn, generation_fn = self._facade.build_execution_functions()
 
-            # 暂存检索结果（含 content），供 generation_fn 闭包引用
-            _retrieved_items: list[dict] = []
-
-            retrieval_fn = None
-            if self._retrieval:
-                async def _retrieval(query, age, domain):
-                    results = await self._retrieval.retrieve_knowledge(query, limit=5)
-                    items = []
-                    for r in (results or []):
-                        if isinstance(r, dict):
-                            items.append({"id": r.get("id", ""), "content": r.get("content", "")})
-                        else:
-                            items.append({"id": getattr(r, "id", "") or "", "content": getattr(r, "content", "") or ""})
-                    _retrieved_items.clear()
-                    _retrieved_items.extend(items)
-                    return items
-                retrieval_fn = _retrieval
-
-            # 构建生成函数：基于检索到的文档内容调用 LLM 生成答案
-            generation_fn = None
-            if self._generation:
-                async def _generation(query, retrieved_ids):
-                    from src.core.prompts_fallback import (
-                        ANSWER_GENERATION_SYSTEM_PROMPT,
-                        ANSWER_GENERATION_USER_PROMPT,
-                    )
-                    from src.schemas.llm import LLMMessage, LLMRequest
-
-                    # 从暂存的检索结果中提取内容
-                    context = "\n\n".join(
-                        item.get("content", "") for item in _retrieved_items if item.get("content")
-                    )
-                    if not context:
-                        return None
-
-                    model = self._get_config_str("rag.eval.run.generation_model", "qwen-plus")
-                    user_prompt = ANSWER_GENERATION_USER_PROMPT.format(
-                        query=query, context=context,
-                    )
-                    resp = await self._generation.chat(LLMRequest(
-                        messages=[
-                            LLMMessage(role="system", content=ANSWER_GENERATION_SYSTEM_PROMPT),
-                            LLMMessage(role="user", content=user_prompt),
-                        ],
-                        model_name=model,
-                        temperature=0.3,
-                        max_tokens=2048,
-                    ))
-                    return resp.content
-                generation_fn = _generation
+            # 动态超时：基础 300 秒 × 当前并发运行数
+            base_timeout_ms = 300_000
+            timeout_ms = base_timeout_ms * current_running
 
             return await self._executor.execute(
                 test_case=case,
                 run_id=run_id,
-                timeout_ms=timeout_ms,
                 retrieval_fn=retrieval_fn,
                 generation_fn=generation_fn,
+                timeout_ms=timeout_ms,
             )
 
     async def _push_event(self, channel: str | None, event_type: str, data: dict):
@@ -262,20 +268,3 @@ class BatchTestRunner:
         except Exception as e:
             logger.warning(f"SSE 推送失败 [{event_type}]: {e}")
 
-    def _get_config_int(self, key: str, default: int) -> int:
-        try:
-            val = self._config.get(key)
-            if val is not None:
-                return int(val)
-        except Exception:
-            pass
-        return default
-
-    def _get_config_str(self, key: str, default: str) -> str:
-        try:
-            val = self._config.get(key)
-            if val is not None:
-                return str(val)
-        except Exception:
-            pass
-        return default

@@ -71,14 +71,13 @@ class MarkdownRenderer:
     def _bc(self, cases) -> str:
         if not cases:
             return "无坏案"
-        h = "| 问题 | 领域 | 年龄 | 精确率 | 召回率 | 错误信息 |\n|------|------|------|--------|--------|----------|"
+        h = "| 问题 | 精确率 | 召回率 | 错误信息 |\n|------|--------|--------|----------|"
         rows = [h]
         for c in cases:
             p = f"{c.precision:.2%}" if c.precision is not None else "—"
             r = f"{c.recall:.2%}" if c.recall is not None else "—"
             err = (c.error_message or "—")[:60]
-            age = f"{c.age:.1f}" if c.age is not None else "—"
-            rows.append(f"| {c.query[:40]} | {c.domain or '—'} | {age} | {p} | {r} | {err} |")
+            rows.append(f"| {c.query[:40]} | {p} | {r} | {err} |")
         return "\n".join(rows)
 
     def _tu(self, e, idx: int) -> str:

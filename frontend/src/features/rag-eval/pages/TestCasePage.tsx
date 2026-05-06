@@ -1,20 +1,16 @@
 import { useState, useCallback } from 'react';
 import {
-  Space, Button, Select, Input, Modal, message, Table, Typography, Alert, Row, Col, Form, InputNumber, Upload, Tag, Tooltip,
+  Space, Button, Select, Input, Modal, message, Table, Typography, Alert, Row, Col, Form, Upload, Tag, Tooltip,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, DeleteOutlined, ImportOutlined, EditOutlined } from '@ant-design/icons';
-import type { TestCase, TestDomain, TestCaseSource } from '@entities/rag-eval';
-import { DOMAIN_MAP, AGE_STAGES } from '@entities/rag-eval';
+import type { TestCase, TestCaseSource } from '@entities/rag-eval';
 import { useTestCases, useCreateTestCase, useUpdateTestCase, useDeleteTestCase, useBatchDeleteTestCases, useImportTestCases } from '../hooks/useTestCases';
-import { DomainTag } from '../components/common/DomainTag';
 import { formatTimestamp } from '@entities/rag-eval';
 
 const { Title, Text } = Typography;
 
 export function TestCasePage() {
-  const [domainFilter, setDomainFilter] = useState<string | undefined>();
-  const [ageFilter, setAgeFilter] = useState<string | undefined>();
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
   const [searchText, setSearchText] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
@@ -23,8 +19,6 @@ export function TestCasePage() {
   const [form] = Form.useForm<Partial<TestCase>>();
 
   const { data, isLoading, isError } = useTestCases({
-    domain: domainFilter,
-    age_stage: ageFilter,
     source: sourceFilter,
     search: searchText || undefined,
   });
@@ -55,7 +49,7 @@ export function TestCasePage() {
       await updateMutation.mutateAsync({ id: editingCase.id, data: values });
       message.success('已更新');
     } else {
-      await createMutation.mutateAsync(values as Pick<TestCase, 'query' | 'age' | 'domain' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> & Partial<Pick<TestCase, 'age_stage_label' | 'description' | 'answer_points_summary'>>);
+      await createMutation.mutateAsync(values as Pick<TestCase, 'query' | 'expected_knowledge_ids' | 'expected_keywords' | 'difficulty_level'> & Partial<Pick<TestCase, 'description' | 'answer_points_summary'>>);
       message.success('已创建');
     }
     setEditModalOpen(false);
@@ -85,8 +79,6 @@ export function TestCasePage() {
 
   const columns: ColumnsType<TestCase> = [
     { title: '查询', dataIndex: 'query', width: 200, ellipsis: true },
-    { title: '领域', dataIndex: 'domain', width: 100, render: (d: TestDomain) => <DomainTag domain={d} /> },
-    { title: '年龄段', dataIndex: 'age_stage_label', width: 90 },
     { title: '来源', dataIndex: 'source', width: 90,
       render: (s: TestCaseSource) => {
         const map: Record<string, { label: string; color: string }> = { manual: { label: '手动', color: 'blue' }, draft: { label: '草稿', color: 'green' }, import: { label: '导入', color: 'purple' } };
@@ -117,8 +109,6 @@ export function TestCasePage() {
 
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={6}><Input.Search placeholder="搜索查询..." allowClear onSearch={setSearchText} style={{ width: '100%' }} /></Col>
-        <Col xs={8} sm={4}><Select placeholder="领域筛选" allowClear value={domainFilter} onChange={setDomainFilter} options={Object.entries(DOMAIN_MAP).map(([v, l]) => ({ value: v, label: l }))} style={{ width: '100%' }} /></Col>
-        <Col xs={8} sm={4}><Select placeholder="年龄段" allowClear value={ageFilter} onChange={setAgeFilter} options={AGE_STAGES.map((s) => ({ value: s, label: s }))} style={{ width: '100%' }} /></Col>
         <Col xs={8} sm={4}><Select placeholder="来源" allowClear value={sourceFilter} onChange={setSourceFilter} options={[{ value: 'manual', label: '手动创建' }, { value: 'draft', label: '草稿导入' }, { value: 'import', label: '文件导入' }]} style={{ width: '100%' }} /></Col>
         <Col xs={24} sm={6}><Button danger icon={<DeleteOutlined />} disabled={selectedRowKeys.length === 0} onClick={handleBatchDelete} loading={batchDeleteMutation.isPending}>批量删除</Button></Col>
       </Row>
@@ -133,11 +123,6 @@ export function TestCasePage() {
         confirmLoading={createMutation.isPending || updateMutation.isPending} width={640}>
         <Form form={form} layout="vertical" size="small">
           <Form.Item name="query" label="查询" rules={[{ required: true }]}><Input.TextArea rows={2} placeholder="输入测试查询..." /></Form.Item>
-          <Row gutter={12}>
-            <Col span={8}><Form.Item name="domain" label="领域" rules={[{ required: true }]}><Select options={Object.entries(DOMAIN_MAP).map(([v, l]) => ({ value: v, label: l }))} placeholder="选择领域" /></Form.Item></Col>
-            <Col span={8}><Form.Item name="age" label="年龄(岁)" rules={[{ required: true }]}><InputNumber min={0} max={7} step={0.5} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={8}><Form.Item name="age_stage_label" label="年龄段标签"><Select options={AGE_STAGES.map((s) => ({ value: s, label: s }))} placeholder="选择" /></Form.Item></Col>
-          </Row>
           <Form.Item name="description" label="描述"><Input.TextArea rows={2} /></Form.Item>
           <Form.Item name="expected_keywords" label="预期关键词"><Select mode="tags" placeholder="输入关键词后回车" /></Form.Item>
           <Form.Item name="answer_points_summary" label="答案要点"><Input.TextArea rows={2} /></Form.Item>

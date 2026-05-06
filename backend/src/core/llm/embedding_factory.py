@@ -74,8 +74,8 @@ class EmbeddingFactory:
             provider = embedding_config.get("provider", "dashscope")
             model = embedding_config.get("model", "text-embedding-v4")
 
-            # 获取提供商凭证（缓存 llm_providers）
-            llm_providers = full_config.get("llm_llm_providers", {})
+            # 获取提供商凭证（config_snapshot 中键名为 llm_providers）
+            llm_providers = full_config.get("llm_providers", {})
             provider_creds = llm_providers.get(provider, {})
 
             if framework == "langchain":
@@ -197,7 +197,7 @@ class EmbeddingFactory:
         """配置变更时先校验新配置，再标记旧实例为废弃"""
         changed_keys = getattr(event, "changed_keys", [])
         if not any(
-            key.startswith("embedding") or key.startswith("llm_llm_providers")
+            key.startswith("embedding") or key.startswith("llm_providers")
             for key in changed_keys
         ):
             return

@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DOMAIN_MAP,
-  DOMAIN_COLORS,
   RUN_STATUS_MAP,
   STATUS_MAP,
   DRAFT_STATUS_MAP,
@@ -9,19 +7,7 @@ import {
   LAYER_NAMES,
   DIFFICULTY_MAP,
   SOURCE_MAP,
-  AGE_STAGES,
-  getAgeStage,
 } from './constants';
-
-/** 测试领域全部枚举值 */
-const ALL_DOMAINS = [
-  'gross_motor',
-  'fine_motor',
-  'language',
-  'cognitive',
-  'social_emotional',
-  'sensory_integration',
-] as const;
 
 /** 测试运行状态全部枚举值 */
 const ALL_RUN_STATUSES = [
@@ -45,43 +31,6 @@ const ALL_DRAFT_STATUSES = [
 
 /** 六层诊断状态全部枚举值 */
 const ALL_LAYER_STATUSES = ['pass', 'warn', 'fail', 'skip', 'error'] as const;
-
-describe('DOMAIN_MAP', () => {
-  it('包含全部 6 个领域', () => {
-    expect(Object.keys(DOMAIN_MAP)).toHaveLength(6);
-  });
-
-  it('每个领域均有非空中文标签', () => {
-    for (const domain of ALL_DOMAINS) {
-      expect(DOMAIN_MAP[domain]).toBeTruthy();
-      expect(typeof DOMAIN_MAP[domain]).toBe('string');
-    }
-  });
-
-  it('大运动映射正确', () => {
-    expect(DOMAIN_MAP.gross_motor).toBe('大运动');
-  });
-
-  it('感觉统合映射正确', () => {
-    expect(DOMAIN_MAP.sensory_integration).toBe('感觉统合');
-  });
-});
-
-describe('DOMAIN_COLORS', () => {
-  it('包含全部 6 个领域', () => {
-    expect(Object.keys(DOMAIN_COLORS)).toHaveLength(6);
-  });
-
-  it('每个领域均有颜色值', () => {
-    for (const domain of ALL_DOMAINS) {
-      expect(DOMAIN_COLORS[domain]).toBeTruthy();
-    }
-  });
-
-  it('大运动颜色为 blue', () => {
-    expect(DOMAIN_COLORS.gross_motor).toBe('blue');
-  });
-});
 
 describe('RUN_STATUS_MAP', () => {
   it('包含全部 5 个状态', () => {
@@ -211,63 +160,3 @@ describe('SOURCE_MAP', () => {
   });
 });
 
-describe('AGE_STAGES', () => {
-  it('包含 10 个年龄段', () => {
-    expect(AGE_STAGES).toHaveLength(10);
-  });
-
-  it('第一个年龄段为 0-1个月', () => {
-    expect(AGE_STAGES[0]).toBe('0-1个月');
-  });
-});
-
-describe('getAgeStage', () => {
-  it('0 个月返回 0-6m', () => {
-    expect(getAgeStage(0)).toBe('0-6m');
-  });
-
-  it('6 个月返回 0-6m（含边界）', () => {
-    expect(getAgeStage(6)).toBe('0-6m');
-  });
-
-  it('7 个月返回 6-12m', () => {
-    expect(getAgeStage(7)).toBe('6-12m');
-  });
-
-  it('12 个月返回 6-12m（含边界）', () => {
-    expect(getAgeStage(12)).toBe('6-12m');
-  });
-
-  it('18 个月返回 1-2y', () => {
-    expect(getAgeStage(18)).toBe('1-2y');
-  });
-
-  it('24 个月返回 1-2y（含边界）', () => {
-    expect(getAgeStage(24)).toBe('1-2y');
-  });
-
-  it('30 个月返回 2-3y', () => {
-    expect(getAgeStage(30)).toBe('2-3y');
-  });
-
-  it('36 个月返回 2-3y（含边界）', () => {
-    expect(getAgeStage(36)).toBe('2-3y');
-  });
-
-  it('42 个月返回 3-4y', () => {
-    expect(getAgeStage(42)).toBe('3-4y');
-  });
-
-  it('60 个月返回 4-6y', () => {
-    expect(getAgeStage(60)).toBe('4-6y');
-  });
-
-  it('72 个月返回 4-6y（含边界）', () => {
-    expect(getAgeStage(72)).toBe('4-6y');
-  });
-
-  it('非常大的值返回 6+y', () => {
-    expect(getAgeStage(120)).toBe('6+y');
-    expect(getAgeStage(999)).toBe('6+y');
-  });
-});

@@ -5,6 +5,7 @@ from typing import Optional
 
 from src.core.llm.factory import LLMServiceFactory
 from src.core.prompt_impl.facade import PromptManager
+from src.schemas.llm import LLMMessage, LLMRequest
 from src.schemas.rag_eval.metrics import MetricInput, MetricOutput
 from src.service.rag_eval.metrics.scoring.base import MetricCalculator
 from src.utils.logger import logger
@@ -88,10 +89,13 @@ class FaithfulnessCalculator(MetricCalculator):
                 variables={"answer": answer},
             )
             llm = await self._llm_factory.create("rag_eval", "langchain")
-            response = await llm.chat(messages=[{"role": "user", "content": prompt}])
+            response = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                timeout=120,
+            ))
 
             # 尝试解析 JSON 数组
-            text = response.get("content", "") if isinstance(response, dict) else str(response)
+            text = response.content
             # 提取 JSON 数组
             start = text.find("[")
             end = text.rfind("]") + 1
@@ -122,9 +126,12 @@ class FaithfulnessCalculator(MetricCalculator):
                 variables={"claim": claim, "contexts": contexts},
             )
             llm = await self._llm_factory.create("rag_eval", "langchain")
-            response = await llm.chat(messages=[{"role": "user", "content": prompt}])
+            response = await llm.chat(LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                timeout=120,
+            ))
 
-            text = response.get("content", "") if isinstance(response, dict) else str(response)
+            text = response.content
             return text.lower().strip().startswith(("yes", "是", "true", "支持"))
         except Exception as e:
             logger.warning(f"LLM 验证声明失败: {e}")

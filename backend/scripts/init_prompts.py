@@ -46,7 +46,7 @@ DEFAULT_PROMPTS = [
         "key": "test_case_generation",
         "content": TEST_CASE_DRAFT_GENERATION_PROMPT,
         "description": "测试用例草稿生成提示词，用于从文档中自动生成RAG测试用例",
-        "variables": ["count", "text", "domains", "age_range_min", "age_range_max"],
+        "variables": ["count", "text"],
         "tags": ["rag_eval", "test_case"],
     },
     {

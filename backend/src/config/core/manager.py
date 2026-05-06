@@ -60,6 +60,11 @@ class ConfigManager:
 
         config = current_settings.model_dump()
 
+        # 将 llm_scene_configs 属性展开为独立的 llm_{scene} 键，供 LLMServiceFactory 使用
+        if hasattr(current_settings, "llm_scene_configs"):
+            for scene_name, scene_config in current_settings.llm_scene_configs.items():
+                config[f"llm_{scene_name}"] = scene_config.model_dump()
+
         # Add rule configs
         rule_configs = {
             "rule_validation": rules.validation.model_dump(),

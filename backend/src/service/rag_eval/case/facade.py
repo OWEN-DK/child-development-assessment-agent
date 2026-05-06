@@ -46,11 +46,9 @@ class CaseEngineFacade:
         self,
         page: int = 1,
         page_size: int = 20,
-        domain: str | None = None,
-        age_stage_label: str | None = None,
         source: str | None = None,
     ) -> TestCaseList:
-        return await self._case.list_cases(page, page_size, domain, age_stage_label, source)
+        return await self._case.list_cases(page, page_size, source)
 
     async def batch_delete_cases(self, case_ids: list[str]) -> None:
         await self._case.batch_delete(case_ids)

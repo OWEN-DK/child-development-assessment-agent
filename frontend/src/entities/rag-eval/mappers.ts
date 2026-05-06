@@ -1,39 +1,15 @@
 /** 格式化映射工具函数 */
 
 import {
-  DOMAIN_MAP,
   RUN_STATUS_MAP,
   DRAFT_STATUS_MAP,
   LAYER_STATUS_MAP,
-  getAgeStage,
 } from './constants';
 import type {
-  TestDomain,
   TestRunStatus,
   DraftStatus,
   LayerResultStatus,
 } from './enums';
-
-/** 格式化领域 */
-export function formatDomain(domain: TestDomain): string {
-  return DOMAIN_MAP[domain] || domain;
-}
-
-/** 格式化年龄段 */
-export function formatAge(age: number): string {
-  return getAgeStage(age);
-}
-
-/** ⚠️ age 参数单位为岁，转换后展示为中文月龄 */
-export function formatAgeRange(age?: number): string {
-  if (age == null) return '未知';
-  if (age < 1) return `${Math.round(age * 12)}个月`;
-  const years = Math.floor(age);
-  const months = Math.round((age - years) * 12);
-  if (years === 0) return `${months}个月`;
-  if (months === 0) return `${years}岁`;
-  return `${years}岁${months}个月`;
-}
 
 /** 运行状态标签 */
 export function getRunStatusLabel(status: TestRunStatus): string {

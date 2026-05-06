@@ -4,7 +4,6 @@ from src.models.rag_eval.enums import (
     DifficultyLevel,
     DocumentStatus,
     TestCaseStatus,
-    TestDomain,
     TestRunStatus,
     TestSourceType,
 )
@@ -81,7 +80,6 @@ from src.schemas.rag_eval.tuning import (
 
 __all__ = [
     # 枚举
-    "TestDomain",
     "TestRunStatus",
     "TestSourceType",
     "DifficultyLevel",

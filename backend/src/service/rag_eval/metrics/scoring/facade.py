@@ -80,10 +80,7 @@ class ScoringFacade:
 
         averaged: dict[str, MetricScore] = {}
         for name, scores in all_m.items():
-            avg_v = sum(s.value for s in scores) / len(scores)
-            first = scores[0]
-            averaged[name] = MetricScore(value=round(avg_v, 4), passed=all(s.passed for s in scores),
-                                         threshold=first.threshold, details={"case_count": len(scores)})
+            averaged[name] = self._avg(scores)
         return averaged
 
     def _get_weights(self) -> dict[str, float]:
@@ -112,13 +109,26 @@ class ScoringFacade:
                              cost_efficiency=self._avg([m.cost_efficiency for m in ml]),
                              config_stability=self._avg([m.config_stability for m in ml]))
 
+    # 空回答/空查询导致的 early-exit，不应计入指标分母
+    _NA_REASONS = {"答案为空", "查询为空"}
+
     def _avg(self, scores: list[MetricScore]) -> MetricScore:
         if not scores:
             return MetricScore(value=0.0, passed=False, threshold=0.0, details={})
-        avg_v = sum(s.value for s in scores) / len(scores)
-        first = scores[0]
-        return MetricScore(value=round(avg_v, 4), passed=all(s.passed for s in scores),
-                           threshold=first.threshold, details={"case_count": len(scores)})
+        # 过滤掉空回答/空查询导致的 N/A 用例，不计入分母
+        valid = [s for s in scores if s.details.get("reason") not in self._NA_REASONS]
+        na_count = len(scores) - len(valid)
+        if not valid:
+            return MetricScore(value=0.0, passed=False, threshold=scores[0].threshold,
+                               details={"case_count": len(scores), "na_count": na_count})
+        avg_v = sum(s.value for s in valid) / len(valid)
+        first = valid[0]
+        pass_rate = sum(1 for s in valid if s.passed) / len(valid)
+        details: dict = {"case_count": len(valid), "pass_rate": round(pass_rate, 4)}
+        if na_count:
+            details["na_count"] = na_count
+        return MetricScore(value=round(avg_v, 4), passed=avg_v >= first.threshold,
+                           threshold=first.threshold, details=details)
 
     def _layer_avg(self, lm) -> float:
         fields = [f for f in lm.__fields__ if isinstance(getattr(lm, f), MetricScore)]

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  formatDomain,
-  formatAge,
-  formatAgeRange,
   getRunStatusLabel,
   getRunStatusColor,
   getDraftStatusLabel,
@@ -16,85 +13,10 @@ import {
   formatDifficulty,
 } from './mappers';
 import type {
-  TestDomain,
   TestRunStatus,
   DraftStatus,
   LayerResultStatus,
 } from './enums';
-
-describe('formatDomain', () => {
-  it('gross_motor 返回 大运动', () => {
-    expect(formatDomain('gross_motor' as TestDomain)).toBe('大运动');
-  });
-
-  it('language 返回 语言', () => {
-    expect(formatDomain('language' as TestDomain)).toBe('语言');
-  });
-
-  it('sensory_integration 返回 感觉统合', () => {
-    expect(formatDomain('sensory_integration' as TestDomain)).toBe('感觉统合');
-  });
-
-  it('未知领域返回原始字符串', () => {
-    expect(formatDomain('unknown_domain' as TestDomain)).toBe('unknown_domain');
-  });
-
-  it('cognitive 返回 认知', () => {
-    expect(formatDomain('cognitive' as TestDomain)).toBe('认知');
-  });
-});
-
-describe('formatAge', () => {
-  it('0 个月返回 0-6m', () => {
-    expect(formatAge(0)).toBe('0-6m');
-  });
-
-  it('18 个月返回 1-2y', () => {
-    expect(formatAge(18)).toBe('1-2y');
-  });
-
-  it('120 个月返回 6+y', () => {
-    expect(formatAge(120)).toBe('6+y');
-  });
-});
-
-describe('formatAgeRange', () => {
-  it('undefined 返回 未知', () => {
-    expect(formatAgeRange(undefined)).toBe('未知');
-  });
-
-  it('0.5 岁（6个月）返回 6个月', () => {
-    expect(formatAgeRange(0.5)).toBe('6个月');
-  });
-
-  it('1 岁返回 1岁', () => {
-    expect(formatAgeRange(1)).toBe('1岁');
-  });
-
-  it('1.5 岁返回 1岁6个月', () => {
-    expect(formatAgeRange(1.5)).toBe('1岁6个月');
-  });
-
-  it('2 岁返回 2岁', () => {
-    expect(formatAgeRange(2)).toBe('2岁');
-  });
-
-  it('0.25 岁（3个月）返回 3个月', () => {
-    expect(formatAgeRange(0.25)).toBe('3个月');
-  });
-
-  it('0.08 岁（约1个月）返回 1个月', () => {
-    expect(formatAgeRange(0.08)).toBe('1个月');
-  });
-
-  it('3 岁返回 3岁', () => {
-    expect(formatAgeRange(3)).toBe('3岁');
-  });
-
-  it('2.5 岁返回 2岁6个月', () => {
-    expect(formatAgeRange(2.5)).toBe('2岁6个月');
-  });
-});
 
 describe('getRunStatusLabel', () => {
   it('completed 返回 已完成', () => {

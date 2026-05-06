@@ -40,9 +40,8 @@ class CaseController:
         self,
         page: int = Query(1, ge=1),
         page_size: int = Query(20, ge=1, le=100),
-        domain: Optional[str] = Query(None),
     ):
-        result = await self._engine.list_cases(page, page_size, domain)
+        result = await self._engine.list_cases(page, page_size)
         return APIResponse.success(result.model_dump(mode="json"))
 
     async def create_case(self, body: TestCaseCreate = Body(...)):

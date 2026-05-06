@@ -1,25 +1,14 @@
 """
 边界场景处理器 (Phase D-5/D-6)
 
-处理输入校验（空查询/超长查询/特殊字符）和年龄边界映射与降级策略。
+处理输入校验（空查询/超长查询/特殊字符）和降级策略。
 """
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import List, Optional, Tuple
 
 from src.utils.logger import logger
-
-
-class DevelopmentStage(str, Enum):
-    """儿童发展阶段"""
-
-    INFANT = "infant"  # 婴儿期 (0-1 岁)
-    TODDLER = "toddler"  # 幼儿期 (1-3 岁)
-    PRESCHOOL = "preschool"  # 学龄前 (3-6 岁)
-    SCHOOL_AGE = "school_age"  # 学龄期 (6-12 岁)
-    ADOLESCENT = "adolescent"  # 青少年期 (13-18 岁)
 
 
 @dataclass
@@ -41,14 +30,6 @@ class BoundaryHandler:
     MAX_QUERY_LENGTH = 200
     INTENT_EXTRACT_LENGTH = 50
     SPECIAL_CHAR_PATTERN = re.compile(r"[^\u4e00-\u9fa5a-zA-Z0-9\s]")
-
-    AGE_STAGE_MAP = [
-        (0, 1, DevelopmentStage.INFANT),
-        (1, 3, DevelopmentStage.TODDLER),
-        (3, 6, DevelopmentStage.PRESCHOOL),
-        (6, 12, DevelopmentStage.SCHOOL_AGE),
-        (13, 18, DevelopmentStage.ADOLESCENT),
-    ]
 
     def validate_and_clean(self, query: str) -> ValidationResult:
         """
@@ -117,41 +98,6 @@ class BoundaryHandler:
         logger.info(f"超长查询意图提取：{len(query)} 字 -> {len(intent)} 字")
 
         return intent.strip()
-
-    @classmethod
-    def get_development_stage(cls, age: int) -> DevelopmentStage:
-        """根据年龄获取发展阶段"""
-        if age < 0:
-            return DevelopmentStage.INFANT
-
-        for min_age, max_age, stage in cls.AGE_STAGE_MAP:
-            if min_age <= age <= max_age:
-                return stage
-
-        return DevelopmentStage.ADOLESCENT
-
-    @classmethod
-    def map_age到_stage_range(cls, age: int) -> Tuple[int, int]:
-        """
-        将边界年龄映射到发展阶段范围
-
-        Args:
-            age: 用户年龄
-
-        Returns:
-            Tuple[int, int]: (阶段最小年龄, 阶段最大年龄)
-        """
-        stage = cls.get_development_stage(age)
-
-        stage_ranges = {
-            DevelopmentStage.INFANT: (0, 1),
-            DevelopmentStage.TODDLER: (1, 3),
-            DevelopmentStage.PRESCHOOL: (3, 6),
-            DevelopmentStage.SCHOOL_AGE: (6, 12),
-            DevelopmentStage.ADOLESCENT: (13, 18),
-        }
-
-        return stage_ranges.get(stage, (0, 18))
 
     def apply_fallback_strategy(
         self,

@@ -1,15 +1,11 @@
-import { Table, Tag, Typography, Empty } from 'antd';
+import { Table, Typography, Empty } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import type { TestDomain } from '@entities/rag-eval';
-import { DomainTag } from '../common/DomainTag';
 import { formatPercent } from '@entities/rag-eval';
 
 const { Text } = Typography;
 
 interface BadCase {
   query: string;
-  domain: TestDomain;
-  age: number;
   precision: number;
   recall: number;
   error_message: string | null;
@@ -23,18 +19,6 @@ interface BadCaseTableProps {
 export function BadCaseTable({ cases, loading }: BadCaseTableProps) {
   const columns: ColumnsType<BadCase> = [
     { title: '查询', dataIndex: 'query', width: 200, ellipsis: true },
-    {
-      title: '领域',
-      dataIndex: 'domain',
-      width: 100,
-      render: (d: TestDomain) => <DomainTag domain={d} />,
-    },
-    {
-      title: '月龄',
-      dataIndex: 'age',
-      width: 80,
-      render: (a: number) => <Tag>{a * 12}月</Tag>,
-    },
     {
       title: '精确率',
       dataIndex: 'precision',

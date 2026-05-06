@@ -28,8 +28,11 @@ class PromptManager:
                 return self._render_template(cached, variables) if variables else cached
             prompt_version = await self.prompt_storage.get_prompt_version(prompt_key, version)
             if not prompt_version:
-                logger.warning(f"提示词未找到：{prompt_key}")
                 fallback = self.prompt_storage._get_fallback_prompt(prompt_key)
+                if fallback == "You are a helpful assistant.":
+                    logger.warning(f"提示词未找到且无 fallback：{prompt_key}")
+                else:
+                    logger.debug(f"提示词 DB 未命中，使用 fallback：{prompt_key}")
                 return self._render_template(fallback, variables) if variables else fallback
             if ab_test_id:
                 prompt_content = await self.ab_test_manager.apply_ab_test(prompt_version, ab_test_id)

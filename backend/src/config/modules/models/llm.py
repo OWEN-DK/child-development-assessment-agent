@@ -10,7 +10,7 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.resolve()
@@ -72,6 +72,15 @@ class LLMSettings(BaseSettings):
         },
         description="LLM 提供商凭证映射（支持 dashscope/openai/anthropic/ollama）",
     )
+
+    def model_post_init(self, __context) -> None:
+        """初始化后将 dashscope_api_key 同步到 llm_providers 中（仅当 providers 未单独配置时）"""
+        if (
+            self.dashscope_api_key
+            and "dashscope" in self.llm_providers
+            and not self.llm_providers["dashscope"].api_key
+        ):
+            self.llm_providers["dashscope"].api_key = self.dashscope_api_key
 
     # ===== 新增：多模态模型前缀列表 =====
     llm_multimodal_model_prefixes: List[str] = Field(
@@ -230,6 +239,10 @@ class LLMSettings(BaseSettings):
                 model=self.model_report_generation or "qwen-plus",
             ),
             "draft_generation": LLMSceneConfig(
+                provider="dashscope",
+                model="qwen-plus",
+            ),
+            "rag_eval": LLMSceneConfig(
                 provider="dashscope",
                 model="qwen-plus",
             ),

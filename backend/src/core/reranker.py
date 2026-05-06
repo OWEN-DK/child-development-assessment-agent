@@ -325,14 +325,19 @@ class DashScopeReranker:
         return [self.rerank(q, ns) for q, ns in zip(queries, nodes_list)]
 
 
+# 单例缓存：相同参数只创建一次 reranker
+_reranker_cache: dict[tuple, "BaseReranker"] = {}
+
+
 def create_reranker(
     model_name: Optional[str] = None,
     initial_k: Optional[int] = None,
     final_k: Optional[int] = None,
 ):
-    """根据配置创建重排序器实例
+    """根据配置创建重排序器实例（单例缓存）
 
     优先使用 DashScope API，sentence-transformers 不可用时自动降级。
+    相同参数组合只创建一次实例，避免重复初始化。
     """
     provider = getattr(settings, "rag_reranker_provider", "dashscope")
 
@@ -343,9 +348,13 @@ def create_reranker(
     if final_k is None:
         final_k = getattr(settings, "rag_reranker_final_k", 5)
 
+    cache_key = (provider, model_name, initial_k, final_k)
+    if cache_key in _reranker_cache:
+        return _reranker_cache[cache_key]
+
     if provider == "dashscope":
         logger.info(f"使用 DashScope Reranker: model={model_name}")
-        return DashScopeReranker(
+        reranker = DashScopeReranker(
             model_name=model_name, initial_k=initial_k, final_k=final_k
         )
     elif provider == "local":
@@ -353,15 +362,19 @@ def create_reranker(
             logger.warning(
                 "sentence-transformers 不可用，回退到 DashScope Reranker"
             )
-            return DashScopeReranker(
+            reranker = DashScopeReranker(
                 model_name="qwen3-rerank", initial_k=initial_k, final_k=final_k
             )
-        logger.info(f"使用本地 CrossEncoder Reranker: model={model_name}")
-        return CrossEncoderReranker(
-            model_name=model_name, initial_k=initial_k, final_k=final_k
-        )
+        else:
+            logger.info(f"使用本地 CrossEncoder Reranker: model={model_name}")
+            reranker = CrossEncoderReranker(
+                model_name=model_name, initial_k=initial_k, final_k=final_k
+            )
     else:
         logger.warning(f"未知的 reranker provider '{provider}'，使用 DashScope")
-        return DashScopeReranker(
+        reranker = DashScopeReranker(
             model_name="qwen3-rerank", initial_k=initial_k, final_k=final_k
         )
+
+    _reranker_cache[cache_key] = reranker
+    return reranker

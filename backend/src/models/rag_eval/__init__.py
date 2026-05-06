@@ -3,7 +3,7 @@
 from .config import EvalConfigChangeSet, EvalConfigVersion
 from .draft import TestCaseDraft
 from .enums import (DifficultyLevel, DocumentStatus, TestCaseStatus,
-                    TestDomain, TestRunStatus, TestSourceType)
+                    TestRunStatus, TestSourceType)
 from .report import EvalReport
 from .snapshot import KnowledgeSnapshot
 from .test_case import TestCase
@@ -25,7 +25,6 @@ __all__ = [
     "TuningSuggestion",
     "EvalConfigVersion",
     "EvalConfigChangeSet",
-    "TestDomain",
     "DifficultyLevel",
     "TestCaseStatus",
     "TestRunStatus",
