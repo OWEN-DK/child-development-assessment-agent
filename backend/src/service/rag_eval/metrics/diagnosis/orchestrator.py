@@ -1,9 +1,10 @@
 """六层诊断编排器
 
-按顺序 1→6 执行各层诊断，单层失败不阻塞后续层。
+各层独立并行执行，单层失败不阻塞其他层。
 计算综合健康度并构建 DiagnosisResult。
 """
 
+import asyncio
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -52,26 +53,39 @@ class DiagnosisOrchestrator:
         self._layers = layers
         self._config_cache = config_cache or ConfigCache.get_instance()
 
+    def _get_config_val(self, key: str, default: Any = None) -> Any:
+        config = self._config_cache.get_latest_config()
+        if config and key in config:
+            return config[key]
+        return _DEFAULT_DIAGNOSIS_CONFIG.get(key, default)
+
     async def run_all(
         self, run_id: str, results: list[TestRunResultItem], run_data: TestRunRead
     ) -> DiagnosisResult:
-        """执行全部 6 层诊断"""
-        layer_results: list[LayerResult] = []
-        for layer_num in sorted(self._layers.keys()):
-            try:
-                result = await self.run_layer(layer_num, run_id, results, run_data)
-            except Exception as e:
-                logger.error(f"诊断层 {layer_num} 执行异常: {e}")
-                result = LayerResult(
-                    layer=layer_num, name=f"Layer{layer_num}", status="error", score=0.0,
-                    total_cases=len(results), affected_cases=0,
-                    issues=[LayerIssue(
-                        severity="critical", category="execution_error",
-                        description=f"层 {layer_num} 执行异常: {str(e)}", affected_items=[run_id],
-                    )],
-                    execution_time_ms=0,
-                )
-            layer_results.append(result)
+        """并行执行全部诊断层（各层独立，无数据依赖）"""
+        concurrency = int(self._get_config_val("rag.eval.diagnosis.concurrency", 3))
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _safe_run(layer_num: int) -> LayerResult:
+            async with sem:
+                try:
+                    return await self.run_layer(layer_num, run_id, results, run_data)
+                except Exception as e:
+                    logger.error(f"诊断层 {layer_num} 执行异常: {e}")
+                    return LayerResult(
+                        layer=layer_num, name=f"Layer{layer_num}", status="error", score=0.0,
+                        total_cases=len(results), affected_cases=0,
+                        issues=[LayerIssue(
+                            severity="critical", category="execution_error",
+                            description=f"层 {layer_num} 执行异常: {str(e)}", affected_items=[run_id],
+                        )],
+                        execution_time_ms=0,
+                    )
+
+        layer_results = await asyncio.gather(
+            *[_safe_run(n) for n in sorted(self._layers.keys())]
+        )
+        layer_results = list(layer_results)
 
         overall_health = _calc_overall(layer_results)
         total_issues = sum(len(r.issues) for r in layer_results)

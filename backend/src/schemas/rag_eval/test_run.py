@@ -82,6 +82,7 @@ class TestRunResultItem(BaseModel):
     test_case_id: str
     query: str
     retrieved_doc_ids: list[str] = []
+    retrieved_contexts: list[str] = []
     relevant_doc_ids: list[str] = []
     expected_knowledge_ids: list[str] = []
     actual_knowledge_ids: list[str] = []

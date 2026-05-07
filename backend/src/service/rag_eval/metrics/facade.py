@@ -115,7 +115,7 @@ class MetricEngineFacade:
                 run_id=r.run_id,
                 test_case_id=r.test_case_id,
                 query=r.query,
-                retrieved_contexts=r.retrieved_doc_ids or [],
+                retrieved_contexts=r.retrieved_contexts or r.retrieved_doc_ids or [],
                 expected_knowledge_ids=r.expected_knowledge_ids or [],
                 actual_knowledge_ids=r.actual_knowledge_ids or [],
                 actual_answer=r.actual_answer,

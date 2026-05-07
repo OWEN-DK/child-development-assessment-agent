@@ -275,6 +275,7 @@ CREATE TABLE `test_run_results` (
     `test_case_id` VARCHAR(64) NOT NULL,
     `query` TEXT NOT NULL,
     `retrieved_doc_ids` JSON COMMENT '检索到的文档 ID 列表',
+    `retrieved_contexts` JSON COMMENT '检索上下文文本列表',
     `relevant_doc_ids` JSON COMMENT '相关文档 ID 列表',
     `expected_knowledge_ids` JSON COMMENT '期望知识片段 ID',
     `actual_knowledge_ids` JSON COMMENT '实际匹配的知识片段 ID',

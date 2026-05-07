@@ -110,10 +110,17 @@ class BatchTestRunner:
     ) -> None:
         """执行测试运行的内部实现（已持有全局信号量）"""
         try:
-            # 更新状态为 running
+            # 清理旧结果（重新评估时防止旧数据混入指标计算）
+            deleted = await self._result_repo.delete_by_run_id(run_id)
+            if deleted > 0:
+                logger.info(f"运行[{run_id}] 已清理 {deleted} 条旧结果")
+
+            # 更新状态为 running（清除上次运行的残留字段）
             await self._run_repo.update(run_id, {
                 "status": "running",
                 "started_at": datetime.now(timezone.utc),
+                "completed_at": None,
+                "passed_test_cases": 0,
                 "total_test_cases": len(test_cases),
             })
 
@@ -121,7 +128,7 @@ class BatchTestRunner:
             await self._push_event(channel, "run_started", {"run_id": run_id, "total_cases": total})
 
             # 读取并发配置
-            concurrency = self._config.get_int("rag.eval.run.concurrency", 3)
+            concurrency = self._config.get_int("rag.eval.run.concurrency", 5)
             sem = asyncio.Semaphore(concurrency)
 
             # 已完成用例计数器（线程安全）
@@ -199,6 +206,7 @@ class BatchTestRunner:
                     "total_count": total,
                 })
             else:
+                # 先更新状态为 completed，让前端立即看到完成状态并显示进度条
                 await self._run_repo.update(run_id, {
                     "status": "completed",
                     "completed_at": datetime.now(timezone.utc),
@@ -216,6 +224,12 @@ class BatchTestRunner:
                     await self._on_complete(run_id)
                 except Exception as pipeline_err:
                     logger.warning(f"运行[{run_id}] 后处理流水线异常（不阻塞主流程）: {pipeline_err}", exc_info=True)
+
+            # pipeline 完成后更新 completed_at，确保耗时包含指标计算+报告生成
+            if not is_cancelled:
+                await self._run_repo.update(run_id, {
+                    "completed_at": datetime.now(timezone.utc),
+                })
 
         except asyncio.CancelledError:
             # asyncio.Task.cancel() 触发的硬取消
@@ -239,11 +253,12 @@ class BatchTestRunner:
 
         动态超时：基础超时 × 当前并发运行数，防止多运行并发时超时过短。
         """
-        async with sem:
-            retrieval_fn, generation_fn = None, None
-            if self._facade:
-                retrieval_fn, generation_fn = self._facade.build_execution_functions()
+        # 闭包创建不涉及 I/O，移到信号量外避免占用并发槽位
+        retrieval_fn, generation_fn = None, None
+        if self._facade:
+            retrieval_fn, generation_fn = self._facade.build_execution_functions()
 
+        async with sem:
             # 动态超时：基础 300 秒 × 当前并发运行数
             base_timeout_ms = 300_000
             timeout_ms = base_timeout_ms * current_running

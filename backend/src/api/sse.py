@@ -30,6 +30,8 @@ class SSEPublisher:
 
     _local_subscribers: dict[str, list[asyncio.Queue]] = {}
     _redis_available: Optional[bool] = None
+    _redis_last_check: float = 0.0
+    _REDIS_CHECK_INTERVAL: float = 30.0  # 30 秒检查一次，避免每次 publish 都 PING
 
     @classmethod
     async def _check_redis_availability(cls) -> bool:
@@ -42,8 +44,12 @@ class SSEPublisher:
 
     @classmethod
     async def _get_redis_availability(cls) -> bool:
-        """获取 Redis 可用性状态（每次发布时重新检查）"""
+        """获取 Redis 可用性状态（带 TTL 缓存，避免每次发布都 PING）"""
+        now = asyncio.get_event_loop().time()
+        if cls._redis_available is not None and (now - cls._redis_last_check) < cls._REDIS_CHECK_INTERVAL:
+            return cls._redis_available
         cls._redis_available = await cls._check_redis_availability()
+        cls._redis_last_check = now
         if not cls._redis_available:
             logger.warning("Redis 不可用，SSE 将降级到内存队列模式")
         return cls._redis_available

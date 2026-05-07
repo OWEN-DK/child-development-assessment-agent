@@ -1,5 +1,6 @@
 """运行引擎门面"""
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
@@ -93,14 +94,24 @@ class RunEngineFacade:
                 case_ids.update((await self._case_engine.get_set(set_id)).case_ids)
             except AppException:
                 continue
-        test_cases = []
-        for cid in case_ids:
+        async def _load_case(cid: str):
             try:
-                test_cases.append(await self._case_engine.get_case(cid))
+                return await self._case_engine.get_case(cid)
             except AppException:
-                continue
+                return None
+
+        loaded = await asyncio.gather(*[_load_case(cid) for cid in case_ids])
+        test_cases = [c for c in loaded if c is not None]
         if not test_cases:
             raise AppException(400, 13019, "测试集为空", "TEST_SET_EMPTY")
+        # 立即清除上次运行的残留字段，确保前端 refetch 能拿到干净状态
+        await self._run_repo.update(run_id, {
+            "status": "running",
+            "started_at": datetime.now(timezone.utc),
+            "completed_at": None,
+            "passed_test_cases": 0,
+            "total_test_cases": len(test_cases),
+        })
         task_id = await self._task_manager.start_task(
             task_type="test_run", task_func=self._batch_runner.execute_run,
             run_id=run_id, test_cases=test_cases)
@@ -125,7 +136,7 @@ class RunEngineFacade:
         retrieval_fn = None
         if self._retrieval:
             async def _retrieval(query: str):
-                results = await self._retrieval.retrieve_knowledge(query, limit=5)
+                results = await self._retrieval.retrieve_knowledge(query, limit=5, skip_classification=True)
                 items = []
                 for r in (results or []):
                     if isinstance(r, dict):

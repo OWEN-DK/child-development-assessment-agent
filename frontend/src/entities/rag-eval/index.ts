@@ -48,6 +48,7 @@ export {
   DRAFT_STATUS_MAP,
   LAYER_STATUS_MAP,
   LAYER_NAMES,
+  METRIC_METADATA,
 } from './constants';
 
 export {

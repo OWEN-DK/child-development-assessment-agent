@@ -72,3 +72,19 @@ export const SOURCE_MAP: Record<string, string> = {
   mixed: '混合',
 };
 
+/** 三层指标元数据 —— 中文名称与解释说明 */
+export const METRIC_METADATA: Record<string, { label: string; description: string }> = {
+  context_precision: { label: '上下文精确率', description: '检索结果中相关片段占比的加权平均' },
+  context_recall: { label: '上下文召回率', description: '检索结果中命中期盼知识片段的比例' },
+  noise_sensitivity: { label: '噪声敏感度', description: '检索结果中无关片段的比例（越低越好）' },
+  mrr: { label: '平均倒数排名', description: '第一个相关结果出现位置的倒数' },
+  ndcg: { label: '归一化折损累积增益', description: '考虑排名位置的检索质量指标' },
+  faithfulness: { label: '忠实度', description: '答案中声明被上下文支持的比例' },
+  answer_relevancy: { label: '答案相关性', description: '从答案反生成问题的 embedding 相似度均值' },
+  groundedness: { label: '落地度', description: '答案每句话是否能从上下文溯源' },
+  rule_compliance: { label: '规则合规度', description: '测试结果满足格式和业务规则的比例' },
+  regression_score: { label: '回归评分', description: '与历史基线相比的稳定性' },
+  cost_efficiency: { label: '成本效率', description: '单位成本获得的质量' },
+  config_stability: { label: '配置稳定性', description: '指标相对历史的变化幅度' },
+};
+

@@ -267,6 +267,63 @@ RAG_EVAL_METRIC_FAITHFULNESS_VERIFY_CLAIM_PROMPT = """\
 
 请只回答 "yes" 或 "no"，不要返回其他内容。"""
 
+RAG_EVAL_METRIC_FAITHFULNESS_BATCH_VERIFY_PROMPT = """\
+请从以下回答中提取所有独立的事实性声明，并逐一验证每个声明是否被检索上下文所支持。
+
+## 回答内容
+{answer}
+
+## 检索上下文
+{contexts}
+
+## 提取规则
+1. 将复合句拆分为独立的简单声明
+2. 每个声明应包含一个核心事实
+3. 忽略过渡语、连接词等非事实性内容
+4. 保留声明的原始语义，不要过度改写
+5. 最多提取 20 个声明
+
+## 验证标准
+- 声明中的所有关键信息都能从上下文中找到明确依据 → supported: true
+- 声明与上下文矛盾，或完全无法从上下文中找到依据 → supported: false
+- 声明部分被上下文支持但包含推断成分 → supported: false（严格标准）
+
+## 返回格式
+返回一个 JSON 对象：
+{{
+  "claims": [
+    {{"claim": "声明内容", "supported": true}},
+    {{"claim": "声明内容", "supported": false}}
+  ]
+}}
+
+仅返回 JSON，不要其他内容。"""
+
+RAG_EVAL_METRIC_GROUNDEDNESS_BATCH_PROMPT = """\
+你是一个严格的 RAG 质量评估专家。请逐一判断以下每个句子是否被提供的上下文所支持。
+
+## 待评估句子
+{sentences_json}
+
+## 检索上下文
+{contexts}
+
+## 评分规则
+- 1.0：句子中的所有信息都能从上下文中找到明确依据
+- 0.7-0.9：句子大部分内容被上下文支持，仅有少量推断
+- 0.4-0.6：句子部分被上下文支持，部分内容为合理推断
+- 0.1-0.3：句子仅有少量信息能从上下文验证，大部分为推测
+- 0.0：句子完全无法从上下文中找到依据，或与上下文矛盾
+
+## 返回格式
+返回一个 JSON 数组，每个元素包含句子索引和对应分数：
+[
+  {{"index": 0, "score": 0.85}},
+  {{"index": 1, "score": 0.3}}
+]
+
+仅返回 JSON 数组，不要其他内容。"""
+
 RAG_EVAL_METRIC_ANSWER_RELEVANCY_GENERATE_PROMPT = """\
 请根据以下回答内容，反向生成 2-3 个该回答可能在回应的问题。
 

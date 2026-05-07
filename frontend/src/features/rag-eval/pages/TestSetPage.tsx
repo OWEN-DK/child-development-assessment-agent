@@ -84,7 +84,8 @@ export function TestSetPage() {
         <Row gutter={[16, 16]}>
           {testSets.map((set: TestSet) => (
             <Col key={set.id} xs={24} sm={12} lg={8}>
-              <Card hoverable size="small"
+              <Card hoverable
+                styles={{ body: { minHeight: 120, display: 'flex', flexDirection: 'column' } }}
                 actions={[
                   <EditOutlined key="edit" onClick={() => handleEdit(set)} />,
                   <SwapOutlined key="transfer" onClick={() => handleOpenTransfer(set.id)} />,
@@ -94,8 +95,13 @@ export function TestSetPage() {
                 <Card.Meta
                   title={<Text strong>{set.name}</Text>}
                   description={
-                    <div>
-                      {set.description && <Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 8 }}>{set.description}</Paragraph>}
+                    <div style={{ flex: 1 }}>
+                      <Paragraph
+                        ellipsis={{ rows: 2 }}
+                        style={{ marginBottom: 8, minHeight: 44, color: 'rgba(0,0,0,0.45)' }}
+                      >
+                        {set.description || ' '}
+                      </Paragraph>
                       <Space wrap size={[4, 4]}>
                         <Tag color="blue">{set.case_count} 个用例</Tag>
                       </Space>
@@ -118,6 +124,7 @@ export function TestSetPage() {
       </Modal>
 
       <CaseTransferModal
+        key={transferSetId}
         open={transferOpen}
         setId={transferSetId!}
         onClose={() => setTransferOpen(false)}

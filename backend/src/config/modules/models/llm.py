@@ -140,6 +140,12 @@ class LLMSettings(BaseSettings):
                 output_per_million=2.0,
                 currency="CNY",
             ),
+            # 速度优先模型（RAG 评估指标计算）
+            "qwen-turbo": ModelPricingConfig(
+                input_per_million=0.3,
+                output_per_million=0.6,
+                currency="CNY",
+            ),
             # 多模态模型
             "qwen3-omni-flash": ModelPricingConfig(
                 input_per_million=0.2,
@@ -196,6 +202,11 @@ class LLMSettings(BaseSettings):
         validation_alias="ML_SCORING_QWEN_MODEL",
         description="大模型评分使用的模型名称（最便宜）",
     )
+    model_rag_eval: str = Field(
+        default="qwen-plus",
+        validation_alias="MODEL_RAG_EVAL",
+        description="RAG 评估指标计算使用的模型（性价比之王，JSON 输出稳定）",
+    )
 
     # ===== 新增：从旧字段自动构建的场景配置 =====
     @property
@@ -244,7 +255,8 @@ class LLMSettings(BaseSettings):
             ),
             "rag_eval": LLMSceneConfig(
                 provider="dashscope",
-                model="qwen-plus",
+                model=self.model_rag_eval or "qwen-plus",
+                max_tokens=4000,
             ),
         }
 

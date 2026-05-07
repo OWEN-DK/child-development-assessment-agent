@@ -41,16 +41,29 @@ class ScoringFacade:
         self._system = system
         self._config_cache = config_cache or ConfigCache.get_instance()
 
+    # 用例级并发上限，防止 DashScope QPS 被击穿（可通过 rag.eval.scoring.case_concurrency 配置）
+    _MAX_CASE_CONCURRENCY = 10
+
     async def calculate_all(self, results: list[MetricInput]) -> RunMetrics:
-        """计算完整三层指标，按用例聚合后取均值"""
+        """计算完整三层指标，按用例聚合后取均值（用例间并行）"""
         if not results:
             return self._empty()
 
-        all_l1, all_l2, all_l3 = [], [], []
-        for rd in results:
-            all_l1.append(await self._retrieval.score_all(rd))
-            all_l2.append(await self._generation.score_all(rd))
-            all_l3.append(await self._system.score_all(rd))
+        sem = asyncio.Semaphore(self._MAX_CASE_CONCURRENCY)
+
+        async def _score_one(rd: MetricInput):
+            async with sem:
+                l1, l2, l3 = await asyncio.gather(
+                    self._retrieval.score_all(rd),
+                    self._generation.score_all(rd),
+                    self._system.score_all(rd),
+                )
+                return l1, l2, l3
+
+        scored = await asyncio.gather(*[_score_one(rd) for rd in results])
+        all_l1 = [s[0] for s in scored]
+        all_l2 = [s[1] for s in scored]
+        all_l3 = [s[2] for s in scored]
 
         weights = self._get_weights()
         l1 = self._agg_l1(all_l1)
@@ -62,20 +75,23 @@ class ScoringFacade:
                           weights=weights, calculated_at=datetime.now(timezone.utc))
 
     async def calculate_layer(self, layer: int, results: list[MetricInput]) -> dict[str, MetricScore]:
-        """计算单层指标，返回 {metric_name: MetricScore}"""
+        """计算单层指标，返回 {metric_name: MetricScore}（用例间并行）"""
         if not results:
             return {}
 
+        sem = asyncio.Semaphore(self._MAX_CASE_CONCURRENCY)
+        scorer = {1: self._retrieval, 2: self._generation, 3: self._system}.get(layer)
+        if scorer is None:
+            return {}
+
+        async def _score_one(rd: MetricInput):
+            async with sem:
+                return await scorer.score_all(rd)
+
+        layer_results = await asyncio.gather(*[_score_one(rd) for rd in results])
+
         all_m: dict[str, list[MetricScore]] = {}
-        for rd in results:
-            if layer == 1:
-                lm = await self._retrieval.score_all(rd)
-            elif layer == 2:
-                lm = await self._generation.score_all(rd)
-            elif layer == 3:
-                lm = await self._system.score_all(rd)
-            else:
-                continue
+        for lm in layer_results:
             self._collect(lm, all_m)
 
         averaged: dict[str, MetricScore] = {}

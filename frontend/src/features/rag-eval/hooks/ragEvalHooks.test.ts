@@ -510,7 +510,7 @@ describe('useGenerateReport', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('mutate 时调用 generateReport', async () => {
-    vi.mocked(reportsApi.generateReport).mockResolvedValue(mockReportsResponse.items[0]);
+    vi.mocked(reportsApi.generateReport).mockResolvedValue({ status: 'started', task_id: 'task-1', run_id: 'run-1' });
     const { result } = renderHook(() => useGenerateReport(), { wrapper: createWrapper() });
     result.current.mutate('run-1');
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

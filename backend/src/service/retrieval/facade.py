@@ -138,9 +138,13 @@ class RetrievalFacade:
         return []
 
     async def retrieve_knowledge(
-        self, query: str, limit: int = 3, user_id: str = None
+        self, query: str, limit: int = 3, user_id: str = None,
+        skip_classification: bool = False,
     ) -> List[KnowledgeItem]:
         """检索知识。复杂查询自动拆解为子查询分别检索后归并。"""
+        if skip_classification:
+            return await self._single_retrieve(query, limit, user_id)
+
         classification = await self.query_router.classify_async(query)
 
         if classification.query_type.value != "complex":

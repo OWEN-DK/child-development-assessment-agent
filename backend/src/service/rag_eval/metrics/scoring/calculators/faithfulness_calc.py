@@ -1,4 +1,7 @@
-"""L2 忠实度计算器——FaithfulnessCalculator（灵感来自 RAGAS）"""
+"""L2 忠实度计算器——FaithfulnessCalculator（灵感来自 RAGAS）
+
+优化：合并声明提取与验证为单次 LLM 调用，从 1+N 次降至 1 次。
+"""
 
 import json
 from typing import Optional
@@ -17,10 +20,9 @@ class FaithfulnessCalculator(MetricCalculator):
     计算: 被上下文支持的声明数 / 总声明数
     阈值: ≥ 0.8
 
-    流程：
-    1. 使用 LLM 从 actual_answer 中提取声明（claims）
-    2. 对每个声明，判断是否被 retrieved_contexts 支持
-    3. supported_claims / total_claims
+    流程（单次 LLM 调用）：
+    1. 使用批量 prompt 同时提取声明并验证每个声明是否被上下文支持
+    2. 解析 JSON 结果，计算 supported / total
     """
 
     def __init__(
@@ -54,85 +56,152 @@ class FaithfulnessCalculator(MetricCalculator):
         if not input_data.retrieved_contexts:
             return MetricOutput(score=0.0, passed=False, threshold=threshold, details={"reason": "无检索上下文"})
 
-        # 步骤1：使用 LLM 提取声明
-        claims = await self._extract_claims(input_data.actual_answer)
-        if not claims:
-            return MetricOutput(score=0.0, passed=False, threshold=threshold, details={"reason": "未能提取声明", "claims": []})
-
-        # 步骤2：验证每个声明
         contexts_text = "\n---\n".join(input_data.retrieved_contexts)
-        supported = 0
-        claim_results = []
 
-        for claim in claims:
-            verdict = await self._verify_claim(claim, contexts_text)
-            claim_results.append({"claim": claim, "supported": verdict})
-            if verdict:
-                supported += 1
+        # 单次 LLM 调用：提取声明 + 验证
+        claims_data = await self._batch_extract_and_verify(input_data.actual_answer, contexts_text)
 
-        score = supported / len(claims)
+        if not claims_data:
+            return MetricOutput(score=0.0, passed=False, threshold=threshold,
+                                details={"reason": "未能提取声明", "claims": []})
+
+        supported = sum(1 for c in claims_data if c.get("supported", False))
+        total = len(claims_data)
+        score = supported / total if total > 0 else 0.0
+
         return MetricOutput(
             score=round(score, 4),
             passed=score >= threshold,
             threshold=threshold,
-            details={"total_claims": len(claims), "supported_claims": supported, "claim_results": claim_results},
+            details={"total_claims": total, "supported_claims": supported, "claim_results": claims_data},
         )
 
-    async def _extract_claims(self, answer: str) -> list[str]:
-        """使用 LLM 从答案中提取声明列表"""
+    async def _batch_extract_and_verify(self, answer: str, contexts: str) -> list[dict]:
+        """单次 LLM 调用：提取声明并验证是否被上下文支持（解析失败自动重试 1 次）"""
         if not self._llm_factory:
-            return self._fallback_extract_claims(answer)
+            return self._fallback(answer)
 
+        prompt = await self._prompt_manager.get_prompt(
+            "rag.eval.metric.faithfulness_batch_verify",
+            variables={"answer": answer, "contexts": contexts},
+        )
+
+        for attempt in range(2):
+            try:
+                llm = await self._llm_factory.create("rag_eval", "langchain")
+                response = await llm.chat(LLMRequest(
+                    messages=[LLMMessage(role="user", content=prompt)],
+                    timeout=120,
+                ))
+                result = self._parse_batch_result(response.content)
+                if result:
+                    return result
+                logger.warning(f"忠实度批量解析为空（第 {attempt + 1} 次），重试")
+            except Exception as e:
+                logger.warning(f"忠实度批量调用失败（第 {attempt + 1} 次）: {e}")
+
+        logger.warning("忠实度批量调用 2 次均失败，降级为逐条模式")
+        return await self._fallback_sequential(answer, contexts)
+
+    def _parse_batch_result(self, text: str) -> list[dict]:
+        """解析 LLM 返回的批量验证结果 JSON（支持截断恢复）"""
+        import re
+        # 清理 markdown 代码块包裹
+        cleaned = re.sub(r'```(?:json)?\s*', '', text).strip().rstrip('`').strip()
+
+        def _extract_claims(data) -> list[dict]:
+            """从数据中提取声明列表"""
+            items = data["claims"] if isinstance(data, dict) and "claims" in data else data if isinstance(data, list) else []
+            return [{"claim": str(c.get("claim", "")), "supported": bool(c.get("supported", False))}
+                    for c in items if isinstance(c, dict)]
+
+        # 策略1：直接解析
         try:
-            prompt = await self._prompt_manager.get_prompt(
+            result = json.loads(cleaned)
+            claims = _extract_claims(result)
+            if claims:
+                return claims
+        except json.JSONDecodeError:
+            pass
+
+        # 策略2：提取 JSON 子串
+        try:
+            start = cleaned.find("{")
+            end = cleaned.rfind("}") + 1
+            if start >= 0 and end > start:
+                result = json.loads(cleaned[start:end])
+                claims = _extract_claims(result)
+                if claims:
+                    return claims
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+        # 策略3：截断恢复——用正则逐条提取已完成的 claim 对象
+        try:
+            pattern = r'\{\s*"claim"\s*:\s*"([^"]*)"\s*,\s*"supported"\s*:\s*(true|false)\s*\}'
+            matches = re.findall(pattern, cleaned, re.IGNORECASE)
+            if matches:
+                claims = [{"claim": m[0], "supported": m[1].lower() == "true"} for m in matches]
+                logger.info(f"忠实度截断恢复成功，提取 {len(claims)} 条声明")
+                return claims
+        except (ValueError, IndexError):
+            pass
+
+        logger.warning(f"忠实度批量结果解析失败: {text[:200]}")
+        return []
+
+    def _fallback(self, answer: str) -> list[dict]:
+        """LLM 不可用时的降级：按句号分句，默认全部不支持"""
+        sentences = [s.strip() for s in answer.replace("！", "。").replace("？", "。").split("。") if len(s.strip()) > 5]
+        if not sentences:
+            sentences = [answer]
+        return [{"claim": s, "supported": False} for s in sentences[:20]]
+
+    async def _fallback_sequential(self, answer: str, contexts: str) -> list[dict]:
+        """批量调用失败时的降级：使用旧的逐条模式"""
+        try:
+            # 提取声明
+            extract_prompt = await self._prompt_manager.get_prompt(
                 "rag.eval.metric.faithfulness_extract_claims",
                 variables={"answer": answer},
             )
             llm = await self._llm_factory.create("rag_eval", "langchain")
             response = await llm.chat(LLMRequest(
-                messages=[LLMMessage(role="user", content=prompt)],
+                messages=[LLMMessage(role="user", content=extract_prompt)],
                 timeout=120,
             ))
 
-            # 尝试解析 JSON 数组
             text = response.content
-            # 提取 JSON 数组
             start = text.find("[")
             end = text.rfind("]") + 1
             if start >= 0 and end > start:
                 claims = json.loads(text[start:end])
-                if isinstance(claims, list):
-                    return [str(c) for c in claims]
-            # 按行分割作为兜底
-            lines = [line.strip("- •").strip() for line in text.split("\n") if line.strip() and len(line.strip()) > 10]
-            return lines[:20] if lines else [answer]
+            else:
+                claims = [s.strip() for s in text.split("\n") if len(s.strip()) > 10][:20]
+
+            if not claims:
+                return []
+
+            # 逐条验证
+            results = []
+            for claim in claims:
+                try:
+                    verify_prompt = await self._prompt_manager.get_prompt(
+                        "rag.eval.metric.faithfulness_verify_claim",
+                        variables={"claim": str(claim), "contexts": contexts},
+                    )
+                    resp = await llm.chat(LLMRequest(
+                        messages=[LLMMessage(role="user", content=verify_prompt)],
+                        timeout=120,
+                    ))
+                    verdict = resp.content.lower().strip()
+                    supported = any(kw in verdict for kw in ("支持", "正确", "yes", "true"))
+                    results.append({"claim": str(claim), "supported": supported})
+                except Exception:
+                    results.append({"claim": str(claim), "supported": False})
+
+            return results
+
         except Exception as e:
-            logger.warning(f"LLM 提取声明失败: {e}，使用降级策略")
-            return self._fallback_extract_claims(answer)
-
-    def _fallback_extract_claims(self, answer: str) -> list[str]:
-        """LLM 不可用时的降级：按句号分句作为声明"""
-        sentences = [s.strip() for s in answer.replace("！", "。").replace("？", "。").split("。") if len(s.strip()) > 5]
-        return sentences if sentences else [answer]
-
-    async def _verify_claim(self, claim: str, contexts: str) -> bool:
-        """使用 LLM 验证声明是否被上下文支持"""
-        if not self._llm_factory:
-            return False  # LLM 不可用时默认不支持
-
-        try:
-            prompt = await self._prompt_manager.get_prompt(
-                "rag.eval.metric.faithfulness_verify_claim",
-                variables={"claim": claim, "contexts": contexts},
-            )
-            llm = await self._llm_factory.create("rag_eval", "langchain")
-            response = await llm.chat(LLMRequest(
-                messages=[LLMMessage(role="user", content=prompt)],
-                timeout=120,
-            ))
-
-            text = response.content
-            return text.lower().strip().startswith(("yes", "是", "true", "支持"))
-        except Exception as e:
-            logger.warning(f"LLM 验证声明失败: {e}")
-            return False
+            logger.error(f"忠实度降级模式也失败: {e}")
+            return self._fallback(answer)

@@ -1,7 +1,7 @@
-import { Card, Progress, Typography } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { Card, Progress, Tooltip, Typography } from 'antd';
+import { CheckCircleFilled, CloseCircleFilled, QuestionCircleOutlined } from '@ant-design/icons';
 import type { MetricScore } from '@entities/rag-eval';
-import { formatPercent } from '@entities/rag-eval';
+import { formatPercent, METRIC_METADATA } from '@entities/rag-eval';
 
 const { Text } = Typography;
 
@@ -12,11 +12,18 @@ interface MetricScoreCardProps {
 
 export function MetricScoreCard({ name, score }: MetricScoreCardProps) {
   const percent = Math.round(score.value * 100);
+  const meta = METRIC_METADATA[name];
+  const displayName = meta?.label ?? name;
 
   return (
     <Card size="small" style={{ minWidth: 180 }}>
       <div style={{ textAlign: 'center' }}>
-        <Text strong style={{ fontSize: 13 }}>{name}</Text>
+        <Text strong style={{ fontSize: 13 }}>{displayName}</Text>
+        {meta?.description && (
+          <Tooltip title={meta.description}>
+            <QuestionCircleOutlined style={{ color: '#8c8c8c', cursor: 'help', fontSize: 12, marginLeft: 4 }} />
+          </Tooltip>
+        )}
         <Progress
           type="circle"
           percent={percent}

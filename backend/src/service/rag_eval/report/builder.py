@@ -1,5 +1,6 @@
 """报告构建器——整合双轨评估结果为EvalReportData"""
 
+import asyncio
 from datetime import datetime, timezone
 
 from src.repository.rag_eval.test_run_repository import TestRunRepository
@@ -51,12 +52,18 @@ class ReportBuilder:
         l3_json = run.l3_metrics_json or {}
         diag_json = run.diagnosis_json or {}
 
+        # 并行查询失败结果和调优建议（两者无依赖关系）
+        failed_results, suggestions = await asyncio.gather(
+            self._result_repo.get_failed_results_by_run(run_id),
+            self._suggestion_repo.get_by_run_id(run_id),
+        )
+
         metrics = self._parse_metrics(l1_json, l2_json, l3_json, {
             "overall_score": run.overall_score or 0.0,
             "weights": {"l1": 0.4, "l2": 0.4, "l3": 0.2},
         })
-        bad_cases = self._build_bad_cases(await self._result_repo.get_failed_results_by_run(run_id))
-        tuning = self._build_tuning(await self._suggestion_repo.get_by_run_id(run_id))
+        bad_cases = self._build_bad_cases(failed_results)
+        tuning = self._build_tuning(suggestions)
 
         return EvalReportData(
             summary=self._build_summary(run, metrics, diag_json),

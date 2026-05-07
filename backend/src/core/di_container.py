@@ -627,6 +627,7 @@ class RagEvalModule(Module):
         metric_engine_facade: MetricEngineFacade, report_engine_facade: ReportEngineFacade, tuning_engine_facade: TuningEngineFacade,
         batch_runner: BatchTestRunner,
     ) -> RagEvalOrchestrator:
+        from src.api.sse import SSEPublisher
         orchestrator = RagEvalOrchestrator(
             draft_engine=draft_engine_facade,
             case_engine=case_engine_facade,
@@ -634,6 +635,7 @@ class RagEvalModule(Module):
             metric_engine=metric_engine_facade,
             report_engine=report_engine_facade,
             tuning_engine=tuning_engine_facade,
+            sse_publisher=SSEPublisher,
         )
         # 延迟绑定：运行完成后自动触发评估+报告流水线
         batch_runner._on_complete = orchestrator.post_run_pipeline
@@ -684,6 +686,7 @@ class RagEvalModule(Module):
         self, draft_controller: DraftController, case_controller: CaseController, run_controller: RunController,
         metric_controller: MetricController, report_controller: ReportController, tuning_controller: TuningController,
         snapshot_controller: SnapshotController,
+        rag_eval_orchestrator: RagEvalOrchestrator,
     ) -> RagEvalControllerRegistry:
         return RagEvalControllerRegistry(
             draft_ctrl=draft_controller,
@@ -693,6 +696,7 @@ class RagEvalModule(Module):
             report_ctrl=report_controller,
             tuning_ctrl=tuning_controller,
             snapshot_ctrl=snapshot_controller,
+            orchestrator=rag_eval_orchestrator,
         )
 
 

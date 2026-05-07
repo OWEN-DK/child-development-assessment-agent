@@ -106,4 +106,9 @@ def create_span(name: str) -> Generator[str, None, None]:
     try:
         yield span_id
     finally:
-        span_stack.reset(token)
+        try:
+            span_stack.reset(token)
+        except ValueError:
+            # 生成器在不同的 asyncio Context 中被清理（如 GC 回收），
+            # token 已失效，跳过重置即可
+            pass

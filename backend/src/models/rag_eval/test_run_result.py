@@ -21,6 +21,9 @@ class TestRunResult(Base):
     retrieved_doc_ids: Mapped[list[str] | None] = mapped_column(
         JSON, comment="检索到的文档 ID 列表"
     )
+    retrieved_contexts: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True, comment="检索上下文文本列表"
+    )
     relevant_doc_ids: Mapped[list[str] | None] = mapped_column(
         JSON, comment="相关文档 ID 列表"
     )

@@ -46,6 +46,7 @@ class TestCaseExecutor:
         timeout_sec = (timeout_ms or 300_000) / 1000.0
 
         retrieved_ids = []
+        retrieved_contexts = []
         actual_answer = None
         error_msg = None
         passed = False
@@ -55,7 +56,7 @@ class TestCaseExecutor:
         try:
             # 检索 + 生成（RAG 流水线内部已有步骤级超时保护，外层仅保留安全网）
             async def _retrieve_and_generate():
-                nonlocal retrieved_ids, actual_answer, failure_stage, retrieval_raw_count
+                nonlocal retrieved_ids, retrieved_contexts, actual_answer, failure_stage, retrieval_raw_count
                 if retrieval_fn:
                     retrieved = await retrieval_fn(test_case.query)
                     retrieval_raw_count = len(retrieved or [])
@@ -63,6 +64,11 @@ class TestCaseExecutor:
                         (d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "")
                         for d in (retrieved or [])
                         if (d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "")
+                    ]
+                    # 捕获检索上下文文本，用于 L2 指标评分
+                    retrieved_contexts = [
+                        (d.get("content", "") if isinstance(d, dict) else getattr(d, "content", "") or "")
+                        for d in (retrieved or [])
                     ]
                     if not retrieved_ids:
                         failure_stage = "retrieval_empty"
@@ -120,9 +126,10 @@ class TestCaseExecutor:
             "test_case_id": test_case.id,
             "query": test_case.query,
             "retrieved_doc_ids": retrieved_ids,
+            "retrieved_contexts": retrieved_contexts,
             "relevant_doc_ids": retrieved_ids,
             "expected_knowledge_ids": expected_ids,
-            "actual_knowledge_ids": [],
+            "actual_knowledge_ids": retrieved_ids,
             "matched_count": metrics.matched_count,
             "expected_count": metrics.expected_count,
             "actual_count": metrics.actual_count,

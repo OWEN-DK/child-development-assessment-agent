@@ -66,3 +66,18 @@ class TestRunResultRepository(BaseRepository[TestRunResult]):
     async def count_by_run_id(self, run_id: str) -> int:
         """统计指定运行的结果数量"""
         return await self.count_by_filter(run_id=run_id)
+
+    async def delete_by_run_id(self, run_id: str) -> int:
+        """删除指定运行的全部测试结果（重新评估前清理旧数据）
+
+        Returns:
+            删除的记录数
+        """
+        from sqlalchemy import delete as _delete
+
+        async with self.db_session_factory() as session:
+            result = await session.execute(
+                _delete(TestRunResult).where(TestRunResult.run_id == run_id)
+            )
+            await session.commit()
+            return result.rowcount

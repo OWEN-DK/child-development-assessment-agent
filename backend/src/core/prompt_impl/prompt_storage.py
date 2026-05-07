@@ -229,8 +229,10 @@ class PromptStorage:
             LAYER3_DEVIATION_ANALYSIS_PROMPT, LAYER3_HALLUCINATION_DETECTION_PROMPT,
             METADATA_EXTRACTION_PROMPT, QUERY_REWRITE_PROMPT,
             RAG_EVAL_METRIC_ANSWER_RELEVANCY_GENERATE_PROMPT,
+            RAG_EVAL_METRIC_FAITHFULNESS_BATCH_VERIFY_PROMPT,
             RAG_EVAL_METRIC_FAITHFULNESS_EXTRACT_CLAIMS_PROMPT,
             RAG_EVAL_METRIC_FAITHFULNESS_VERIFY_CLAIM_PROMPT,
+            RAG_EVAL_METRIC_GROUNDEDNESS_BATCH_PROMPT,
             RAG_EVAL_METRIC_GROUNDEDNESS_PROMPT,
             RAG_QUERY_TEMPLATE, REPORTING_SYSTEM_PROMPT, SCORING_SYSTEM_PROMPT,
             SYNONYM_EXPANSION_PROMPT, TEST_CASE_DRAFT_GENERATION_PROMPT,
@@ -248,8 +250,10 @@ class PromptStorage:
             "rag.eval.diagnosis.layer3.deviation_analysis": LAYER3_DEVIATION_ANALYSIS_PROMPT,
             "rag.eval.diagnosis.layer3.hallucination_detection": LAYER3_HALLUCINATION_DETECTION_PROMPT,
             "rag.eval.metric.groundedness": RAG_EVAL_METRIC_GROUNDEDNESS_PROMPT,
+            "rag.eval.metric.groundedness_batch": RAG_EVAL_METRIC_GROUNDEDNESS_BATCH_PROMPT,
             "rag.eval.metric.faithfulness_extract_claims": RAG_EVAL_METRIC_FAITHFULNESS_EXTRACT_CLAIMS_PROMPT,
             "rag.eval.metric.faithfulness_verify_claim": RAG_EVAL_METRIC_FAITHFULNESS_VERIFY_CLAIM_PROMPT,
+            "rag.eval.metric.faithfulness_batch_verify": RAG_EVAL_METRIC_FAITHFULNESS_BATCH_VERIFY_PROMPT,
             "rag.eval.metric.answer_relevancy_generate": RAG_EVAL_METRIC_ANSWER_RELEVANCY_GENERATE_PROMPT,
         }
         return fallbacks.get(prompt_key, "You are a helpful assistant.")

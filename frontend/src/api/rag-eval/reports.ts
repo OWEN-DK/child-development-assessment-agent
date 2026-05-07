@@ -19,9 +19,9 @@ export async function getReport(id: string): Promise<EvalReport> {
   return res.data;
 }
 
-/** 生成报告 */
-export async function generateReport(runId: string): Promise<EvalReport> {
-  const res = await apiClient.post<EvalReport>('/api/v1/rag/eval/reports', { run_id: runId });
+/** 生成报告，始终生成新报告（force=true 确保每次创建新任务） */
+export async function generateReport(runId: string): Promise<{ status: string; task_id?: string; run_id: string }> {
+  const res = await apiClient.post('/api/v1/rag/eval/reports', { run_id: runId, force: true });
   return res.data;
 }
 

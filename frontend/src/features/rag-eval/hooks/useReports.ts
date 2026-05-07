@@ -29,14 +29,14 @@ export function useReport(id: string) {
   });
 }
 
-/** 为指定运行生成评估报告 */
+/** 为指定运行生成评估报告（始终生成新报告）
+
+  注意：onSuccess 在 API 返回时触发（报告还在生成中），
+  报告列表的刷新由 SSE 完成后的 onDone 回调处理。
+ */
 export function useGenerateReport() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) => reportsApi.generateReport(runId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rag-eval', 'reports'] });
-    },
   });
 }
 
