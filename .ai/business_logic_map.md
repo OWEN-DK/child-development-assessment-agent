@@ -43,6 +43,9 @@
 | **LLM 工厂** | 多提供商路由与场景隔离 | 统一生成适配的 LLM 实例，支持 DashScope/OpenAI/Anthropic/DeepSeek/Ollama。支持热重载。 | `backend/src/core/llm/factory.py` |
 | **三级缓存** | 性能防穿透 | 提供 `内存LRU -> Redis -> 磁盘` 的三层缓存架构，加速高频检索和配置读取。 | `backend/src/service/cache/facade.py` |
 | **异步任务管理** | 实时推送与并发控制 | `AsyncTaskManager` 管理后台任务，通过 SSE 向前端推送进度，支持断线重连与并发限制。 | `backend/src/core/async_task.py` |
+| **全链路追踪** | Span 追踪与成本分析 | 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析。 | `backend/src/core/tracing/writer.py`<br>`backend/src/core/tracing/context.py` |
+| **中间件层** | 请求处理与异常处理 | 全局异常处理、响应包装、追踪中间件，统一请求处理流程。 | `backend/src/middleware/exception_handler.py`<br>`backend/src/middleware/response_wrapper.py`<br>`backend/src/middleware/trace_middleware.py` |
+| **LLM 适配器** | 多框架适配 | LangChain/LlamaIndex/DashScope 适配器，统一 LLM 调用接口。 | `backend/src/core/llm/adapters/langchain.py`<br>`backend/src/core/llm/adapters/llamaindex.py`<br>`backend/src/core/llm/adapters/dashscope_multimodal.py` |
 
 ---
 
@@ -56,6 +59,9 @@
 | **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/pages/`（DraftPage / TestCasePage / RunPage / ReportPage / TuningPage 等 11 个子页面） |
 | **系统配置页** | 多模式配置热更新 | 提供向导模式/专家模式，动态修改系统参数，提供冲突检测与原子保存。 | `frontend/src/pages/SystemConfigPage.tsx` |
 | **提示词与监控** | 沙箱测试与全链路追踪 | 在线编辑 Prompt 并进行沙箱预览；查看 LLM 调用的 Span 层级树、耗时与成本大盘。 | `frontend/src/features/rag-eval/pages/PromptListPage.tsx`<br>`frontend/src/features/rag-eval/pages/PromptEditPage.tsx`<br>`frontend/src/features/monitoring/LLMMonitoringDashboard.tsx` |
+| **RAG 评估状态管理** | Zustand 状态管理 | 管理草稿生成、测试运行、报告生成等复杂业务状态。 | `frontend/src/features/rag-eval/stores/draftGenerationStore.ts`<br>`frontend/src/features/rag-eval/stores/runProgressStore.ts`<br>`frontend/src/features/rag-eval/stores/reportProgressStore.ts` |
+| **RAG 评估 API 客户端** | API 封装 | 封装 RAG 评估相关 API 调用。 | `frontend/src/api/rag-eval/`（drafts.ts / cases.ts / runs.ts / reports.ts 等） |
+| **链路追踪 API** | 追踪数据查询 | 查询 Trace 和 Span 数据，支持全链路追踪。 | `frontend/src/api/tracing.ts` |
 
 ---
 
@@ -74,6 +80,7 @@
 | **报告生成引擎** | 可视化评估报告 | 生成多维度指标统计报告，支持趋势分析、版本对比、调优建议展示，可导出为PDF/CSV/JSON。 | `backend/src/service/rag_eval/report/facade.py`<br>`backend/src/service/rag_eval/report/builder.py` |
 | **调优引擎** | 智能调参建议 | 基于诊断结果生成调优建议，支持一键采纳、冲突检测、配置变更管理。 | `backend/src/service/rag_eval/tuning/facade.py`<br>`backend/src/service/rag_eval/tuning/advisor.py` |
 | **规范驱动** | SDD 业务契约 | 所有的复杂逻辑修改必须先在 `specs/` 下写明机器可读的契约与验收标准。 | `docs/specs/` |
+| **ML 评分引擎** | AHP+ML 融合评分 | XGBoost + SHAP + scikit-learn 实现 AHP 基准评分与 ML 模型融合，支持特征重要度分析。 | `backend/src/core/ml/qwen_scorer.py`<br>`backend/src/core/nodes/scoring.py` |
 
 ## 6. 前端测试与类型安全
 **逻辑概述**：前端代码质量保障体系，包含单元测试、集成测试与类型检查。
@@ -83,6 +90,8 @@
 | **单元测试** | Vitest + RTL | 组件渲染、交互逻辑、Hook 测试。 | `frontend/src/**/*.test.tsx` |
 | **类型检查** | TypeScript 严格模式 | `npm run typecheck`，禁止 `any` 类型。 | `frontend/tsconfig.json` |
 | **代码规范** | ESLint + Prettier | `npm run lint` 自动修复格式问题。 | `frontend/.eslintrc` |
+| **RAG 评估测试** | 业务逻辑测试 | 测试 RAG 评估相关的 Hooks、工具函数、实体映射。 | `frontend/src/features/rag-eval/hooks/ragEvalHooks.test.ts`<br>`frontend/src/features/rag-eval/hooks/useSSEProgress.test.ts`<br>`frontend/src/features/rag-eval/utils/sse.test.ts` |
+| **实体层测试** | 类型安全测试 | 测试实体类型定义、枚举、映射器、常量。 | `frontend/src/entities/rag-eval/constants.test.ts`<br>`frontend/src/entities/rag-eval/enums.test.ts`<br>`frontend/src/entities/rag-eval/mappers.test.ts` |
 
 ---
 

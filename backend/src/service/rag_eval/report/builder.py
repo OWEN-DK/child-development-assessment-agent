@@ -15,6 +15,7 @@ from src.schemas.rag_eval.report import (
     OverallSummary, ScoringDashboard, TuningEntry,
 )
 from src.utils.exceptions import TestRunNotFoundException
+from src.utils.logger import logger
 
 _PASSED_THRESHOLD = 0.6
 _METRIC_NAMES = {
@@ -52,21 +53,37 @@ class ReportBuilder:
         l3_json = run.l3_metrics_json or {}
         diag_json = run.diagnosis_json or {}
 
-        # 并行查询失败结果和调优建议（两者无依赖关系）
-        failed_results, suggestions = await asyncio.gather(
-            self._result_repo.get_failed_results_by_run(run_id),
+        # 并行查询全部结果、调优建议（独立 DB 读）
+        all_results, suggestions = await asyncio.gather(
+            self._result_repo.get_by_run_id(run_id),
             self._suggestion_repo.get_by_run_id(run_id),
         )
+
+        # 直接从结果计算 passed/total，不依赖 test_runs 的缓存值
+        passed_count = sum(1 for r in all_results if r.passed)
+        total_count = len(all_results)
+
+        # 回写到 test_runs，确保运行列表也显示正确的通过数
+        if passed_count != run.passed_test_cases or total_count != run.total_test_cases:
+            logger.info(
+                f"报告构建 run_id={run_id}: 修正 passed_test_cases "
+                f"{run.passed_test_cases}→{passed_count}, "
+                f"total_test_cases {run.total_test_cases}→{total_count}"
+            )
+            await self._run_repo.update(run_id, {
+                "passed_test_cases": passed_count,
+                "total_test_cases": total_count,
+            })
 
         metrics = self._parse_metrics(l1_json, l2_json, l3_json, {
             "overall_score": run.overall_score or 0.0,
             "weights": {"l1": 0.4, "l2": 0.4, "l3": 0.2},
         })
-        bad_cases = self._build_bad_cases(failed_results)
+        bad_cases = self._build_bad_cases([r for r in all_results if not r.passed])
         tuning = self._build_tuning(suggestions)
 
         return EvalReportData(
-            summary=self._build_summary(run, metrics, diag_json),
+            summary=self._build_summary(run, metrics, diag_json, passed_count, total_count),
             scoring_dashboard=self._build_dashboard(l1_json, l2_json, l3_json),
             diagnosis_details=self._build_diagnosis(diag_json),
             bad_cases=bad_cases,
@@ -94,8 +111,8 @@ class ReportBuilder:
             calculated_at=datetime.now(timezone.utc),
         )
 
-    def _build_summary(self, run, metrics, diag_json) -> OverallSummary:
-        def _avg(layer): 
+    def _build_summary(self, run, metrics, diag_json, passed_count: int, total_count: int) -> OverallSummary:
+        def _avg(layer):
             fields = [v for k, v in layer.__dict__.items() if isinstance(v, MetricScore)]
             return sum(v.value for v in fields) / len(fields) if fields else 0.0
         return OverallSummary(
@@ -104,8 +121,8 @@ class ReportBuilder:
             diagnosis_health=float(diag_json.get("overall_health", 0.0)) if isinstance(diag_json, dict) else 0.0,
             total_issues=diag_json.get("total_issues", 0) if isinstance(diag_json, dict) else 0,
             critical_issues=diag_json.get("critical_issues", 0) if isinstance(diag_json, dict) else 0,
-            run_name=run.name, total_cases=run.total_test_cases or 0,
-            passed_cases=run.passed_test_cases or 0,
+            run_name=run.name, total_cases=total_count,
+            passed_cases=passed_count,
             duration_ms=self._calc_duration_ms(run),
         )
 

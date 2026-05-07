@@ -77,6 +77,12 @@
 - **智能诊断与调优面板**: 基于 6 层校验引擎生成调参建议，支持一键应用（推荐模式/审查模式分离）。
 - **SSE 实时反馈**: 支持任务进度实时推送、断线重连与页面独立执行。
 - **趋势分析**: 包含多指标叠加、配置版本误差线的趋势图表。
+- **状态管理**: 使用 Zustand 管理复杂业务状态
+  - **DraftGenerationStore**: 草稿生成状态管理
+  - **RunProgressStore**: 测试运行进度状态
+  - **ReportProgressStore**: 报告生成进度状态
+- **API 客户端**: `api/rag-eval/` 包含草稿、测试用例、测试运行、报告等 API
+- **实体层**: `entities/rag-eval/` 包含类型定义、枚举、映射器、常量
 
 ### 5.5 系统配置 (System Config)
 - **热重载与版本控制**: 动态修改系统运行参数，修改后通过 ConfigCache 热重载生效，支持原子保存与一键回滚。
@@ -90,17 +96,37 @@
 ### 5.7 LLM 监控与分析 (LLM Monitoring)
 - **总览仪表盘**: 全系统 LLM 调用统计、消耗趋势、错误率概览
 - **全链路追踪 (Tracing)**: 支持查看 LangGraph 到大模型底层调用的完整 Span 层级树，耗时与成本分析。
+- **监控组件**: `components/monitoring/` 包含 TraceListView、SpanDetailPanel、TraceFilterBar 等组件
+- **API 客户端**: `api/tracing.ts` 包含 Trace 和 Span 查询 API
+- **实体层**: `entities/tracing/` 包含链路追踪实体类型定义
 
 ### 5.8 前端测试与类型安全
 - **测试框架**: Vitest 4.1 + React Testing Library，测试文件位于 `src/**/*.test.tsx`
 - **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型
 - **代码规范**: ESLint 10 + Prettier，`npm run lint` 自动修复
 - **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载
-- **测试覆盖**: 当前 6 个测试文件集中在 `rag-eval` 特性和实体层，其他特性模块暂无测试覆盖
+- **测试覆盖**: 当前测试文件集中在 `rag-eval` 特性和实体层，包括：
+  - `features/rag-eval/hooks/ragEvalHooks.test.ts`
+  - `features/rag-eval/hooks/useSSEProgress.test.ts`
+  - `entities/rag-eval/constants.test.ts`
+  - `entities/rag-eval/enums.test.ts`
+  - `entities/rag-eval/mappers.test.ts`
+  - `features/rag-eval/utils/sse.test.ts`
 
 ## 6. 核心基础设施
 
-### 6.1 配置系统
+### 6.1 API 基础设施
+
+- **位置**: `src/api/`
+- **JsonResponse**: 统一 JSON 响应类，处理日期时间序列化
+  - 支持 `datetime` 和 `date` 对象序列化为 ISO 格式
+  - 自动处理时区转换
+- **SSE 基础设施**: Server-Sent Events 推送支持
+  - 支持实时进度推送
+  - 支持断线重连
+  - 支持多客户端广播
+
+### 6.2 配置系统
 - **配置优先级（严格）**：MySQL 数据库（主） > `.env` 文件（仅兜底）
 - **三层分层架构**:
   - `core/`：配置基础设施，包含管理器、持久化存储、事件系统
@@ -281,7 +307,7 @@ graph TB
 - **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器 (`src/core/di_container.py`)
 - **已迁移模块**: ConfigManager, PromptManager, MonitoringService, RagTestManager (部分 CRUD)
 
-### 6.11 模型适配与路由 (LLM Factory)
+### 6.12 模型适配与路由 (LLM Factory)
 
 ```mermaid
 graph TB
@@ -300,6 +326,7 @@ graph TB
         Interface[ILLMService 统一接口]
         LangChain[LangChainAdapter]
         LlamaIndex[LlamaIndexAdapter]
+        DashScope[DashScopeMultimodalAdapter]
     end
     
     subgraph Models [底层模型]
@@ -314,20 +341,22 @@ graph TB
     Factory --> Interface
     Interface <|-- LangChain
     Interface <|-- LlamaIndex
+    Interface <|-- DashScope
     
     LangChain --> Qwen
     LlamaIndex --> Qwen
+    DashScope --> Qwen
 ```
 
 - **配置结构升级**: 采用嵌套配置模型，分离"凭证管理"与"场景配置"。
   - **凭证管理 (`llm_providers`)**: 独立管理各提供商（DashScope/OpenAI/Anthropic 等）的 API Key 和 Base URL，每种提供商只能配置一个凭证。
   - **场景配置 (`llm_scene_configs`)**: 9 大业务场景独立配置模型参数（provider, model, temperature, max_tokens, top_p 等）。
-- **多框架支持**: LangChain 和 LlamaIndex 适配器，统一定义为 `ILLMService`。
+- **多框架支持**: LangChain、LlamaIndex 和 DashScope 适配器，统一定义为 `ILLMService`。
 - **工厂注入**: `LLMServiceFactory` 根据场景懒加载模型实例，自动从配置中读取凭证和参数。
 - **热切换**: 支持配置变更事件安全清理（dispose）旧模型实例，支持动态重载。
 - **前端交互**: 系统配置页提供独立的"LLM 凭证管理"区域，场景配置按卡片分组展示，包含详细的应用场景说明和参数输入限制。
 
-### 6.12 RAG 查询流水线编排 (Pipeline Orchestrator)
+### 6.13 RAG 查询流水线编排 (Pipeline Orchestrator)
 
 ```mermaid
 graph TB
@@ -366,14 +395,33 @@ graph TB
 - **分支路由**: 根据分类结果动态选择 `simple` 或 `complex` 流水线（目前临时硬编码为返回 `complex`，待对接动态分类）
 - **安全与可观测性**: 流水线首节点强制集成 `prompt_injection_guard` 拦截恶意输入，并提供全链路监控耗时与步骤结果
 
-### 6.13 Prometheus 监控与指标收集
+### 6.14 Prometheus 监控与指标收集
 
 - **指标端点**: `/metrics` 暴露 Prometheus 格式指标
 - **收集内容**: HTTP 请求耗时、LLM 调用延迟、缓存命中率、活跃任务数
 - **集成方式**: FastAPI 中间件嵌入 `prometheus_client` ASGI 应用
 - **Tracing 系统**: `core/tracing/` 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析
+  - **TraceWriter**: 异步队列写入器，支持批量写入和优雅关闭
+  - **TraceContext**: 追踪上下文管理，支持 Span 嵌套和父子关系
+  - **CostCalculator**: LLM 调用成本计算，支持多模型定价
+  - **LangGraphMiddleware**: LangGraph 集成中间件，自动追踪节点执行
 
-### 6.14 ML 评分引擎
+### 6.14 中间件层
+
+- **位置**: `src/middleware/`
+- **TraceMiddleware**: 自动注入 TRACE_ID，支持全链路追踪
+  - 为每个请求生成唯一 TRACE_ID
+  - 将 TRACE_ID 注入到请求上下文
+  - 支持跨服务追踪
+- **ResponseWrapperMiddleware**: 自动包装成功响应为统一格式
+  - 将控制器返回的数据包装为 `{code: 0, message: "success", data: {...}}`
+  - 保持 HTTP 语义（200/4xx/5xx）
+- **ExceptionHandler**: 统一异常处理
+  - 将业务异常（`AppException`）转换为标准错误响应
+  - 处理验证异常（`RequestValidationError`）
+  - 全局异常捕获和日志记录
+
+### 6.15 ML 评分引擎
 
 - **技术栈**: XGBoost + SHAP + scikit-learn
 - **评分模式**: AHP (层次分析法) 基准评分 + ML 模型融合
@@ -381,7 +429,7 @@ graph TB
 - **模型管理**: `joblib` 序列化/反序列化，支持模型热更新
 - **代码入口**: `backend/src/core/nodes/scoring.py` (Agent 评分节点), `backend/src/schemas/ml.py` (输出模型)
 
-### 6.15 NLP 文本处理
+### 6.16 NLP 文本处理
 
 - **中文分词**: jieba 分词器，支持自定义词典 (`backend/src/data/jieba_custom_dict.txt`)
 - **去重引擎**: datasketch MinHash 实现近似去重 (`backend/src/core/rag/dedup_engine.py`)
@@ -389,7 +437,7 @@ graph TB
 - **同义词校验**: 同义词质量校验 (`backend/src/core/rag/synonym_validator.py`)
 - **查询分析**: 中文查询类型分类 (`backend/src/core/rag/query_analyzer.py`)
 
-### 6.16 定时任务调度
+### 6.17 定时任务调度
 
 - **调度器**: APScheduler，进程内单例
 - **定时任务**:

@@ -38,13 +38,19 @@ class ConfigHealthService:
             )
 
             # 调用 LLM（使用兼容层）
+            from src.schemas import LLMMessage, LLMRequest
+
             llm = LLMServiceFactoryCompat.create(
                 framework=LLMFramework.LANGCHAIN,
                 model_name="qwen-turbo",
                 scenario="config_health_diagnosis",
                 temperature=0.7,
             )
-            response = await llm.ainvoke(prompt)
+            request = LLMRequest(
+                messages=[LLMMessage(role="user", content=prompt)],
+                scenario="config_health_diagnosis",
+            )
+            response = await llm.chat(request)
 
             # 解析结果（使用 json-repair 容错）
             import json_repair

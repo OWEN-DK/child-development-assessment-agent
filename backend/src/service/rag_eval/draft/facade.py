@@ -61,10 +61,11 @@ class DraftEngineFacade:
             task_type=tt, task_id=tid, event_type="progress",
             data={"status": "running", "stage": s, "message": m, "metadata": d})
         try:
+            await pub("loading_document", "正在加载文档与分块数据…", document_id=source_document_id)
             doc = await self._load_doc(source_document_id)
             chunks = await self._load_chunks(doc.file_hash)
             chunks = self._filter_chunks(chunks)
-            await pub("generation_started", "开始", document_id=source_document_id)
+            await pub("generation_started", "开始生成草稿", total_chunks=len(chunks), document_id=source_document_id)
             meta = await self._analyzer.analyze(
                 title=doc.title or "",
                 file_type=doc.file_type or "",

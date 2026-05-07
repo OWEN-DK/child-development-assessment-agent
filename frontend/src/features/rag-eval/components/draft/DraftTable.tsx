@@ -103,8 +103,9 @@ export function DraftTable({
     _pagination: TablePaginationConfig,
     _filters: Record<string, unknown>,
     sorter: SorterResult<TestCaseDraft> | SorterResult<TestCaseDraft>[],
+    extra: { action: 'paginate' | 'sort' | 'filter' },
   ) => {
-    if (!onSortChange) return;
+    if (!onSortChange || extra.action !== 'sort') return;
     const s = Array.isArray(sorter) ? sorter[0] : sorter;
     if (s.field && s.order) {
       onSortChange(s.field as string, s.order === 'ascend' ? 'asc' : 'desc');

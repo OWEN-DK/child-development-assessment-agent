@@ -7,6 +7,8 @@ import {
   TraceFilterBar,
   TraceListView,
   TraceDetailDrawer,
+  LatencyChart,
+  CostAnalysisDashboard,
 } from '@/components/monitoring';
 
 const { Option } = Select;
@@ -45,14 +47,27 @@ export const LLMMonitoringDashboard: React.FC = () => {
     },
   };
 
+  const rawDistribution = modelDistribution?.distribution || [];
+  const totalCount = rawDistribution.reduce((sum: number, d: any) => sum + (d.count || 0), 0);
+  const pieData = rawDistribution.map((d: any) => ({
+    ...d,
+    percentage: totalCount > 0 ? `${((d.count / totalCount) * 100).toFixed(1)}%` : '0%',
+  }));
+
   const pieConfig = {
-    data: modelDistribution?.distribution || [],
+    data: pieData,
     angleField: 'count',
     colorField: 'model_name',
     radius: 0.8,
     label: {
-      position: 'outside',
-      content: (datum: any) => `${datum.model_name} ${datum.percentage}`,
+      text: (d: any) => `${d.model_name} ${d.percentage}`,
+      position: 'spider' as const,
+      transform: [{ type: 'overlapDodgeY' }],
+    },
+    legend: {
+      color: {
+        position: 'right' as const,
+      },
     },
   };
 
@@ -126,7 +141,7 @@ export const LLMMonitoringDashboard: React.FC = () => {
         </Col>
       </Row>
 
-      <Row gutter={16}>
+      <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={16}>
           <Card title="调用趋势">
             <Line {...lineConfig} />
@@ -136,6 +151,15 @@ export const LLMMonitoringDashboard: React.FC = () => {
           <Card title="模型使用分布">
             <Pie {...pieConfig} />
           </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16}>
+        <Col span={12}>
+          <LatencyChart />
+        </Col>
+        <Col span={12}>
+          <CostAnalysisDashboard />
         </Col>
       </Row>
     </div>

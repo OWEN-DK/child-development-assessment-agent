@@ -4,7 +4,7 @@
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, Node
@@ -19,6 +19,7 @@ def split_pages_into_chunks(
     chunk_size: int = 1536,
     chunk_overlap: int = 200,
     file_hash: Optional[str] = None,
+    progress_callback: Optional[Callable[[str, float, str], None]] = None,
 ) -> List[Node]:
     """将页级文档拆分为更小的块
 
@@ -34,6 +35,7 @@ def split_pages_into_chunks(
         chunk_size: 块大小
         chunk_overlap: 块重叠大小，默认 200 字符
         file_hash: 文档哈希值，用于设置源关联
+        progress_callback: 进度回调函数 (stage, progress, message)
 
     Returns:
         拆分后的节点列表
@@ -96,6 +98,16 @@ def split_pages_into_chunks(
                     logger.info(
                         f"Processed {completed_count}/{len(documents)} pages"
                     )
+                if progress_callback:
+                    try:
+                        progress_pct = (completed_count / len(documents)) * 100.0
+                        progress_callback(
+                            "chunking",
+                            progress_pct,
+                            f"已处理 {completed_count}/{len(documents)} 页的分块"
+                        )
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(
                     f"Failed to process page "

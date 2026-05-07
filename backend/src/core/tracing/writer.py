@@ -15,8 +15,6 @@ from typing import Any
 
 from src.core.database import async_session_factory
 from src.core.tracing.cost import calculate_cost
-from src.core.tracing.truncation import (save_full_content, truncate_content,
-                                         truncate_messages)
 from src.models.monitor import CallLevel, LLMCallLog
 from src.models.trace import Trace, TraceStatus
 
@@ -290,25 +288,50 @@ class TraceWriter:
                 last_flush = time.time()
 
     async def _flush_batch(self, batch: list[dict]):
-        """批量写入数据库"""
+        """批量写入数据库（一次查询 + 一次批量插入）"""
         if not batch:
             return
 
         try:
             async with async_session_factory() as session:
                 async with session.begin():
+                    # 第一步：按 span_id 归并 llm_start/llm_complete/llm_error
                     merged_spans: dict[str, dict] = {}
+                    span_ids: list[str] = []
                     for item in batch:
                         if item["type"] in ("llm_start", "llm_complete", "llm_error"):
-                            span_id = item.get("span_id")
-                            if span_id:
-                                if span_id not in merged_spans:
-                                    merged_spans[span_id] = {}
-                                merged_spans[span_id].update(item)
+                            sid = item.get("span_id")
+                            if sid:
+                                if sid not in merged_spans:
+                                    merged_spans[sid] = {}
+                                    span_ids.append(sid)
+                                merged_spans[sid].update(item)
 
+                    # 第二步：一次查询获取所有已有记录
+                    existing_map: dict[str, LLMCallLog] = {}
+                    if span_ids:
+                        from sqlalchemy import select as sa_select
+                        result = await session.execute(
+                            sa_select(LLMCallLog).where(LLMCallLog.span_id.in_(span_ids))
+                        )
+                        for log in result.scalars().all():
+                            existing_map[log.span_id] = log
+
+                    # 第三步：批量 INSERT 新记录，批量 UPDATE 已有记录
+                    new_logs: list[LLMCallLog] = []
                     for span_id, merged_item in merged_spans.items():
-                        await self._write_llm_call(session, merged_item)
+                        existing = existing_map.get(span_id)
+                        if existing is not None:
+                            self._update_llm_call(existing, merged_item)
+                        else:
+                            new_log = self._build_llm_call(merged_item)
+                            if new_log:
+                                new_logs.append(new_log)
 
+                    if new_logs:
+                        session.add_all(new_logs)
+
+                    # 第四步：处理非 LLM 类型的记录
                     for item in batch:
                         if item["type"] == "trace_start":
                             await self._create_trace(session, item)
@@ -341,8 +364,8 @@ class TraceWriter:
         session.add(trace)
 
     async def _finalize_trace(self, session, item: dict):
-        """更新 Trace 结束时间"""
-        from sqlalchemy import select
+        """更新 Trace 结束时间，并聚合关联 LLM 调用的 tokens/cost/status"""
+        from sqlalchemy import func, select
 
         result = await session.execute(
             select(Trace).where(Trace.trace_id == item["trace_id"])
@@ -357,6 +380,34 @@ class TraceWriter:
                 trace.total_duration_ms = int(
                     (item["end_time"] - start).total_seconds() * 1000
                 )
+
+            # 聚合关联 LLM 调用的 tokens 和 cost
+            agg_result = await session.execute(
+                select(
+                    func.sum(LLMCallLog.total_tokens).label("total_tokens"),
+                    func.sum(LLMCallLog.cost).label("total_cost"),
+                ).where(
+                    LLMCallLog.trace_id == item["trace_id"],
+                    LLMCallLog.model_name != 'unknown',
+                )
+            )
+            agg = agg_result.one()
+            if agg.total_tokens:
+                trace.total_tokens = agg.total_tokens
+            if agg.total_cost:
+                trace.total_cost = agg.total_cost
+
+            # 检查是否有失败的 LLM 调用
+            error_result = await session.execute(
+                select(func.count()).where(
+                    LLMCallLog.trace_id == item["trace_id"],
+                    LLMCallLog.model_name != 'unknown',
+                    LLMCallLog.level == CallLevel.ERROR,
+                )
+            )
+            error_count = error_result.scalar() or 0
+            if error_count > 0:
+                trace.status = TraceStatus.FAILED
 
     async def _write_span(self, session, item: dict):
         """写入 Span 记录 (节点级)"""
@@ -378,36 +429,38 @@ class TraceWriter:
         )
         session.add(span)
 
-    async def _write_llm_call(self, session, item: dict):
-        """写入/更新 LLM 调用记录"""
-        from sqlalchemy import select
+    @staticmethod
+    def _build_llm_call(item: dict) -> "LLMCallLog | None":
+        """从合并后的 item 构建新的 LLMCallLog 对象（用于批量 insert）"""
+        from src.models.monitor import LLMCallStatus
 
         span_id = item.get("span_id")
         if not span_id:
-            return
+            return None
 
-        result = await session.execute(
-            select(LLMCallLog).where(LLMCallLog.span_id == span_id)
+        log = LLMCallLog(
+            request_id=item.get("request_id") or str(uuid.uuid4()),
+            trace_id=item.get("trace_id"),
+            span_id=span_id,
+            parent_span_id=item.get("parent_span_id"),
+            prompt_messages=item.get("prompt_messages"),
+            level=CallLevel.INFO,
+            model_name=item.get("model_name") or item.get("call_parameters", {}).get("model", "unknown"),
+            status=LLMCallStatus.SUCCESS,
         )
-        log = result.scalar_one_or_none()
+        TraceWriter._apply_llm_item_fields(log, item)
+        return log
 
-        if not log:
-            from src.models.monitor import LLMCallStatus
-
-            log = LLMCallLog(
-                request_id=item.get("request_id") or str(uuid.uuid4()),
-                trace_id=item.get("trace_id"),
-                span_id=span_id,
-                parent_span_id=item.get("parent_span_id"),
-                prompt_messages=item.get("prompt_messages"),
-                level=CallLevel.INFO,
-                model_name=item.get("model_name") or item.get("call_parameters", {}).get("model", "unknown"),
-                status=LLMCallStatus.SUCCESS,
-            )
-            session.add(log)
-        elif not log.parent_span_id and item.get("parent_span_id"):
+    @staticmethod
+    def _update_llm_call(log: "LLMCallLog", item: dict) -> None:
+        """用合并后的 item 更新已有 LLMCallLog 记录"""
+        if not log.parent_span_id and item.get("parent_span_id"):
             log.parent_span_id = item["parent_span_id"]
+        TraceWriter._apply_llm_item_fields(log, item)
 
+    @staticmethod
+    def _apply_llm_item_fields(log: "LLMCallLog", item: dict) -> None:
+        """将 item 中的字段应用到 LLMCallLog 对象"""
         if "prompt_messages" in item:
             log.prompt_messages = item["prompt_messages"]
         if "completion_message" in item:

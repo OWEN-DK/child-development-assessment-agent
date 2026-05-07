@@ -23,6 +23,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: child-dev-backend
+    user: "0:0"
     restart: unless-stopped
     mem_limit: 4g
     cpus: 2
@@ -41,6 +42,7 @@ services:
       DATA_DIR: "/app/app_data/data"
       RAG_STORAGE_DIR: "/app/app_data/storage"
       RAG_TEMP_UPLOAD_DIR: "/app/app_data/temp_uploads"
+      LOG_FILE: "/app/backend/logs/app.log"
       # 以下变量本应由 Dockerfile ENV 设置，部分环境下镜像 ENV 丢失，此处显式补充
       PATH: "/app/backend/.venv/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
       PYTHONPATH: "/app/backend"

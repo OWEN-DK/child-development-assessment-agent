@@ -88,12 +88,13 @@ class MetadataProcessor:
         chunk_size: int = 1536,
         chunk_overlap: int = 200,
         file_hash: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, float, str], None]] = None,
     ) -> List[Node]:
         """将页级文档拆分为更小的块
 
         委托给 chunk_page 模块处理。
         """
-        return _split_pages(documents, chunk_size, chunk_overlap, file_hash)
+        return _split_pages(documents, chunk_size, chunk_overlap, file_hash, progress_callback)
 
     @staticmethod
     def hierarchical_chunking(

@@ -25,15 +25,16 @@ graph TB
             AssessmentFeature[评估特性]
             DocumentsFeature[知识库特性]
             KnowledgeFeature[搜索特性]
-            RagEvalFeature[RAG评估特性]
+            RagEvalFeature[RAG评估特性<br>pages/components/hooks/stores/utils]
             ConfigFeature[配置特性]
             PromptFeature[提示词特性]
-            MonitoringFeature[监控特性]
+            MonitoringFeature[监控特性<br>LLMMonitoringDashboard]
         end
         subgraph Entities 业务实体层
             AssessmentEntity[评估实体]
             TestCaseEntity[测试用例实体]
             TracingEntity[链路追踪实体]
+            RagEvalEntity[RAG评估实体<br>types/enums/mappers/constants]
         end
         subgraph Shared 共享层
             ApiClient[统一API客户端]
@@ -41,10 +42,17 @@ graph TB
             Hooks[通用hooks]
             Utils[工具函数]
         end
+        subgraph Stores 状态管理层
+            DraftStore[DraftGenerationStore<br>草稿生成状态]
+            RunStore[RunProgressStore<br>测试运行状态]
+            ReportStore[ReportProgressStore<br>报告生成状态]
+        end
     end
     
     subgraph API 网关层 API Gateway
         FastAPI[FastAPI 0.135.1]
+        TraceMW[TraceMiddleware<br>TRACE_ID注入]
+        RespWrap[ResponseWrapperMiddleware<br>响应包装]
         CORS[CORS 中间件]
         TaskCtrl[TaskController]
         RagCtrl[RagController]
@@ -53,6 +61,7 @@ graph TB
         ConfigHealthCtrl[ConfigHealthController]
         PromptCtrl[PromptManagementController]
         MonitorCtrl[MonitoringController]
+        HealthCtrl[HealthController]
     end
     
     subgraph 业务服务层 Services

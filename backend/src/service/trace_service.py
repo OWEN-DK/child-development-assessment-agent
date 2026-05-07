@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_ as sa_or, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.monitor import CallLevel, LLMCallLog
@@ -22,9 +22,11 @@ class TraceService:
         status: Optional[str] = None,
         user_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        scenes: Optional[list[str]] = None,
+        models: Optional[list[str]] = None,
     ) -> tuple[list[Trace], int]:
         """分页查询 Trace 列表"""
-        query = select(Trace)
+        query = select(Trace).where(~Trace.name.like('%/api/v1/monitoring%'))
 
         if start_time:
             query = query.where(Trace.created_at >= start_time)
@@ -36,6 +38,20 @@ class TraceService:
             query = query.where(Trace.user_id == user_id)
         if trace_id:
             query = query.where(Trace.trace_id == trace_id)
+        if scenes:
+            scene_clauses = [Trace.name.ilike(f'%{scene}%') for scene in scenes]
+            query = query.where(sa_or(*scene_clauses))
+        if models:
+            model_subq = (
+                sa_select(LLMCallLog.trace_id)
+                .where(
+                    LLMCallLog.model_name.in_(models),
+                    LLMCallLog.model_name != 'unknown',
+                )
+                .distinct()
+                .subquery()
+            )
+            query = query.where(Trace.trace_id.in_(sa_select(model_subq.c.trace_id)))
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await session.execute(count_query)
@@ -63,7 +79,10 @@ class TraceService:
             return None
 
         spans_result = await session.execute(
-            select(LLMCallLog).where(LLMCallLog.trace_id == trace_id)
+            select(LLMCallLog).where(
+                LLMCallLog.trace_id == trace_id,
+                LLMCallLog.model_name != 'unknown',
+            )
         )
         spans = spans_result.scalars().all()
 
@@ -128,8 +147,8 @@ class TraceService:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> tuple[list[LLMCallLog], int]:
-        """分页查询 LLM 调用日志"""
-        query = select(LLMCallLog)
+        """分页查询 LLM 调用日志（仅返回真正的 LLM 调用，过滤 node span）"""
+        query = select(LLMCallLog).where(LLMCallLog.model_name != 'unknown')
 
         if trace_id:
             query = query.where(LLMCallLog.trace_id == trace_id)
@@ -195,8 +214,8 @@ class TraceService:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> dict:
-        """成本分析"""
-        query = select(LLMCallLog)
+        """成本分析（仅统计真正的 LLM 调用）"""
+        query = select(LLMCallLog).where(LLMCallLog.model_name != 'unknown')
         if start_time:
             query = query.where(LLMCallLog.created_at >= start_time)
         if end_time:
@@ -279,8 +298,11 @@ class TraceService:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> dict:
-        """错误分析"""
-        query = select(LLMCallLog).where(LLMCallLog.level == CallLevel.ERROR)
+        """错误分析（仅统计真正的 LLM 调用）"""
+        query = select(LLMCallLog).where(
+            LLMCallLog.level == CallLevel.ERROR,
+            LLMCallLog.model_name != 'unknown',
+        )
         if start_time:
             query = query.where(LLMCallLog.created_at >= start_time)
         if end_time:

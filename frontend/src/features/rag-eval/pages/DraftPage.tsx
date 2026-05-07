@@ -48,7 +48,7 @@ export function DraftPage() {
   const [detailDraft, setDetailDraft] = useState<TestCaseDraft | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
 
-  const { tasks: genTasks, startTracking, removeTask } = useDraftGenerationProgress();
+  const { tasks: genTasks, startTracking, removeTask, cancelTask } = useDraftGenerationProgress();
 
   const filteredDrafts = (data?.items || []).filter((d) => {
     if (!searchText) return true;
@@ -178,7 +178,7 @@ export function DraftPage() {
       </Row>
 
       <ProgressList
-        config={{ ...draftGenerationConfig, onDelete: (task) => removeTask(task.taskId) }}
+        config={{ ...draftGenerationConfig, onCancel: (task) => cancelTask(task.taskId), onDelete: (task) => removeTask(task.taskId) }}
         tasks={genTasks}
       />
 

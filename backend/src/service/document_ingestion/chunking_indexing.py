@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import time
 from typing import Any, Callable
 
@@ -18,6 +19,36 @@ async def _safe_call_callback(callback: Callable, *args):
     result = callback(*args)
     if asyncio.iscoroutine(result):
         await result
+
+
+class _ProgressTracker:
+    """线程安全的进度状态容器
+
+    - update(): 线程侧调用（分块/Metadata 处理线程），只更新共享状态
+    - consume(): event-loop 侧调用（progress_poller），原子读取+清脏标记
+    """
+
+    def __init__(self, stage: str = "chunking", progress: float = 30.0, message: str = ""):
+        self._lock = threading.Lock()
+        self._stage = stage
+        self._progress = progress
+        self._message = message
+        self._dirty = False
+
+    def update(self, stage: str, progress: float, message: str) -> None:
+        with self._lock:
+            self._stage = stage
+            self._progress = progress
+            self._message = message
+            self._dirty = True
+
+    def consume(self) -> tuple | None:
+        """原子读取并清脏标记，返回 (stage, progress, message) 或 None"""
+        with self._lock:
+            if not self._dirty:
+                return None
+            self._dirty = False
+            return (self._stage, self._progress, self._message)
 
 
 class ChunkingAndIndexing:
@@ -56,32 +87,101 @@ class ChunkingAndIndexing:
         if is_epub or is_pdf_with_bookmarks:
             file_type = "EPUB" if is_epub else "PDF with bookmarks"
             logger.info(f"Using chapter + paragraph based chunking for {file_type} file")
-            def chunking_progress(stage: str, progress: float, message: str):
-                nonlocal pending_doc
-                if progress_callback:
-                    overall_progress = 30.0 + (progress / 100.0 * 20.0)
-                    pending_doc["progress"] = overall_progress
-                    asyncio.run_coroutine_threadsafe(
-                        document_manager.add_document(pending_doc), loop
+
+            # 创建线程安全的进度追踪器
+            tracker = _ProgressTracker("chunking", 30.0, "正在分块处理")
+            chunking_done = False
+
+            async def progress_poller():
+                """每 0.5s 读取 tracker 并推送到 SSE 和 Redis"""
+                while not chunking_done:
+                    update = tracker.consume()
+                    if update and progress_callback:
+                        stage, progress, message = update
+                        pending_doc["progress"] = progress
+                        await document_manager.add_document(pending_doc)
+                        await _safe_call_callback(progress_callback, stage, progress, message)
+                        await task_state_service.update(
+                            task_id=task_id, task_type=TASK_TYPE,
+                            updates={"progress": progress, "stage": stage, "message": message}
+                        )
+                    await asyncio.sleep(0.5)
+                # 最后一次刷新
+                update = tracker.consume()
+                if update and progress_callback:
+                    stage, progress, message = update
+                    pending_doc["progress"] = progress
+                    await document_manager.add_document(pending_doc)
+                    await _safe_call_callback(progress_callback, stage, progress, message)
+                    await task_state_service.update(
+                        task_id=task_id, task_type=TASK_TYPE,
+                        updates={"progress": progress, "stage": stage, "message": message}
                     )
-                    res = progress_callback(stage, overall_progress, message)
-                    if asyncio.iscoroutine(res):
-                        asyncio.run_coroutine_threadsafe(res, loop)
-            t_chunk_start = time.monotonic()
-            all_nodes = await asyncio.to_thread(
-                MetadataProcessor.split_chapters_into_chunks,
-                documents, chunk_target_size=settings.rag_epub_chunk_target_size,
-                file_hash=file_hash, progress_callback=chunking_progress,
-            )
+
+            poller = asyncio.create_task(progress_poller())
+
+            try:
+                t_chunk_start = time.monotonic()
+                all_nodes = await asyncio.to_thread(
+                    MetadataProcessor.split_chapters_into_chunks,
+                    documents, chunk_target_size=settings.rag_epub_chunk_target_size,
+                    file_hash=file_hash,
+                    progress_callback=lambda s, p, m: tracker.update(
+                        s, 30.0 + (p / 100.0 * 20.0), m
+                    ),
+                )
+            finally:
+                chunking_done = True
+                await poller
+
             logger.info(f"[PERF] chunking ({file_type}): {time.monotonic() - t_chunk_start:.2f}s, {len(all_nodes)} nodes from {len(documents)} chapters")
         else:
-            # 使用线程池执行同步的分块操作，避免阻塞事件循环
-            t_chunk_start = time.monotonic()
-            all_nodes = await loop.run_in_executor(
-                None,
-                MetadataProcessor.split_pages_into_chunks,
-                documents, settings.rag_pdf_chunk_size, settings.rag_chunk_overlap, file_hash,
-            )
+            # PDF: 使用线程安全的进度追踪器（此前缺失进度回调！）
+            tracker = _ProgressTracker("chunking", 30.0, "正在分块处理")
+            chunking_done = False
+
+            async def progress_poller():
+                """每 0.5s 读取 tracker 并推送"""
+                while not chunking_done:
+                    update = tracker.consume()
+                    if update and progress_callback:
+                        stage, progress, message = update
+                        pending_doc["progress"] = progress
+                        await document_manager.add_document(pending_doc)
+                        await _safe_call_callback(progress_callback, stage, progress, message)
+                        await task_state_service.update(
+                            task_id=task_id, task_type=TASK_TYPE,
+                            updates={"progress": progress, "stage": stage, "message": message}
+                        )
+                    await asyncio.sleep(0.5)
+                update = tracker.consume()
+                if update and progress_callback:
+                    stage, progress, message = update
+                    pending_doc["progress"] = progress
+                    await document_manager.add_document(pending_doc)
+                    await _safe_call_callback(progress_callback, stage, progress, message)
+                    await task_state_service.update(
+                        task_id=task_id, task_type=TASK_TYPE,
+                        updates={"progress": progress, "stage": stage, "message": message}
+                    )
+
+            poller = asyncio.create_task(progress_poller())
+
+            try:
+                t_chunk_start = time.monotonic()
+                all_nodes = await loop.run_in_executor(
+                    None,
+                    MetadataProcessor.split_pages_into_chunks,
+                    documents, settings.rag_pdf_chunk_size,
+                    settings.rag_chunk_overlap, file_hash,
+                    lambda s, p, m: tracker.update(
+                        s, 30.0 + (p / 100.0 * 20.0), m
+                    ),
+                )
+            finally:
+                chunking_done = True
+                await poller
+
             logger.info(f"[PERF] chunking (page-based): {time.monotonic() - t_chunk_start:.2f}s, {len(all_nodes)} nodes from {len(documents)} pages")
 
         if progress_callback:

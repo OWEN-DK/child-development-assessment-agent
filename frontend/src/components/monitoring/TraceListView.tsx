@@ -5,6 +5,25 @@ import { useQuery } from '@tanstack/react-query';
 import { tracingApi } from '@/api/tracing';
 import type { Trace } from '@entities/tracing/types';
 
+const SCENE_NAME_MAP: [RegExp, string][] = [
+  [/\/rag\/eval\/drafts\/generation/, 'RAG评测 - 草稿生成'],
+  [/\/rag\/eval\/test-runs/, 'RAG评测 - 测试执行'],
+  [/\/rag\/eval\/reports/, 'RAG评测 - 报告生成'],
+  [/\/rag\/eval/, 'RAG评测'],
+  [/\/documents\/upload/, '文档上传'],
+  [/\/assessment\/evaluate/, '评估执行'],
+  [/\/assessment/, '儿童发展评估'],
+];
+
+function formatTraceName(rawName: string): string {
+  const pathMatch = rawName.match(/^\w+\s+(.+)$/);
+  const path = pathMatch ? pathMatch[1] : rawName;
+  for (const [pattern, label] of SCENE_NAME_MAP) {
+    if (pattern.test(path)) return label;
+  }
+  return rawName;
+}
+
 interface TraceListViewProps {
   filters?: Record<string, any>;
   onRowClick?: (traceId: string) => void;
@@ -38,6 +57,7 @@ export const TraceListView: React.FC<TraceListViewProps> = ({ filters, onRowClic
       title: '场景/名称',
       dataIndex: 'name',
       key: 'name',
+      render: (name: string) => formatTraceName(name),
       width: 200,
     },
     {

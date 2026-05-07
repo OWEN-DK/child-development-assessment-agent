@@ -4,6 +4,10 @@ from typing import Any, Dict, List, Tuple
 import httpx
 from pydantic import Field
 
+from src.core.tracing.context import (create_span, get_current_span_id,
+                                      get_current_trace_id, get_parent_span_id,
+                                      trace_context as async_trace_context)
+from src.core.tracing.writer import get_trace_writer
 from src.schemas import (ChildProfile, ChildState, KnowledgeItem, ProposedPlan,
                          QwenScoringOutput)
 from src.utils.logger import logger
@@ -32,6 +36,24 @@ class QwenScorer:
         docs: List[KnowledgeItem],
         ahp_scores: Dict[str, float],
     ) -> Tuple[float, Dict[str, float], str]:
+        trace_id = get_current_trace_id()
+        if not trace_id:
+            async with async_trace_context("qwen_scorer_predict") as auto_tid:
+                return await self._predict_inner(child, plan, child_state, docs, ahp_scores, auto_tid)
+        return await self._predict_inner(child, plan, child_state, docs, ahp_scores, trace_id)
+
+    async def _predict_inner(
+        self,
+        child: ChildProfile,
+        plan: ProposedPlan,
+        child_state: ChildState,
+        docs: List[KnowledgeItem],
+        ahp_scores: Dict[str, float],
+        trace_id: str,
+    ) -> Tuple[float, Dict[str, float], str]:
+        writer = get_trace_writer()
+        span_id = None
+
         try:
             # 准备输入数据
             child_age = child.age
@@ -113,12 +135,22 @@ class QwenScorer:
                 },
             }
 
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(
-                    self.base_url, headers=headers, json=payload
+            # Tracing: 记录 LLM 调用开始
+            prompt_messages = payload["input"]["messages"]
+            with create_span(f"qwen_scorer_{self.model}") as span_id:
+                await writer.record_llm_start(
+                    trace_id=trace_id, span_id=span_id,
+                    parent_span_id=get_parent_span_id(),
+                    prompt_messages=prompt_messages,
+                    call_parameters={"model": self.model, "scenario": "ml_scoring"},
                 )
-                response.raise_for_status()
-                result = response.json()
+
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(
+                        self.base_url, headers=headers, json=payload
+                    )
+                    response.raise_for_status()
+                    result = response.json()
 
             # 解析结果
             output_text = result["output"]["choices"][0]["message"]["content"]
@@ -128,6 +160,18 @@ class QwenScorer:
             scoring_output = QwenScoringOutput(**output_data)
 
             logger.info(f"Qwen ML scoring completed, score: {scoring_output.score}")
+
+            # Tracing: 记录 LLM 调用完成（非流式调用 ttft 为 None）
+            input_tokens = sum(len(m["content"]) for m in prompt_messages) // 4
+            output_tokens = len(output_text) // 4
+            await writer.record_llm_complete(
+                trace_id=trace_id, span_id=span_id,
+                parent_span_id=get_parent_span_id(),
+                completion_message=output_text,
+                tokens={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
+                ttft=None,
+            )
+
             return (
                 scoring_output.score,
                 scoring_output.feature_importance,
@@ -135,6 +179,9 @@ class QwenScorer:
             )
 
         except Exception as e:
+            # Tracing: 记录 LLM 调用错误
+            if span_id:
+                await writer.record_llm_error(trace_id=trace_id, span_id=span_id, error=str(e))
             logger.error(f"Qwen scoring failed: {e}", exc_info=True)
             # 失败时回退到AHP得分
             return ahp_scores["total"], {}, "ML评分失败，使用规则评分结果"

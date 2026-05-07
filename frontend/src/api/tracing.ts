@@ -28,6 +28,8 @@ export const tracingApi = {
     if (filters?.status) params.append('status', filters.status);
     if (filters?.user_id) params.append('user_id', filters.user_id);
     if (filters?.trace_id) params.append('trace_id', filters.trace_id);
+    if (filters?.scenes?.length) params.append('scenes', filters.scenes.join(','));
+    if (filters?.models?.length) params.append('models', filters.models.join(','));
 
     const res = await apiClient.get(`/api/v1/monitoring/traces?${params.toString()}`);
     return res.data;

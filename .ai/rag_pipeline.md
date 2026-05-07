@@ -39,6 +39,18 @@ RAG 系统是本项目知识库检索的核心，采用分层架构，包含文�
 | 去重 | `backend/src/core/pipeline/steps/deduplication.py` | 结果去重去噪 |
 | PageIndex 增强 | `backend/src/core/pipeline/steps/pageindex_enhancement.py` | PageIndex 元数据增强 |
 
+**RAG 评估服务层（RAG Eval Services）**
+
+| 模块 | 文件路径 | 职责 |
+|------|----------|------|
+| 评估编排器 | `backend/src/service/rag_eval/orchestrator.py` | RAG 评估全流程编排 |
+| 草稿引擎 | `backend/src/service/rag_eval/draft/` | 测试草稿生成、审核、去重 |
+| 测试用例引擎 | `backend/src/service/rag_eval/case/` | 测试用例和测试集管理 |
+| 测试运行引擎 | `backend/src/service/rag_eval/run/` | 批量测试执行、快照管理 |
+| 指标引擎 | `backend/src/service/rag_eval/metrics/` | 评分和6层诊断 |
+| 报告引擎 | `backend/src/service/rag_eval/report/` | 报告生成、趋势分析、导出 |
+| 调优引擎 | `backend/src/service/rag_eval/tuning/` | 调优建议、冲突检测 |
+
 **RAG 核心模块 (`core/rag/`)**
 
 | 模块 | 文件路径 | 职责 |

@@ -57,6 +57,90 @@
 - **包管理**: uv (后端), npm (前端)
 - **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
 
+## 后端目录结构
+```
+backend/src/
+├── api/                    # API 基础设施
+│   ├── json_response.py    # 统一 JSON 响应类
+│   └── sse.py              # SSE 推送基础设施
+├── config/                 # 配置系统
+│   ├── core/               # 配置基础设施（管理器、持久化、事件）
+│   ├── modules/            # 按功能域拆分的配置模块
+│   └── rules/              # 业务规则配置层
+├── controller/             # API 控制器层
+│   ├── rag_eval/           # RAG 评估子控制器（7个）
+│   ├── config_controller.py
+│   ├── monitoring_controller.py
+│   ├── rag_controller.py
+│   └── task_controller.py
+├── core/                   # 核心业务逻辑
+│   ├── llm/                # LLM 工厂与适配器
+│   │   ├── adapters/       # 框架适配器（LangChain/LlamaIndex/DashScope）
+│   │   ├── factory.py      # LLM 服务工厂
+│   │   └── embedding_factory.py
+│   ├── tracing/            # 全链路追踪系统
+│   │   ├── writer.py       # 异步追踪写入器
+│   │   ├── context.py      # 追踪上下文管理
+│   │   └── cost.py         # 成本计算
+│   ├── rag/                # RAG 核心模块
+│   ├── metadata/           # 文档元数据处理
+│   ├── ml/                 # ML 评分引擎
+│   ├── nodes/              # LangGraph 节点
+│   ├── pipeline/           # RAG 查询流水线
+│   ├── prompt/             # 提示词管理
+│   ├── prompt_impl/        # 提示词实现层
+│   └── config/             # 配置缓存
+├── middleware/              # 中间件层
+│   ├── exception_handler.py # 全局异常处理
+│   ├── response_wrapper.py  # 响应包装中间件
+│   └── trace_middleware.py  # 追踪中间件
+├── models/                 # SQLAlchemy 数据模型
+├── repository/             # 数据访问层
+├── schemas/                # Pydantic 实体类
+├── service/                # 业务服务层
+│   ├── rag_eval/           # RAG 评估服务
+│   ├── retrieval/          # 检索服务
+│   ├── document_ingestion/ # 文档导入服务
+│   ├── cache/              # 缓存服务
+│   └── index_manager/      # 索引管理服务
+└── utils/                  # 工具函数
+```
+
+## 前端目录结构
+```
+frontend/src/
+├── api/                    # API 客户端层
+│   ├── rag-eval/           # RAG 评估 API
+│   ├── tracing.ts          # 链路追踪 API
+│   └── ...
+├── components/             # 通用组件
+│   ├── monitoring/         # 监控组件
+│   ├── config/             # 配置组件
+│   └── ...
+├── entities/               # 业务实体类型
+│   ├── rag-eval/           # RAG 评估实体
+│   └── tracing/            # 链路追踪实体
+├── features/               # 业务特性层
+│   ├── rag-eval/           # RAG 评估特性
+│   │   ├── pages/          # 页面组件
+│   │   ├── components/     # 业务组件
+│   │   ├── hooks/          # 业务 Hooks
+│   │   ├── stores/         # Zustand 状态管理
+│   │   └── utils/          # 工具函数
+│   ├── monitoring/         # LLM 监控特性
+│   ├── assessment/         # 评估特性
+│   ├── documents/          # 知识库特性
+│   └── knowledge/          # 搜索特性
+├── pages/                  # 独立页面
+├── router/                 # 路由配置
+├── shared/                 # 共享层
+│   ├── api/                # 通用 API 工具
+│   ├── hooks/              # 通用 Hooks
+│   ├── lib/                # 通用库
+│   └── types/              # 通用类型
+└── app/                    # 应用根组件
+```
+
 ## 常用开发命令
 - **后端**: `cd backend && uv sync && uv run start` 或 `uv run python src/server.py`
 - **后端测试**: `cd backend && uv run pytest`
@@ -125,7 +209,7 @@
 - **ChromaDB 距离度量**: 使用输出 Cosine Similarity 的 Embedding 模型（如 DashScope）时，创建 Chroma collection 必须指定 `metadata={'hnsw:space': 'cosine'}`，否则分数计算异常。
 - **docstore 持久化**: 使用自定义 Chroma 库时，必须在创建 `VectorStoreIndex` 时传入 `store_nodes_override=True`，否则 `docstore.json` 为空，导致依赖 docstore 的检索器（如 BM25）失效。
 - **目录隔离**: LlamaIndex `StorageContext` 的 `persist_dir` 必须使用独立子目录（如 `storage/index`），避免覆盖或删除应用的其他文件。
-- **搜索分数阈值**: 融合搜索使用的绝对分数偏低（最高往往 50% 左右），因此阈值（如 `RAG_SEARCH_SCORE_THRESHOLD_HYBRID`）需适当调低至 `0.25`，并在前端进行线性映射。
+- **搜索分数阈值**: 当前使用 RRF (Reciprocal Rank Fusion) 融合，分数范围约 0.001–0.033。`RAG_SEARCH_SCORE_THRESHOLD_HYBRID/VECTOR` 必须设在 RRF 级别（默认 `0.003`），严禁用旧线性评分值（如 `0.25`）——会导致零结果。搜索页面同时启用 RRF → Per-Query Min-Max 归一化映射到前端显示分数。
 - **DashScope Embedding 异常**: 遇 API 异常会返回 None 导致 Pydantic 报错，必须使用 `SafeDashScopeEmbedding` 包装器处理。
 
 ### 4. LLM 输出解析与文档上传
@@ -148,6 +232,13 @@
 - **配置热重载**: 通过 `ConfigCache` 单例 + Redis Pub/Sub 实现，修改配置后自动生效，无需重启。
 - **Prometheus 指标**: 系统暴露 `/metrics` 端点，收集 HTTP 请求耗时、LLM 调用延迟、缓存命中率等。
 - **Tracing 系统**: `core/tracing/` 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析。
+  - **TraceWriter**: 异步队列写入器，支持批量写入和优雅关闭
+  - **TraceContext**: 追踪上下文管理，支持 Span 嵌套和父子关系
+  - **CostCalculator**: LLM 调用成本计算，支持多模型定价
+- **中间件层**: `middleware/` 包含全局异常处理、响应包装、追踪中间件
+  - **ExceptionHandler**: 统一异常处理，将业务异常转换为标准响应
+  - **ResponseWrapper**: 自动包装成功响应为统一格式
+  - **TraceMiddleware**: 自动注入 TRACE_ID，支持全链路追踪
 
 ### 8. Repository 数据访问层
 - **泛型基类**: `BaseRepository` 提供 CRUD 通用实现，专属 Repository 继承并扩展。
@@ -158,6 +249,12 @@
 - **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`。
 - **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型。
 - **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载。
+- **状态管理**: 使用 Zustand 5 管理复杂业务状态
+  - **RAG 评估状态**: `features/rag-eval/stores/` 包含草稿生成、测试运行、报告进度等状态
+  - **状态持久化**: 支持状态持久化和恢复
+- **API 客户端**: `api/` 目录按业务模块组织 API 客户端
+  - **RAG 评估 API**: `api/rag-eval/` 包含草稿、测试用例、测试运行、报告等 API
+  - **链路追踪 API**: `api/tracing.ts` 包含 Trace 和 Span 查询 API
 
 ---
 

@@ -11,10 +11,8 @@ from typing import Any, Optional
 
 from src.core.llm.base import (LLMRateLimitError, LLMService, LLMTimeoutError,
                                 LLMUnavailableError)
-from src.core.llm.log_collector import LLMLogCollector
 from src.core.tracing.context import (create_span, get_current_span_id,
                                        get_current_trace_id, get_parent_span_id)
-from src.core.tracing.truncation import truncate_content, truncate_messages
 from src.core.tracing.writer import get_trace_writer
 from src.schemas import LLMMessage, LLMRequest, LLMResponse
 from src.utils.logger import logger
@@ -98,19 +96,19 @@ class DashScopeMultiModalAdapter(LLMService):
             converted.append({"role": msg.role, "content": content})
         return converted
 
-    def _call_sync(self, messages: list[dict], **kwargs) -> str:
+    def _call_sync(self, messages: list[dict], **kwargs) -> tuple[str, dict]:
         """同步调用 DashScope API（自动选择文本或多模态 API）
-        
+
         Args:
             messages: DashScope 格式消息列表
             **kwargs: 调用参数
-            
+
         Returns:
-            模型返回的文本内容
+            (模型返回的文本内容, token 用量字典)
         """
         import dashscope
         from http import HTTPStatus
-        
+
         # 合并默认参数和调用时参数
         call_params = {**self._default_params, **kwargs}
 
@@ -134,19 +132,28 @@ class DashScopeMultiModalAdapter(LLMService):
                 api_key=self._api_key,
                 **call_params
             )
-        
+
         if response.status_code == HTTPStatus.OK:
             if response.output and response.output.choices:
                 content = response.output.choices[0].message.content
                 # content 可能是字符串或列表
                 if isinstance(content, list):
-                    return "".join(
+                    text = "".join(
                         [item["text"] for item in content if "text" in item]
                     )
                 elif isinstance(content, str):
-                    return content
+                    text = content
                 else:
-                    return str(content)
+                    text = str(content)
+
+                # 提取真实 token 用量
+                usage = {}
+                if hasattr(response, 'usage') and response.usage:
+                    usage = {
+                        "input_tokens": getattr(response.usage, 'input_tokens', 0) or 0,
+                        "output_tokens": getattr(response.usage, 'output_tokens', 0) or 0,
+                    }
+                return text, usage
             else:
                 raise LLMUnavailableError(f"模型返回空响应")
         else:
@@ -176,8 +183,8 @@ class DashScopeMultiModalAdapter(LLMService):
         prompt_parts.append("Assistant: ")
         return "\n".join(prompt_parts)
 
-    async def _call_with_timeout(self, ds_messages: list[dict], request: LLMRequest) -> str:
-        """带超时的同步调用包装"""
+    async def _call_with_timeout(self, ds_messages: list[dict], request: LLMRequest) -> tuple[str, dict]:
+        """带超时的同步调用包装，返回 (content, usage)"""
         timeout = getattr(request, 'timeout', 30) or 30
         return await asyncio.wait_for(
             asyncio.to_thread(
@@ -190,40 +197,31 @@ class DashScopeMultiModalAdapter(LLMService):
         )
 
     async def _record_success(self, request_id: str, request: LLMRequest,
-                              content: str, duration_ms: int, ttft: int = 0,
-                              writer=None, trace_id: str = None, span_id: str = None):
-        """统一记录成功日志（避免 TraceWriter 和 LLMLogCollector 重复写入）"""
-        input_tokens = sum(len(msg.content) for msg in request.messages) // 4
-        output_tokens = len(content) // 4
+                              content: str, duration_ms: int, ttft: Optional[int] = None,
+                              writer=None, trace_id: str = None, span_id: str = None,
+                              input_tokens: int = 0, output_tokens: int = 0):
+        """统一记录成功日志（ttft 仅对流式调用有意义，非流式传 None）"""
+        if not input_tokens:
+            input_tokens = sum(len(msg.content) for msg in request.messages) // 4
+        if not output_tokens:
+            output_tokens = len(content) // 4
 
         if writer and span_id:
-            truncated_messages = truncate_messages(
-                [{"role": msg.role, "content": msg.content} for msg in request.messages]
-            )
-            truncated_completion, _ = truncate_content(content)
+            full_messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
             await writer.record_llm_start(
                 trace_id=trace_id, span_id=span_id,
                 parent_span_id=get_parent_span_id(),
-                prompt_messages=truncated_messages,
+                prompt_messages=full_messages,
                 call_parameters={"model": self._model, "scenario": request.scenario, "prompt_key": request.prompt_key},
                 request_id=request_id,
             )
             await writer.record_llm_complete(
                 trace_id=trace_id, span_id=span_id,
                 parent_span_id=get_parent_span_id(),
-                completion_message=truncated_completion,
+                completion_message=content,
                 tokens={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
                 ttft=ttft, request_id=request_id,
             )
-        else:
-            # 无 TraceWriter 时走 LLMLogCollector
-            await LLMLogCollector.submit({
-                "request_id": request_id, "model_name": self._model,
-                "prompt_key": request.prompt_key, "scenario": request.scenario,
-                "input_tokens": input_tokens, "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "duration_ms": duration_ms, "status": "success",
-            })
 
     async def _record_error(self, request_id: str, request: LLMRequest,
                             error: str, status: str = "failed",
@@ -231,12 +229,6 @@ class DashScopeMultiModalAdapter(LLMService):
         """统一记录错误日志"""
         if writer and span_id:
             await writer.record_llm_error(trace_id=trace_id, span_id=span_id, error=str(error))
-        else:
-            await LLMLogCollector.submit({
-                "request_id": request_id, "model_name": self._model,
-                "prompt_key": request.prompt_key, "scenario": request.scenario,
-                "status": status, "error_message": str(error),
-            })
 
     async def chat(self, request: LLMRequest) -> LLMResponse:
         """聊天接口实现（异步）"""
@@ -254,14 +246,14 @@ class DashScopeMultiModalAdapter(LLMService):
             if span_ctx:
                 span_id = span_ctx.__enter__()
 
-            content = await self._call_with_timeout(ds_messages, request)
+            content, usage = await self._call_with_timeout(ds_messages, request)
 
-            ttft = int((time.time() - start_time) * 1000)
-            duration_ms = ttft
-            input_tokens = sum(len(msg.content) for msg in request.messages) // 4
-            output_tokens = len(content) // 4
+            duration_ms = int((time.time() - start_time) * 1000)
+            input_tokens = usage.get("input_tokens", 0) or sum(len(msg.content) for msg in request.messages) // 4
+            output_tokens = usage.get("output_tokens", 0) or len(content) // 4
 
-            await self._record_success(request_id, request, content, duration_ms, ttft, writer, trace_id, span_id)
+            # 非流式调用：ttft 设为 None（TTFT 仅对流式调用有意义）
+            await self._record_success(request_id, request, content, duration_ms, None, writer, trace_id, span_id, input_tokens, output_tokens)
 
             if span_ctx:
                 span_ctx.__exit__(None, None, None)
@@ -304,41 +296,89 @@ class DashScopeMultiModalAdapter(LLMService):
         return self._model
 
     async def chat_stream(self, request: LLMRequest):
-        """流式聊天接口（自动选择文本或多模态 API）"""
+        """流式聊天接口（自动选择文本或多模态 API，带 Tracing）"""
+        from src.core.tracing.context import trace_context as async_trace_context
+
+        trace_id = get_current_trace_id()
+        if not trace_id:
+            async with async_trace_context(f"llm_stream_{self._model}") as auto_tid:
+                async for chunk in self._stream_with_tracing(request, auto_tid):
+                    yield chunk
+        else:
+            async for chunk in self._stream_with_tracing(request, trace_id):
+                yield chunk
+
+    async def _stream_with_tracing(self, request: LLMRequest, trace_id: str):
+        """流式调用核心逻辑，带 Tracing 埋点"""
         import dashscope
         from http import HTTPStatus
-        
-        ds_messages = self._convert_messages(request.messages)
-        call_params = {**self._default_params}
 
-        if self._is_multimodal_model():
-            filtered = {k: v for k, v in call_params.items()
-                        if k not in self._generation_only_params}
-            response = dashscope.MultiModalConversation.call(
-                model=self._model,
-                messages=ds_messages,
-                api_key=self._api_key,
-                stream=True,
-                **filtered
+        writer = get_trace_writer()
+        start_time = time.time()
+
+        with create_span(f"llm_stream_{self._model}") as span_id:
+            # 记录 LLM 调用开始
+            full_messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            await writer.record_llm_start(
+                trace_id=trace_id, span_id=span_id,
+                parent_span_id=get_parent_span_id(),
+                prompt_messages=full_messages,
+                call_parameters={"model": self._model, "scenario": request.scenario, "prompt_key": request.prompt_key},
             )
-        else:
-            # 纯文本模型使用 Generation API
-            prompt = self._messages_to_prompt(ds_messages)
-            response = dashscope.Generation.call(
-                model=self._model,
-                prompt=prompt,
-                api_key=self._api_key,
-                stream=True,
-                **call_params
-            )
-        
-        for chunk in response:
-            if chunk.status_code == HTTPStatus.OK:
-                if chunk.output and chunk.output.choices:
-                    content = chunk.output.choices[0].message.content
-                    if isinstance(content, list):
-                        for item in content:
-                            if "text" in item:
-                                yield item["text"]
-                    elif isinstance(content, str):
-                        yield content
+
+            first_token_time = None
+            accumulated_text = []
+
+            try:
+                ds_messages = self._convert_messages(request.messages)
+                call_params = {**self._default_params}
+
+                if self._is_multimodal_model():
+                    filtered = {k: v for k, v in call_params.items()
+                                if k not in self._generation_only_params}
+                    response = dashscope.MultiModalConversation.call(
+                        model=self._model, messages=ds_messages,
+                        api_key=self._api_key, stream=True, **filtered
+                    )
+                else:
+                    prompt = self._messages_to_prompt(ds_messages)
+                    response = dashscope.Generation.call(
+                        model=self._model, prompt=prompt,
+                        api_key=self._api_key, stream=True, **call_params
+                    )
+
+                for chunk in response:
+                    if chunk.status_code == HTTPStatus.OK:
+                        if chunk.output and chunk.output.choices:
+                            content = chunk.output.choices[0].message.content
+                            if isinstance(content, list):
+                                for item in content:
+                                    if "text" in item:
+                                        text = item["text"]
+                                        if first_token_time is None:
+                                            first_token_time = time.time()
+                                        accumulated_text.append(text)
+                                        yield text
+                            elif isinstance(content, str):
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+                                accumulated_text.append(content)
+                                yield content
+
+                # 流式完成，记录 llm_complete
+                ttft = int((first_token_time - start_time) * 1000) if first_token_time else 0
+                completion_text = "".join(accumulated_text)
+                input_tokens = sum(len(msg.content) for msg in request.messages) // 4
+                output_tokens = len(completion_text) // 4
+
+                await writer.record_llm_complete(
+                    trace_id=trace_id, span_id=span_id,
+                    parent_span_id=get_parent_span_id(),
+                    completion_message=completion_text,
+                    tokens={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
+                    ttft=ttft,
+                )
+
+            except Exception as e:
+                await writer.record_llm_error(trace_id=trace_id, span_id=span_id, error=str(e))
+                raise

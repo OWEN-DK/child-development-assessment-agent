@@ -66,7 +66,13 @@ async def trace_context(name: str, metadata: dict | None = None):
 
 @contextmanager
 def trace_context_sync(name: str, metadata: dict | None = None):
-    """创建 Trace 上下文（sync 版本，仅用于同步场景）"""
+    """创建 Trace 上下文（sync 版本，仅用于同步场景）
+
+    通过 asyncio.ensure_future 将异步写入操作提交到事件循环，
+    避免 coroutine 未被 await 导致 trace start 记录丢失。
+    """
+    import asyncio
+
     from src.core.tracing.writer import get_trace_writer
 
     tid = str(uuid.uuid4())
@@ -75,15 +81,28 @@ def trace_context_sync(name: str, metadata: dict | None = None):
     span_token = span_stack.set([])
 
     writer = get_trace_writer()
-    writer.record_trace_start(
-        trace_id=tid, name=name, metadata=metadata or {}, start_time=start_time
-    )
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            writer.record_trace_start(
+                trace_id=tid, name=name, metadata=metadata or {}, start_time=start_time
+            )
+        )
+    except RuntimeError:
+        # 无运行中的事件循环，跳过异步写入
+        pass
 
     try:
         yield tid
     finally:
         end_time = datetime.now(UTC)
-        writer.record_trace_end(trace_id=tid, end_time=end_time)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                writer.record_trace_end(trace_id=tid, end_time=end_time)
+            )
+        except RuntimeError:
+            pass
         trace_id.reset(trace_token)
         span_stack.reset(span_token)
 

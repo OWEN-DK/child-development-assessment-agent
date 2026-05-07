@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func as sa_func, select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import async_session_factory
+from src.models.monitor import LLMCallLog
 from src.schemas.common import APIResponse
 from src.service.alert_service import AlertService
 from src.service.monitoring_service import MonitoringService
@@ -151,28 +153,72 @@ async def list_traces(
     status: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
     trace_id: Optional[str] = Query(None),
+    scenes: Optional[str] = Query(None, description="逗号分隔的场景关键词"),
+    models: Optional[str] = Query(None, description="逗号分隔的模型名称"),
     db: AsyncSession = Depends(get_db),
 ):
     """分页查询追踪列表"""
+    scene_list = [s.strip() for s in scenes.split(',') if s.strip()] if scenes else None
+    model_list = [m.strip() for m in models.split(',') if m.strip()] if models else None
+
     service = TraceService()
     items, total = await service.list_traces(
-        db, page, page_size, start_time, end_time, status, user_id, trace_id
+        db, page, page_size, start_time, end_time, status, user_id, trace_id,
+        scenes=scene_list, models=model_list,
     )
+
+    # 从 LLMCallLog 聚合 token/cost/model 数据
+    trace_ids = [item.trace_id for item in items]
+    agg_map: dict[str, tuple] = {}
+    model_map: dict[str, list[str]] = {}
+
+    if trace_ids:
+        agg_result = await db.execute(
+            sa_select(
+                LLMCallLog.trace_id,
+                sa_func.sum(LLMCallLog.total_tokens).label("tokens"),
+                sa_func.sum(LLMCallLog.cost).label("cost"),
+            )
+            .where(
+                LLMCallLog.trace_id.in_(trace_ids),
+                LLMCallLog.model_name != 'unknown',
+            )
+            .group_by(LLMCallLog.trace_id)
+        )
+        agg_map = {row[0]: (row[1] or 0, row[2] or 0) for row in agg_result.all()}
+
+        model_result = await db.execute(
+            sa_select(LLMCallLog.trace_id, LLMCallLog.model_name)
+            .where(
+                LLMCallLog.trace_id.in_(trace_ids),
+                LLMCallLog.model_name != 'unknown',
+            )
+            .distinct()
+        )
+        for row in model_result.all():
+            if row[1]:
+                model_map.setdefault(row[0], []).append(row[1])
+
+    def _build_item(item):
+        agg_tokens, agg_cost = agg_map.get(item.trace_id, (None, None))
+        models = model_map.get(item.trace_id)
+        return {
+            "trace_id": item.trace_id,
+            "name": item.name,
+            "user_id": item.user_id,
+            "status": item.status.value,
+            "total_tokens": agg_tokens if agg_tokens is not None else item.total_tokens,
+            "total_duration_ms": item.total_duration_ms,
+            "total_cost": str(agg_cost) if agg_cost else (str(item.total_cost) if item.total_cost else None),
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "metadata": {
+                **(item.trace_metadata or {}),
+                "model": (models or [None])[0] or (item.trace_metadata or {}).get("model"),
+            },
+        }
+
     return APIResponse.success(data={
-        "items": [
-            {
-                "trace_id": item.trace_id,
-                "name": item.name,
-                "user_id": item.user_id,
-                "status": item.status.value,
-                "total_tokens": item.total_tokens,
-                "total_duration_ms": item.total_duration_ms,
-                "total_cost": str(item.total_cost) if item.total_cost else None,
-                "created_at": item.created_at.isoformat() if item.created_at else None,
-                "metadata": item.trace_metadata,
-            }
-            for item in items
-        ],
+        "items": [_build_item(item) for item in items],
         "total": total,
         "page": page,
         "page_size": page_size,
