@@ -19,6 +19,7 @@ from src.utils.exceptions import ResourceNotFoundException
 from src.middleware.exception_handler import (app_exception_handler,
                                                global_exception_handler,
                                                validation_exception_handler)
+from src.api.json_response import UtcJsonResponse
 from src.middleware.response_wrapper import ResponseWrapperMiddleware
 from src.utils.exceptions import AppException
 from fastapi.exceptions import RequestValidationError
@@ -153,6 +154,7 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         debug=settings.debug,
         lifespan=lifespan,
+        default_response_class=UtcJsonResponse,
     )
 
     # 校验环境变量

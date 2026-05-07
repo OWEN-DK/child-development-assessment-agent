@@ -33,8 +33,8 @@ export function useCreateRun() {
   return useMutation({
     mutationFn: (data: { name: string; test_set_ids: string[]; description?: string }) =>
       runsApi.createRun(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
     },
   });
 }
@@ -44,8 +44,8 @@ export function useExecuteRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => runsApi.executeRun(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['rag-eval', 'runs'] });
     },
   });
 }

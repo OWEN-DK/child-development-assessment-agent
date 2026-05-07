@@ -19,7 +19,9 @@ import json
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response, StreamingResponse
+from starlette.responses import Response, StreamingResponse
+
+from src.api.json_response import UtcJsonResponse
 
 
 class ResponseWrapperMiddleware(BaseHTTPMiddleware):
@@ -63,7 +65,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
 
         # 跳过已包装的响应
         if isinstance(original_data, dict) and "code" in original_data:
-            return JSONResponse(
+            return UtcJsonResponse(
                 status_code=response.status_code,
                 content=original_data,
             )
@@ -74,7 +76,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
             "message": "success",
             "data": original_data,
         }
-        return JSONResponse(
+        return UtcJsonResponse(
             status_code=response.status_code,
             content=wrapped,
         )

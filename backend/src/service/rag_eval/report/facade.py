@@ -1,5 +1,9 @@
 """报告引擎门面——生成、查询、趋势分析与导出"""
 
+from sqlalchemy import desc
+
+from src.core.async_task import AsyncTaskManager
+from src.models.rag_eval.report import EvalReport
 from src.repository.rag_eval.report_repository import ReportRepository
 from src.repository.rag_eval.test_run_repository import TestRunRepository
 from src.schemas.rag_eval.report import (
@@ -10,8 +14,10 @@ from src.service.rag_eval.report.builder import ReportBuilder
 from src.service.rag_eval.report.exporter import ReportExporter
 from src.service.rag_eval.report.markdown_renderer import MarkdownRenderer
 from src.service.rag_eval.report.trend_analyzer import TrendAnalyzer
+from src.service.task_sse_publisher import TaskSsePublisher
 from src.utils.exceptions import AppException, ReportNotFoundException, TestRunNotFoundException
 from src.utils.id_generator import generate_id
+from src.utils.logger import logger
 from src.utils.orm_mapper import OrmMapper
 
 
@@ -20,15 +26,111 @@ class ReportEngineFacade:
 
     def __init__(self, builder, markdown_renderer, trend_analyzer, exporter,
                  report_repository, test_run_repository, orm_mapper=None,
-                 metric_engine=None, run_engine=None):
+                 metric_engine=None, run_engine=None,
+                 async_task_manager: AsyncTaskManager | None = None):
         self._b = builder; self._r = markdown_renderer; self._t = trend_analyzer
         self._e = exporter; self._rr = report_repository; self._tr = test_run_repository
         self._m = orm_mapper or OrmMapper()
         self._metric = metric_engine
         self._run = run_engine
+        self._task_manager = async_task_manager or AsyncTaskManager()
+
+    async def start_generate_report(self, run_id: str, force: bool = True) -> dict:
+        """启动报告生成，强制生成新报告（旧报告标记为 superseded）
+
+        Returns:
+            {"status": "started", "task_id": ...}
+        """
+        # 前置校验：run 必须存在且状态为 completed
+        run = await self._tr.get_by_id(run_id)
+        if run is None:
+            raise TestRunNotFoundException(run_id)
+        if run.status != "completed":
+            raise AppException(400, 13001, f"运行状态为 {run.status} 非 completed", "TEST_RUN_NOT_COMPLETED")
+
+        # 非强制模式下，检查是否已有 completed 报告
+        if not force:
+            existing = await self._rr.get_latest_by_run(run_id)
+            if existing and existing.status == "completed":
+                return {"status": "existing", "report_id": existing.id}
+
+        task_id = await self._task_manager.start_task(
+            task_type="report_generation",
+            task_func=self._generate_report_with_progress,
+            run_id=run_id,
+            force=force,
+        )
+        return {"status": "started", "task_id": task_id}
+
+    async def _generate_report_with_progress(
+        self,
+        run_id: str,
+        progress_callback=None,
+        task_id: str = None,
+        task_type: str = None,
+        force: bool = False,
+        **kwargs,
+    ) -> str:
+        """带 SSE 进度推送的报告生成流程"""
+
+        async def _notify(event_type: str, data: dict | None = None):
+            # 直接通过 TaskSsePublisher 发送，确保 event_type 正确传递给前端
+            await TaskSsePublisher.publish(
+                task_type=task_type or "report_generation",
+                task_id=task_id or "",
+                event_type=event_type,
+                data=data or {},
+            )
+            logger.info(f"[报告生成] {event_type} run_id={run_id}")
+
+        try:
+            run = await self._tr.get_by_id(run_id)
+
+            # 阶段 1：指标计算（缺失时补算，force 时强制重算）
+            if force or not run.l1_metrics_json:
+                if not self._metric or not self._run:
+                    raise AppException(400, 13023, "运行尚未完成指标计算，无法生成报告", "METRICS_NOT_COMPUTED")
+                await _notify("metrics_computing")
+                await self._compute_metrics(run_id, run)
+                await _notify("metrics_done")
+
+            # 阶段 2：构建报告数据
+            await _notify("building_report")
+            data = await self._b.build(run_id)
+
+            # 阶段 3：渲染 Markdown
+            await _notify("rendering")
+            md = self._r.render(data)
+
+            # 阶段 4：保存报告
+            await _notify("saving")
+            await self._supersede(run_id)
+
+            rid = generate_id()
+            orm = await self._rr.create({
+                "id": rid, "run_id": run_id,
+                "test_set_id": run.test_set_ids[0] if run.test_set_ids else None,
+                "config_version_id": getattr(run, "config_version_id", None),
+                "overall_score": data.summary.overall_score,
+                "l1_score": data.summary.l1_score,
+                "l2_score": data.summary.l2_score,
+                "l3_score": data.summary.l3_score,
+                "metrics_json": data.model_dump(mode="json"),
+                "diagnosis_json": {"sections": [s.model_dump(mode="json") for s in data.diagnosis_details],
+                                   "overall_health": data.summary.diagnosis_health},
+                "bad_cases_json": [c.model_dump(mode="json") for c in data.bad_cases],
+                "suggestions_json": [s.model_dump(mode="json") for s in data.tuning_suggestions],
+                "markdown_content": md, "status": "completed",
+            })
+            await _notify("report_completed")
+            return rid
+
+        except Exception as e:
+            await _notify("report_failed")
+            raise
 
     async def generate_report(self, run_id: str) -> EvalReportRead:
-        """生成完整评估报告：build→render→save→return
+        """生成完整评估报告：build→render→save→return（同步版本，用于 post_run_pipeline）
 
         如果指标尚未计算，自动触发双轨评估补算。
         """
@@ -73,13 +175,18 @@ class ReportEngineFacade:
             raise ReportNotFoundException(report_id)
         return self._to_read(r)
 
-    async def list_reports(self, page=1, page_size=20, test_set_id=None) -> EvalReportList:
+    async def list_reports(self, page=1, page_size=20, test_set_id=None, run_id=None) -> EvalReportList:
+        skip = (page - 1) * page_size
         if test_set_id:
-            reports = await self._rr.get_by_test_set_id(test_set_id, skip=(page - 1) * page_size, limit=page_size)
+            reports = await self._rr.get_by_test_set_id(test_set_id, skip=skip, limit=page_size)
             total = await self._rr.count_by_filter(test_set_id=test_set_id)
+        elif run_id:
+            reports = await self._rr.get_by_run_id(run_id)
+            total = len(reports)
+            reports = reports[skip:skip + page_size]
         else:
-            reports = await self._rr.get_by_status("completed", skip=(page - 1) * page_size, limit=page_size)
-            total = await self._rr.count_by_filter(status="completed")
+            reports = await self._rr.get_all(skip=skip, limit=page_size, order_by=desc(EvalReport.created_at))
+            total = await self._rr.count_all()
         return EvalReportList(
             items=[self._to_read(r) for r in reports],
             total=total, page=page, page_size=page_size,
