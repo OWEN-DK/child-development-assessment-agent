@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import { createSSEConnection } from '../utils/sse';
+import { API_BASE_URL } from '@shared/lib/constants';
 import type { DraftGenerationTask } from '../../../components/progress/configs/draftGeneration';
 
 /** SSE 各阶段对应进度百分比 */
@@ -110,8 +111,9 @@ export const useDraftGenerationStore = create<DraftGenerationState>((set, get) =
     const controller = new AbortController();
     set((s) => ({ _sseControllers: { ...s._sseControllers, [taskId]: controller } }));
 
+    const base = API_BASE_URL.replace(/\/$/, '');
     createSSEConnection(
-      `/api/v1/rag/eval/drafts/generation/${taskId}/stream`,
+      `${base}/api/v1/rag/eval/drafts/generation/${taskId}/stream`,
       controller.signal,
       {
         onOpen: () => {

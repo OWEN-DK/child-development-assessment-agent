@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import { createSSEConnection } from '../utils/sse';
+import { API_BASE_URL } from '@shared/lib/constants';
 
 const TERMINAL_EVENTS = new Set([
   'run_completed', 'run_failed', 'run_cancelled', 'complete', 'error',
@@ -142,7 +143,8 @@ export const useRunProgressStore = create<RunProgressState>((set, get) => ({
     const controller = new AbortController();
     set(s => ({ _sseControllers: { ...s._sseControllers, [runId]: controller } }));
 
-    createSSEConnection(`/api/v1/rag/eval/runs/${runId}/stream`, controller.signal, {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    createSSEConnection(`${base}/api/v1/rag/eval/runs/${runId}/stream`, controller.signal, {
       onOpen: () => {
         onRefetch?.();
       },

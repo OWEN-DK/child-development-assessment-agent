@@ -32,10 +32,8 @@
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
 | **RAG 完整技术文档**| `.ai/rag_pipeline.md` | RAG 系统完整的技术细节、双流水线架构与 API 规范 |
-| **RAG+LLM 重构计划**| `docs/superpowers/plans/rag-llm-refactoring/` | RAG 与 LLM 架构重构的详细实施方案、进度追踪与验收标准 |
-| **RAG页面重构计划**| `docs/superpowers/plans/rag-evaluation-page-refactoring/` | RAG 评估页面的6层校验诊断、工作流及 SSE 推送的详细重构计划 |
+| **平台化架构与需求**| `.ai/platform-architecture/` | 四模块联动需求文档（当前阶段Bug/优先级）+ RAG 平台化架构愿景（配置驱动、管道编排、多客户交付） |
 | **统一响应与异常规范**| `.ai/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
-| **统一响应与异常重构计划**| `docs/superpowers/plans/unified-api-response-error-handling/` | 统一接口返回与异常处理的详细实施方案、进度追踪与验收标准 |
 
 ---
 

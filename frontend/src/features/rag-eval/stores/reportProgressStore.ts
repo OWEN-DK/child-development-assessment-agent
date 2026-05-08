@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import { createSSEConnection } from '../utils/sse';
+import { API_BASE_URL } from '@shared/lib/constants';
 
 const REPORT_STAGE_MAP: Record<string, ReportProgressEntry> = {
   metrics_computing: { label: '计算指标', percent: 20 },
@@ -104,8 +105,9 @@ export const useReportProgressStore = create<ReportProgressState>((set, get) => 
     const controller = new AbortController();
     set((s) => ({ _sseControllers: { ...s._sseControllers, [runId]: controller } }));
 
+    const base = API_BASE_URL.replace(/\/$/, '');
     createSSEConnection(
-      `/api/v1/rag/eval/reports/generation/${taskId}/stream`,
+      `${base}/api/v1/rag/eval/reports/generation/${taskId}/stream`,
       controller.signal,
       {
         onOpen: () => {},
