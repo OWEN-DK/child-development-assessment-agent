@@ -15,7 +15,6 @@ from fastapi.responses import FileResponse
 from prometheus_client import make_asgi_app
 
 from src.config import settings, validate_required_env_vars
-from src.controller import config_controller, monitoring_controller
 from src.core.config.cache import ConfigCache
 from src.core.llm.log_collector import LLMLogCollector
 from src.core.redis_client import RedisClient
@@ -41,30 +40,70 @@ async def lifespan(app: FastAPI):
 
     # 启动 LLM 日志收集器
     LLMLogCollector.start()
-    logger.info("[1/4] LLMLogCollector started")
+    logger.info("[1/5] LLMLogCollector started")
 
     # 启动 TraceWriter 异步队列
     trace_writer = get_trace_writer()
     await trace_writer.start()
-    logger.info("[2/4] TraceWriter started")
+    logger.info("[2/5] TraceWriter started")
 
     # 初始化配置热重载缓存
     try:
         redis_client = RedisClient.get_client()
         config_cache = ConfigCache.get_instance()
         await config_cache.initialize(redis_client)
-        logger.info("[3/4] ConfigCache initialized with hot-reload")
+        logger.info("[3/5] ConfigCache initialized with hot-reload")
     except Exception as e:
         logger.warning(f"ConfigCache 初始化失败，热重载未启用: {e}")
 
-    # 占位：Phase 1 初始化（认证、租户管理）
-    # from src.core.auth.initializer import init_auth
-    # await init_auth()
-    logger.info("[4/4] Auth system placeholder (Phase 1)")
+    # 初始化认证与权限服务
+    from src.core.auth.jwt_service import JWTService
+    from src.repository.auth.tenant_repo import TenantRepository
+    from src.repository.auth.user_repo import UserRepository, UserRoleRepository
+    from src.repository.auth.role_repo import RoleRepository
+    from src.repository.auth.audit_repo import AuditRepository
+    from src.service.auth.tenant_service import TenantService
+    from src.service.auth.user_service import UserService
+    from src.service.auth.role_service import RoleService
+    from src.service.auth.god_mode_service import GodModeService
+    from src.core.database import async_session_factory
 
+    # 创建 JWT 服务
+    jwt_service = JWTService(secret_key=settings.jwt_secret)
+    app.state.jwt_service = jwt_service
+
+    # 创建 Repository 实例
+    tenant_repo = TenantRepository(async_session_factory)
+    user_repo = UserRepository(async_session_factory)
+    user_role_repo = UserRoleRepository(async_session_factory)
+    role_repo = RoleRepository(async_session_factory)
+    audit_repo = AuditRepository(async_session_factory)
+
+    app.state.tenant_repo = tenant_repo
+    app.state.user_repo = user_repo
+    app.state.user_role_repo = user_role_repo
+    app.state.role_repo = role_repo
+    app.state.audit_repo = audit_repo
+
+    # 创建 Service 实例
+    tenant_service = TenantService(async_session_factory)
+    user_service = UserService(async_session_factory)
+    role_service = RoleService(async_session_factory)
+    god_mode_service = GodModeService(async_session_factory, jwt_service, redis_client)
+
+    app.state.tenant_service = tenant_service
+    app.state.user_service = user_service
+    app.state.role_service = role_service
+    app.state.god_mode_service = god_mode_service
+
+    logger.info("[4/5] Auth services initialized")
+
+    # 存储 session 工厂供中间件使用
+    app.state.db_session_factory = async_session_factory
+
+    logger.info("[5/5] RAG Platform startup complete")
     logger.info("=" * 60)
-    logger.info("RAG Platform startup complete")
-    logger.info("=" * 60)
+
     yield
 
     logger.info("=" * 60)
@@ -143,9 +182,11 @@ def create_app() -> FastAPI:
     # 2. 响应包装中间件
     app.add_middleware(ResponseWrapperMiddleware)
 
-    # 3. 占位：认证中间件（Phase 1）
-    # from src.middleware.auth_middleware import AuthMiddleware
-    # app.add_middleware(AuthMiddleware)
+    # 3. 认证中间件（Phase 1，从 app.state 获取依赖）
+    from src.middleware.auth_middleware import AuthMiddleware
+    from src.middleware.tenant_middleware import TenantMiddleware
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(TenantMiddleware)
 
     # 4. 占位：限流中间件（Phase 4）
     # from src.middleware.rate_limit_middleware import RateLimitMiddleware
@@ -167,13 +208,19 @@ def create_app() -> FastAPI:
 
     # ── 路由注册 ────────────────────────────────────────
 
-    # 基础设施路由（继承）
-    app.include_router(config_controller.router)
-    app.include_router(monitoring_controller.router)
-
     # 健康检查
     from src.controller.health_controller import router as health_router
     app.include_router(health_router)
+
+    # 认证路由（Phase 1）
+    from src.controller.auth.auth_controller import router as auth_router
+    from src.controller.auth.tenant_controller import router as tenant_router
+    from src.controller.auth.user_controller import router as user_router
+    from src.controller.auth.role_controller import router as role_router
+    app.include_router(auth_router)
+    app.include_router(tenant_router)
+    app.include_router(user_router)
+    app.include_router(role_router)
 
     # 占位：管道引擎路由（Phase 3）
     # from src.controller.pipeline.pipeline_controller import router as pipeline_router
@@ -186,10 +233,6 @@ def create_app() -> FastAPI:
     # 占位：搜索 API 路由（Phase 4）
     # from src.controller.search_controller import router as search_router
     # app.include_router(search_router)
-
-    # 占位：权限路由（Phase 1）
-    # from src.controller.auth_controller import router as auth_router
-    # app.include_router(auth_router)
 
     # ── Prometheus 指标 ─────────────────────────────────
 

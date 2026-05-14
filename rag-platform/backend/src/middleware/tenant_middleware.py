@@ -9,17 +9,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from src.core.auth.exceptions import TenantSuspendedError
-from src.repository.auth.tenant_repo import TenantRepository
 from src.utils.logger import logger
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
     """租户状态检查中间件"""
-
-    def __init__(self, app, tenant_repo: TenantRepository):
-        super().__init__(app)
-        self.tenant_repo = tenant_repo
 
     async def dispatch(self, request: Request, call_next):
         # 超管无 tenant_id，跳过检查
@@ -29,7 +23,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         # 查询租户状态
         try:
-            tenant = await self.tenant_repo.get_by_id(tenant_id)
+            tenant_repo = request.app.state.tenant_repo
+            tenant = await tenant_repo.get_by_id(tenant_id)
+
             if tenant is None:
                 return JSONResponse(
                     status_code=404,
@@ -52,6 +48,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
                     content={"code": 404, "message": "租户已删除", "error_code": "TENANT_NOT_FOUND"},
                 )
 
+        except AttributeError:
+            # tenant_repo 未初始化（lifespan 未完成）
+            return JSONResponse(
+                status_code=503,
+                content={"code": 503, "message": "服务初始化中", "error_code": "SERVICE_UNAVAILABLE"},
+            )
         except Exception as e:
             logger.error(f"租户状态检查异常: {e}")
             return JSONResponse(
