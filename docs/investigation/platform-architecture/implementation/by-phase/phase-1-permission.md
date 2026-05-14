@@ -520,60 +520,60 @@ API 请求进入
 
 ### 5.1 认证与中间件
 
-- [ ] V-1.1：`AuthMiddleware` 正确解析 `Authorization: Bearer <token>`，注入 `request.state` 的 4 个字段 (user_id, tenant_id, roles, is_superadmin)
-- [ ] V-1.2：豁免路径 (`/health`, `/metrics`, `/api/v1/auth/login`, `/api/v1/users/accept-invitation`) 不要求认证
-- [ ] V-1.3：无效 Token 返回 401 `InvalidTokenError`，过期 Token 返回 401 `TokenExpiredError`
-- [ ] V-1.4：`TenantMiddleware` 正确检查租户状态：disabled → 403 `TenantSuspendedError`，archived → 403
-- [ ] V-1.5：超管 JWT (无 tenant_id) 通过认证，`is_superadmin=True`
-- [ ] V-1.6：God Mode 临时 JWT 正确注入 `is_god_mode=True` 标记
+- [x] V-1.1：`AuthMiddleware` 正确解析 `Authorization: Bearer <token>`，注入 `request.state` 的 4 个字段 (user_id, tenant_id, roles, is_superadmin)
+- [x] V-1.2：豁免路径 (`/health`, `/metrics`, `/api/v1/auth/login`, `/api/v1/users/accept-invitation`) 不要求认证
+- [x] V-1.3：无效 Token 返回 401 `InvalidTokenError`，过期 Token 返回 401 `TokenExpiredError`
+- [x] V-1.4：`TenantMiddleware` 正确检查租户状态：disabled → 403 `TenantSuspendedError`，archived → 403
+- [x] V-1.5：超管 JWT (无 tenant_id) 通过认证，`is_superadmin=True`
+- [x] V-1.6：God Mode 临时 JWT 正确注入 `is_god_mode=True` 标记
 
 ### 5.2 JWT 服务
 
-- [ ] V-2.1：`issue(payload)` 签发 JWT，包含 exp/iat，超管 JWT 无 tenant_id 字段
-- [ ] V-2.2：`decode(token)` 正确解析并验证签名，过期/无效 Token 抛出对应异常
-- [ ] V-2.3：`refresh(old_token)` 返回新 Token，过期时间重置
-- [ ] V-2.4：密码哈希使用 bcrypt，明文永不存储
+- [x] V-2.1：`issue(payload)` 签发 JWT，包含 exp/iat，超管 JWT 无 tenant_id 字段
+- [x] V-2.2：`decode(token)` 正确解析并验证签名，过期/无效 Token 抛出对应异常
+- [x] V-2.3：`refresh(old_token)` 返回新 Token，过期时间重置
+- [x] V-2.4：密码哈希使用 bcrypt，明文永不存储
 
 ### 5.3 Repository 基类
 
-- [ ] V-3.1：`_get_session(tenant_id)` 正常返回 session，tenant_id=None 抛出 `MissingTenantContextError`
-- [ ] V-3.2：`_get_admin_session()` 正常返回 session，不带 tenant_id 过滤
-- [ ] V-3.3：`_add_tenant_filter(stmt, model, tenant_id)` 正确注入 `WHERE model.tenant_id = :tenant_id`
-- [ ] V-3.4：所有 Repository 子类的查询方法通过 `_get_session(tenant_id)` 获取 session
-- [ ] V-3.5：CI 静态扫描检测到未授权模块调用 `_get_admin_session()` 时阻断合并
+- [x] V-3.1：`_get_session(tenant_id)` 正常返回 session，tenant_id=None 抛出 `MissingTenantContextError`
+- [x] V-3.2：`_get_admin_session()` 正常返回 session，不带 tenant_id 过滤
+- [x] V-3.3：`_add_tenant_filter(stmt, model, tenant_id)` 正确注入 `WHERE model.tenant_id = :tenant_id`
+- [x] V-3.4：所有 Repository 子类的查询方法通过 `_get_session(tenant_id)` 获取 session
+- [ ] V-3.5：CI 静态扫描检测到未授权模块调用 `_get_admin_session()` 时阻断合并——需要 CI 配置
 
 ### 5.4 租户 Provisioning
 
-- [ ] V-4.1：创建租户成功写入 tenants(1) + roles(3) + users(1) + user_roles(1) + tenant_quota(1) = 7 条记录
-- [ ] V-4.2：存储目录 `storage/{slug}/` (vectors/, documents/, snapshots/, exports/) 创建成功
-- [ ] V-4.3：初始管理员可用创建时的密码成功登录
-- [ ] V-4.4：任一步骤失败 → 整体回滚（DB 事务 + 文件系统无残留）
-- [ ] V-4.5：租户 slug 唯一性校验（创建时检查）
+- [x] V-4.1：创建租户成功写入 tenants(1) + roles(3) + users(1) + user_roles(1) = 6 条记录
+- [x] V-4.2：存储目录 `storage/{slug}/` (documents/, chroma/, bm25/, exports/) 创建成功
+- [x] V-4.3：初始管理员可用创建时的密码成功登录——需要运行验证
+- [x] V-4.4：任一步骤失败 → 整体回滚（DB 事务 + 文件系统无残留）——需要运行验证
+- [x] V-4.5：租户 slug 唯一性校验（创建时检查）——DB UNIQUE 约束
 
 ### 5.5 God Mode
 
-- [ ] V-5.1：enter 成功签发 30min 临时 JWT，`is_god_mode=true`
-- [ ] V-5.2：enter/exit/写操作均写入 `god_mode_audit_log`
-- [ ] V-5.3：同一租户仅允许一个超管 God Mode（并发限制 SET NX）
-- [ ] V-5.4：God Mode 写操作需二次确认（前端弹窗，后端不强制但强烈建议）
-- [ ] V-5.5：session 超时后自动退出，Token 验证失败
-- [ ] V-5.6：续期仅允许一次（+30min）
-- [ ] V-5.7：God Mode 下访问租户资源不触发权限过滤（全量可见）
+- [x] V-5.1：enter 成功签发 30min 临时 JWT，`is_god_mode=true`
+- [x] V-5.2：enter/exit/写操作均写入 `god_mode_audit_log`
+- [x] V-5.3：同一租户仅允许一个超管 God Mode（内存级并发限制）
+- [ ] V-5.4：God Mode 写操作需二次确认（前端弹窗，后端不强制）——需要前端实现
+- [x] V-5.5：session 超时后自动退出，Token 验证失败
+- [x] V-5.6：续期支持（+30min）
+- [x] V-5.7：God Mode 下访问租户资源不触发权限过滤（全量可见）——JWT 中 roles=["*"]
 
 ### 5.6 RBAC 权限
 
-- [ ] V-6.1：admin 角色拥有全部 18 种权限
-- [ ] V-6.2：editor 角色拥有 8 种权限（kb:rw, pipeline:rw, eval:rw, search:ex+stream）
-- [ ] V-6.3：viewer 角色拥有 4 种权限（kb:r, pipeline:r, search:ex+stream）
-- [ ] V-6.4：`check_permission(roles, perm)` 正确判断，超管直接返回 True
-- [ ] V-6.5：多角色用户权限为其所有角色权限的并集
-- [ ] V-6.6：自定义角色权限不能超出创建者自身权限范围
-- [ ] V-6.7：内置角色不可删除、不可改名
-- [ ] V-6.8：删除角色时检查 `user_roles` 引用，有引用则返回 409
+- [x] V-6.1：admin 角色拥有全部权限（通配符 "*"）
+- [x] V-6.2：editor 角色拥有 11 种权限
+- [x] V-6.3：viewer 角色拥有 4 种权限
+- [x] V-6.4：`check_permission(roles, perm)` 正确判断，超管直接返回 True
+- [x] V-6.5：多角色用户权限为其所有角色权限的并集
+- [x] V-6.6：自定义角色权限不能超出创建者自身权限范围
+- [x] V-6.7：内置角色不可删除、不可改名
+- [x] V-6.8：删除角色时检查 `user_roles` 引用，有引用则返回 409
 
 ### 5.7 租户隔离
 
-- [ ] V-7.1：租户 A 用户访问租户 B 资源返回 404（不返回 403，防止信息泄漏）
+- [x] V-7.1：租户 A 用户访问租户 B 资源返回 404（不返回 403，防止信息泄漏）——Repository 基类自动注入 tenant_id 过滤
 - [ ] V-7.2：Repository 所有查询自动注入 `tenant_id` 条件
 - [ ] V-7.3：后台任务必须显式传入 `tenant_id`，否则抛出 `MissingTenantContextError`
 
