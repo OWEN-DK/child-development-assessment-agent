@@ -1,0 +1,25 @@
+# ============================================================
+# RAG Platform 开发环境覆盖文件
+# 用法：docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ============================================================
+
+services:
+  rag-platform:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    volumes:
+      - ./backend/src:/app/backend/src
+      - ./backend/tests:/app/backend/tests
+    environment:
+      - APP_RELOAD=True
+    command: uvicorn src.server:create_app --host 0.0.0.0 --port 51002 --reload --factory
+
+  mysql:
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"

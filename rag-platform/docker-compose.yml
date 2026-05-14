@@ -1,0 +1,163 @@
+# ============================================================
+# RAG Platform Docker Compose
+# 核心服务：rag-platform + mysql + redis
+# 可选服务：elasticsearch (profile)、milvus (profile)
+# ============================================================
+
+services:
+  # ── RAG Platform 后端 ──────────────────────────────
+  rag-platform:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-platform-app
+    ports:
+      - "51002:51002"
+    environment:
+      - DATABASE_URL=mysql+asyncmy://raguser:ragpass@mysql:3306/rag_platform
+      - REDIS_URL=redis://:ragredis@redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-min-32-chars}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - rag-platform-data:/app/app_data
+      - rag-platform-logs:/app/logs
+      - ./storage:/app/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    resources:
+      limits:
+        memory: 4g
+        cpus: 2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:51002/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── MySQL 5.7 ─────────────────────────────────────
+  mysql:
+    image: mysql:5.7
+    container_name: rag-platform-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=ragroot
+      - MYSQL_DATABASE=rag_platform
+      - MYSQL_USER=raguser
+      - MYSQL_PASSWORD=ragpass
+    volumes:
+      - rag-platform-mysql:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=200
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pragroot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis 7.0 ─────────────────────────────────────
+  redis:
+    image: redis:7.0-alpine
+    container_name: rag-platform-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ragredis --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - rag-platform-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "ragredis", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Elasticsearch 8.15（可选）────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: rag-platform-es
+    profiles: ["elasticsearch"]
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - rag-platform-es:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Milvus 依赖：etcd ─────────────────────────────
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: rag-platform-etcd
+    profiles: ["milvus"]
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    volumes:
+      - rag-platform-etcd:/etcd
+    command: etcd --advertise-client-urls=http://127.0.0.1:2379 --listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  # ── Milvus 依赖：MinIO ────────────────────────────
+  minio:
+    image: minio/minio
+    container_name: rag-platform-minio
+    profiles: ["milvus"]
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rag-platform-minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+
+  # ── Milvus 2.3（可选）────────────────────────────
+  milvus:
+    image: milvusdb/milvus:v2.3.4
+    container_name: rag-platform-milvus
+    profiles: ["milvus"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - rag-platform-milvus:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  rag-platform-data:
+  rag-platform-logs:
+  rag-platform-mysql:
+  rag-platform-redis:
+  rag-platform-es:
+  rag-platform-etcd:
+  rag-platform-minio:
+  rag-platform-milvus:
