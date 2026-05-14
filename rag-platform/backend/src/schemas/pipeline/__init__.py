@@ -4,6 +4,14 @@ from .domain import DomainConfig, DomainPlan, DomainResult
 from .edge import ConditionalEdgeConfig, DegradationEdgeConfig, EdgeConfig
 from .node import NodeConfig, NodeDefinition, NodeTypeList
 from .pipeline import PipelineConfig, PipelineCreate, PipelineList, PipelineRead, PipelineUpdate
+from .validation import (
+    DryRunResult,
+    NodeTypeInfo,
+    NodeTypeCategory,
+    NodeTypeListResponse,
+    ValidationError,
+    ValidationResult,
+)
 from .version import PipelineVersionListItem, PipelineVersionRead, VersionCompareResult
 
 __all__ = [
@@ -27,4 +35,10 @@ __all__ = [
     "DomainConfig",
     "DomainPlan",
     "DomainResult",
+    "ValidationError",
+    "ValidationResult",
+    "DryRunResult",
+    "NodeTypeInfo",
+    "NodeTypeCategory",
+    "NodeTypeListResponse",
 ]

@@ -6,12 +6,23 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.pipeline.pipeline import PipelineCreate, PipelineUpdate
 from src.service.pipeline.pipeline_service import PipelineService
+from src.service.pipeline.validation_service import PipelineValidationService
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/api/v1/pipelines", tags=["管道管理"])
+
+# 校验服务（无状态，无需依赖注入）
+_validation_service = PipelineValidationService()
+
+
+@router.get("/node-types")
+async def list_node_types():
+    """列出所有已注册的节点类型及参数 Schema（供编辑器面板使用）"""
+    result = _validation_service.get_node_types()
+    return APIResponse(data=result.model_dump())
 
 
 @router.post("/")
@@ -114,3 +125,34 @@ async def compare_versions(
 
     result = await service.compare(pipeline_id, v1, v2, tenant_id)
     return APIResponse.success(data=result.model_dump())
+
+
+@router.post("/{pipeline_id}/validate")
+async def validate_pipeline(request: Request, pipeline_id: str):
+    """校验管道配置（结构→节点→边→编译）"""
+    service: PipelineService = request.app.state.pipeline_service
+    tenant_id = request.state.tenant_id
+
+    config = await _get_pipeline_config(service, pipeline_id, tenant_id)
+    result = await _validation_service.validate(config)
+    return APIResponse.success(data=result.model_dump())
+
+
+@router.post("/{pipeline_id}/dry-run")
+async def dry_run_pipeline(request: Request, pipeline_id: str):
+    """干运行：验证管道可编译性，不实际执行检索"""
+    service: PipelineService = request.app.state.pipeline_service
+    tenant_id = request.state.tenant_id
+
+    config = await _get_pipeline_config(service, pipeline_id, tenant_id)
+    result = await _validation_service.dry_run(config)
+    return APIResponse.success(data=result.model_dump())
+
+
+async def _get_pipeline_config(
+    service: PipelineService, pipeline_id: str, tenant_id: str
+) -> dict:
+    """获取管道当前激活版本的配置"""
+    pipeline = await service.get(pipeline_id, tenant_id)
+    version = await service.get_version(pipeline_id, pipeline.active_version, tenant_id)
+    return version.config_snapshot
