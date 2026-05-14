@@ -2,11 +2,8 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Integer, SMALLINT, String, Text
-from sqlalchemy.orm import DeclarativeBase
 
-
-class Base(DeclarativeBase):
-    pass
+from src.models.base import Base
 
 
 class KbRebuildTask(Base):

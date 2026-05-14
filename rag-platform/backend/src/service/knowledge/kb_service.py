@@ -44,40 +44,69 @@ class KnowledgeBaseService:
         """创建知识库
 
         同时创建 MySQL 记录 + 向量存储 Collection + BM25 索引（如需）
+        失败时自动回滚已创建的资源。
         """
         kb_id = self._generate_id()
+        collection_created = False
 
-        # 创建向量存储 Collection
-        adapter = VectorStoreAdapterFactory.get_adapter(
-            data.vector_backend.value,
-            es_url=self._get_es_url(),
-            milvus_host=self._get_milvus_host(),
-        )
-        dimension = data.embedding_config.dimension if data.embedding_config else 1024
-        await adapter.create_collection(kb_id, tenant_id, dimension)
+        try:
+            # 1. 创建向量存储 Collection
+            adapter = VectorStoreAdapterFactory.get_adapter(
+                data.vector_backend.value,
+                es_url=self._get_es_url(),
+                milvus_host=self._get_milvus_host(),
+            )
+            dimension = data.embedding_config.dimension if data.embedding_config else 1024
+            await adapter.create_collection(kb_id, tenant_id, dimension)
+            collection_created = True
 
-        # Chroma/Milvus 后端需要创建 BM25 索引目录
-        if data.vector_backend != VectorBackend.ELASTICSEARCH:
-            await self.bm25_manager.rebuild(kb_id, tenant_id, [])
+            # 2. Chroma/Milvus 后端需要创建 BM25 索引目录
+            if data.vector_backend != VectorBackend.ELASTICSEARCH:
+                await self.bm25_manager.rebuild(kb_id, tenant_id, [])
 
-        # 创建 MySQL 记录
-        kb_data = {
-            "id": kb_id,
-            "tenant_id": tenant_id,
-            "name": data.name,
-            "description": data.description,
-            "vector_backend": data.vector_backend.value,
-            "chunk_strategy": data.chunk_strategy.model_dump() if data.chunk_strategy else None,
-            "embedding_config": data.embedding_config.model_dump() if data.embedding_config else None,
-            "visibility": data.visibility.value,
-            "visible_roles": data.visible_roles,
-            "owner_id": user_id,
-            "status": "ready",
-        }
-        kb = await self.kb_repo.create(kb_data)
+            # 3. 创建 MySQL 记录
+            kb_data = {
+                "id": kb_id,
+                "tenant_id": tenant_id,
+                "name": data.name,
+                "description": data.description,
+                "vector_backend": data.vector_backend.value,
+                "chunk_strategy": data.chunk_strategy.model_dump() if data.chunk_strategy else None,
+                "embedding_config": data.embedding_config.model_dump() if data.embedding_config else None,
+                "visibility": data.visibility.value,
+                "visible_roles": data.visible_roles,
+                "owner_id": user_id,
+                "status": "ready",
+            }
+            kb = await self.kb_repo.create(kb_data)
 
-        logger.info(f"知识库创建成功: {kb_id} ({data.name})")
-        return self._to_detail(kb)
+            logger.info(f"知识库创建成功: {kb_id} ({data.name})")
+            return self._to_detail(kb)
+
+        except Exception as e:
+            logger.error(f"知识库创建失败: {kb_id}, {e}")
+
+            # 回滚：清理已创建的资源
+            if collection_created:
+                try:
+                    adapter = VectorStoreAdapterFactory.get_adapter(
+                        data.vector_backend.value,
+                        es_url=self._get_es_url(),
+                        milvus_host=self._get_milvus_host(),
+                    )
+                    await adapter.delete_collection(kb_id, tenant_id)
+                    logger.info(f"回滚：向量 Collection 已删除: {kb_id}")
+                except Exception as rollback_error:
+                    logger.error(f"回滚失败: {rollback_error}")
+
+            if data.vector_backend != VectorBackend.ELASTICSEARCH:
+                try:
+                    await self.bm25_manager.delete_index(kb_id, tenant_id)
+                    logger.info(f"回滚：BM25 索引已删除: {kb_id}")
+                except Exception as rollback_error:
+                    logger.error(f"回滚失败: {rollback_error}")
+
+            raise
 
     async def list(
         self,

@@ -2,11 +2,8 @@
 from datetime import datetime
 
 from sqlalchemy import JSON, Column, DateTime, Integer, MEDIUMTEXT, String
-from sqlalchemy.orm import DeclarativeBase
 
-
-class Base(DeclarativeBase):
-    pass
+from src.models.base import Base
 
 
 class KbDocument(Base):

@@ -164,9 +164,12 @@ class DocumentService:
 
             # 3. 保存分块到数据库
             chunk_records = []
+            chunk_ids = []
             for i, chunk in enumerate(chunks):
+                chunk_id = self._generate_id()
+                chunk_ids.append(chunk_id)
                 chunk_records.append({
-                    "id": self._generate_id(),
+                    "id": chunk_id,
                     "kb_id": kb_id,
                     "doc_id": doc_id,
                     "tenant_id": tenant_id,
@@ -179,20 +182,68 @@ class DocumentService:
             if chunk_records:
                 await self.chunk_repo.batch_insert(chunk_records)
 
-            # 4. 更新文档状态
+            # 4. 向量化
+            embedding_config = kb.embedding_config if kb and kb.embedding_config else {}
+            provider = embedding_config.get("provider", "dashscope")
+            api_key = self._get_api_key(provider)
+            dimension = embedding_config.get("dimension", 1024)
+            model = embedding_config.get("model")
+
+            embedding_engine = EmbeddingEngine.from_config(
+                provider=provider,
+                api_key=api_key,
+                model=model,
+                dimension=dimension,
+            )
+
+            texts = [c.content for c in chunks]
+            embeddings = await embedding_engine.embed_batch(texts)
+
+            # 5. 写入向量存储
+            adapter = VectorStoreAdapterFactory.get_adapter(
+                kb.vector_backend if kb else "chroma",
+                es_url=self._get_env("ES_URL"),
+                milvus_host=self._get_env("MILVUS_HOST"),
+            )
+
+            metadatas = [{"doc_id": doc_id, "doc_acl": []} for _ in chunks]
+            await adapter.add_embeddings(
+                kb_id, tenant_id, chunk_ids, embeddings, metadatas, texts
+            )
+
+            # 更新分块的 vector_id
+            for i, chunk_id in enumerate(chunk_ids):
+                await self.chunk_repo.update(chunk_id, {"vector_id": chunk_id}, tenant_id)
+
+            # 6. 更新文档状态
             await self.doc_repo.update(doc_id, {
                 "parse_status": "parsed",
                 "chunk_count": len(chunks),
             }, tenant_id)
 
-            # 5. 更新知识库统计
+            # 7. 更新知识库统计
             await self.kb_repo.increment_counts(kb_id, tenant_id, doc_delta=1, chunk_delta=len(chunks))
 
-            logger.info(f"文档解析完成: {doc_id}, {len(chunks)} 个分块")
+            logger.info(f"文档解析完成: {doc_id}, {len(chunks)} 个分块, {len(embeddings)} 个向量")
 
         except Exception as e:
             logger.error(f"文档解析失败: {doc_id}, {e}")
             await self.doc_repo.update_parse_status(doc_id, tenant_id, "error", str(e))
+
+    def _get_api_key(self, provider: str) -> str:
+        """获取 API Key"""
+        import os
+        key_map = {
+            "dashscope": "DASHSCOPE_API_KEY",
+            "openai": "OPENAI_API_KEY",
+        }
+        env_key = key_map.get(provider, "")
+        return os.getenv(env_key, "")
+
+    def _get_env(self, key: str) -> str:
+        """获取环境变量"""
+        import os
+        return os.getenv(key, "") or None
 
     async def list_documents(
         self,

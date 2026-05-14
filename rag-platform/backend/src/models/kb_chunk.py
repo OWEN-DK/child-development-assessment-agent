@@ -1,10 +1,7 @@
 """知识库分块数据模型"""
 from sqlalchemy import JSON, Column, Integer, MEDIUMTEXT, String
-from sqlalchemy.orm import DeclarativeBase
 
-
-class Base(DeclarativeBase):
-    pass
+from src.models.base import Base
 
 
 class KbChunk(Base):

@@ -2,11 +2,8 @@
 from datetime import datetime
 
 from sqlalchemy import JSON, BigInteger, Column, DateTime, Integer, String
-from sqlalchemy.orm import DeclarativeBase
 
-
-class Base(DeclarativeBase):
-    pass
+from src.models.base import Base
 
 
 class KnowledgeBase(Base):

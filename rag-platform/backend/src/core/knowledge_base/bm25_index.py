@@ -41,21 +41,15 @@ class BM25IndexManager:
     async def add_chunks(
         self, kb_id: str, tenant_id: str, chunks: list[dict[str, Any]]
     ) -> None:
-        """增量添加分块到 BM25 索引
-
-        Args:
-            kb_id: 知识库 ID
-            tenant_id: 租户 ID
-            chunks: [{"chunk_id": str, "content": str}, ...]
-        """
+        """增量添加分块到 BM25 索引"""
         async with self._get_lock(kb_id):
             index_dir = self._index_dir(kb_id, tenant_id)
             index_dir.mkdir(parents=True, exist_ok=True)
 
-            # 加载现有索引
-            index_data, id_map = self._load_index(index_dir)
+            # 加载现有索引（异步文件 I/O）
+            index_data, id_map = await asyncio.to_thread(self._load_index, index_dir)
 
-            # 添加新分块
+            # 添加新分块（CPU 密集，保持同步）
             for chunk in chunks:
                 chunk_id = chunk["chunk_id"]
                 content = chunk["content"]
@@ -64,8 +58,8 @@ class BM25IndexManager:
                 id_map[str(internal_id)] = chunk_id
                 index_data.append(tokens)
 
-            # 保存索引
-            self._save_index(index_dir, index_data, id_map)
+            # 保存索引（异步文件 I/O）
+            await asyncio.to_thread(self._save_index, index_dir, index_data, id_map)
             logger.info(f"BM25 索引增量添加 {len(chunks)} 个分块: {kb_id}")
 
     async def remove_chunks(
@@ -77,7 +71,7 @@ class BM25IndexManager:
             if not index_dir.exists():
                 return
 
-            index_data, id_map = self._load_index(index_dir)
+            index_data, id_map = await asyncio.to_thread(self._load_index, index_dir)
 
             # 找到需要删除的内部 ID
             to_remove = set()
@@ -98,29 +92,22 @@ class BM25IndexManager:
                     new_id_map[str(new_internal_id)] = id_map[str(i)]
                     new_internal_id += 1
 
-            self._save_index(index_dir, new_index_data, new_id_map)
+            await asyncio.to_thread(self._save_index, index_dir, new_index_data, new_id_map)
             logger.info(f"BM25 索引删除 {len(to_remove)} 个分块: {kb_id}")
 
     async def search(
         self, kb_id: str, tenant_id: str, query: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        """BM25 搜索
-
-        Args:
-            query: 查询文本
-
-        Returns:
-            [{"chunk_id": str, "score": float}, ...]
-        """
+        """BM25 搜索"""
         index_dir = self._index_dir(kb_id, tenant_id)
         if not index_dir.exists():
             return []
 
-        index_data, id_map = self._load_index(index_dir)
+        index_data, id_map = await asyncio.to_thread(self._load_index, index_dir)
         if not index_data:
             return []
 
-        # 计算 BM25 分数
+        # 计算 BM25 分数（CPU 密集，保持同步）
         query_tokens = self._tokenize(query)
         scores = self._bm25_scores(query_tokens, index_data)
 
@@ -151,7 +138,7 @@ class BM25IndexManager:
                 index_data.append(tokens)
                 id_map[str(i)] = chunk["chunk_id"]
 
-            self._save_index(index_dir, index_data, id_map)
+            await asyncio.to_thread(self._save_index, index_dir, index_data, id_map)
             logger.info(f"BM25 索引全量重建 {len(chunks)} 个分块: {kb_id}")
 
     async def delete_index(self, kb_id: str, tenant_id: str) -> None:
