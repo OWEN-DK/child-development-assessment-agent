@@ -2,9 +2,11 @@
 
 LLM 调用改写查询，输出查询变体列表。
 """
+import json
 from typing import Any
 
 from src.core.pipeline.base_node import BaseNodeExecutor
+from src.core.pipeline.llm_helper import call_llm_json
 from src.core.pipeline.node_context import NodeContext
 from src.core.pipeline.node_result import NodeResult
 from src.utils.logger import logger
@@ -32,20 +34,41 @@ class QueryRewriteExecutor(BaseNodeExecutor):
             return NodeResult(output=[], node_id=context.node_id, node_type="query_rewrite")
 
         model = context.config.get("model", "qwen-turbo")
-        prompt_template = context.config.get(
-            "prompt_template",
-            "请将以下查询改写为更适合检索的形式，保持语义不变：\n{query}"
-        )
+        max_retries = context.config.get("max_retries", 2)
 
-        # 简化实现：直接返回原查询作为变体
-        # 实际实现应调用 LLM
-        variants = [query]
+        system_prompt = """你是一个查询改写专家。将用户查询改写为更适合检索的形式。
+要求：
+1. 保持语义不变
+2. 使查询更精确、更适合向量检索
+3. 返回 JSON 数组，包含 2-3 个改写变体
+
+示例输出：["改写变体1", "改写变体2", "改写变体3"]"""
+
+        prompt = f"请改写以下查询：\n{query}"
+
+        try:
+            result = await call_llm_json(
+                prompt=prompt,
+                model=model,
+                temperature=0.7,
+                system_prompt=system_prompt,
+            )
+
+            if isinstance(result, list) and all(isinstance(v, str) for v in result):
+                variants = result
+            else:
+                variants = [query]
+                logger.warning(f"查询改写返回格式异常，使用原查询")
+
+        except Exception as e:
+            logger.warning(f"查询改写失败，使用原查询: {e}")
+            variants = [query]
 
         logger.debug(f"查询改写: {query} → {len(variants)} 个变体")
 
         return NodeResult(
             output=variants,
-            metadata={"original_query": query, "model": model},
+            metadata={"original_query": query, "model": model, "variant_count": len(variants)},
             node_id=context.node_id,
             node_type="query_rewrite",
         )
