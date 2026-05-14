@@ -484,3 +484,19 @@ class MetricNotAvailableException(AppException):
             error_code="METRIC_NOT_AVAILABLE",
             details=details,
         )
+
+
+# ==================== 配置异常 (17000-17999) ====================
+
+
+class ConfigurationError(AppException):
+    """配置错误"""
+
+    def __init__(self, message: str = "配置错误", details: Optional[dict] = None):
+        super().__init__(
+            status_code=500,
+            code=17001,
+            message=message,
+            error_code="CONFIGURATION_ERROR",
+            details=details,
+        )

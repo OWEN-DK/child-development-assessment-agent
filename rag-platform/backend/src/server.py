@@ -96,6 +96,11 @@ async def lifespan(app: FastAPI):
     app.state.role_service = role_service
     app.state.god_mode_service = god_mode_service
 
+    # 创建知识库服务（Phase 2）
+    from src.service.knowledge.kb_service import KnowledgeBaseService
+    kb_service = KnowledgeBaseService(async_session_factory)
+    app.state.kb_service = kb_service
+
     logger.info("[4/5] Auth services initialized")
 
     # 存储 session 工厂供中间件使用
@@ -226,9 +231,9 @@ def create_app() -> FastAPI:
     # from src.controller.pipeline.pipeline_controller import router as pipeline_router
     # app.include_router(pipeline_router)
 
-    # 占位：知识库路由（Phase 2）
-    # from src.controller.knowledge_base_controller import router as kb_router
-    # app.include_router(kb_router)
+    # 知识库路由（Phase 2）
+    from src.controller.knowledge.kb_controller import router as kb_router
+    app.include_router(kb_router)
 
     # 占位：搜索 API 路由（Phase 4）
     # from src.controller.search_controller import router as search_router
