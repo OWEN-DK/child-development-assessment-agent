@@ -19,6 +19,7 @@ from src.core.pipeline.nodes.query import (
 from src.core.pipeline.nodes.retrieval import (
     BM25SearchExecutor,
     HybridSearchExecutor,
+    MultimodalSearchExecutor,
     ResultFusionExecutor,
     VectorSearchExecutor,
 )
@@ -70,6 +71,7 @@ def register_all_nodes():
     registry.register("bm25_search", BM25SearchExecutor)
     registry.register("vector_search", VectorSearchExecutor)
     registry.register("hybrid_search", HybridSearchExecutor)
+    registry.register("multimodal_search", MultimodalSearchExecutor)
     registry.register("result_fusion", ResultFusionExecutor)
 
     # 安全合规

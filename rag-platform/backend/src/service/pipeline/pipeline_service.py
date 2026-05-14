@@ -109,8 +109,14 @@ class PipelineService:
         if update_data:
             await self.pipeline_repo.update(pipeline_id, update_data, tenant_id)
 
-        # 如果有新配置，创建新版本
+        # 如果有新配置，校验并创建新版本
         if data.config is not None:
+            # 校验管道配置
+            try:
+                self.compiler.compile(data.config)
+            except Exception as e:
+                raise ValueError(f"管道配置校验失败: {e}")
+
             new_version = await self.version_repo.get_next_version_number(pipeline_id, tenant_id)
             version_data = {
                 "id": self._generate_id(),

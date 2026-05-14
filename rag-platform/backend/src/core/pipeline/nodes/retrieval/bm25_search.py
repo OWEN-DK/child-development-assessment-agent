@@ -1,7 +1,8 @@
 """BM25 检索节点
 
-BM25 关键词检索，支持 ES 后端和独立 BM25 索引。
+BM25 关键词检索，集成 BM25IndexManager。
 """
+import os
 from typing import Any
 
 from src.core.pipeline.base_node import BaseNodeExecutor
@@ -26,15 +27,40 @@ class BM25SearchExecutor(BaseNodeExecutor):
         top_k = context.config.get("top_k", 10)
         score_threshold = context.config.get("score_threshold", 0.0)
 
-        # 实际实现应调用 BM25IndexManager
-        # 简化实现：返回空结果
-        results = []
+        try:
+            from src.core.knowledge_base.bm25_index import BM25IndexManager
+            manager = BM25IndexManager()
 
-        logger.debug(f"BM25 检索: query={query}, top_k={top_k}, results={len(results)}")
+            kb_id = context.knowledge_base_id or context.config.get("knowledge_base_id", "")
+            tenant_id = context.auth.tenant_id
 
-        return NodeResult(
-            output=results,
-            metadata={"top_k": top_k, "score_threshold": score_threshold},
-            node_id=context.node_id,
-            node_type="bm25_search",
-        )
+            if not kb_id:
+                return NodeResult(
+                    output=[], node_id=context.node_id, node_type="bm25_search",
+                    metadata={"error": "knowledge_base_id 未指定"}
+                )
+
+            results = await manager.search(kb_id, tenant_id, query, top_k)
+
+            if score_threshold > 0:
+                results = [r for r in results if r.get("score", 0) >= score_threshold]
+
+            logger.debug(f"BM25 检索: kb={kb_id}, top_k={top_k}, results={len(results)}")
+
+            return NodeResult(
+                output=results,
+                metadata={"top_k": top_k, "kb_id": kb_id, "result_count": len(results)},
+                node_id=context.node_id,
+                node_type="bm25_search",
+            )
+
+        except Exception as e:
+            logger.error(f"BM25 检索失败: {e}")
+            return NodeResult(
+                output=[],
+                metadata={"error": str(e)},
+                node_id=context.node_id,
+                node_type="bm25_search",
+                degraded=True,
+                degradation_reason=str(e),
+            )
