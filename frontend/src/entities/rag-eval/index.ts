@@ -5,6 +5,7 @@ export type {
   IssueSeverity,
   TuningActionStatus,
   TestCaseSource,
+  PromptCategory,
 } from './enums';
 
 export type {
@@ -41,6 +42,14 @@ export type {
   SSEEvent,
   TestCaseFilters,
   RunFilters,
+  PromptMetadata,
+  PromptVersion,
+  PromptDetail,
+  PromptListResponse,
+  ImpactAnalysis,
+  PromptTestResult,
+  PromptComparison,
+  PromptFilters,
 } from './types';
 
 export {
@@ -49,6 +58,8 @@ export {
   LAYER_STATUS_MAP,
   LAYER_NAMES,
   METRIC_METADATA,
+  PROMPT_CATEGORY_MAP,
+  RISK_LEVEL_MAP,
 } from './constants';
 
 export {
@@ -61,4 +72,8 @@ export {
   formatPercent,
   formatDuration,
   formatTimestamp,
+  getPromptCategoryLabel,
+  getPromptCategoryColor,
+  getRiskLevelLabel,
+  getRiskLevelColor,
 } from './mappers';

@@ -67,3 +67,12 @@ export {
 
 export { useSSEProgress } from './useSSEProgress';
 export type { SSEEvent, SSEStatus } from './useSSEProgress';
+
+export {
+  usePrompts,
+  usePromptDetail,
+  useUpdatePrompt,
+  useAnalyzeImpact,
+  useTestPrompt,
+  useCompareVersions,
+} from './usePrompts';

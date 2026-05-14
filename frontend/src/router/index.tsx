@@ -20,10 +20,18 @@ import {
 } from '@features/rag-eval/pages';
 
 // 懒加载提示词管理页面
-const PromptListPage = lazy(() => import('@/features/rag-eval/pages/PromptListPage'));
-const PromptEditPage = lazy(() => import('@/features/rag-eval/pages/PromptEditPage'));
-const PromptVersionComparisonPage = lazy(() => import('@/features/rag-eval/pages/PromptVersionComparisonPage'));
-const PromptTestSandboxPage = lazy(() => import('@/features/rag-eval/pages/PromptTestSandboxPage'));
+const PromptListPage = lazy(() =>
+  import('@/features/rag-eval/pages/PromptListPage').then((m) => ({ default: m.PromptListPage })),
+);
+const PromptEditPage = lazy(() =>
+  import('@/features/rag-eval/pages/PromptEditPage').then((m) => ({ default: m.PromptEditPage })),
+);
+const PromptVersionComparisonPage = lazy(() =>
+  import('@/features/rag-eval/pages/PromptVersionComparisonPage').then((m) => ({ default: m.PromptVersionComparisonPage })),
+);
+const PromptTestSandboxPage = lazy(() =>
+  import('@/features/rag-eval/pages/PromptTestSandboxPage').then((m) => ({ default: m.PromptTestSandboxPage })),
+);
 
 // 布局组件
 const RagEvalLayout = () => (

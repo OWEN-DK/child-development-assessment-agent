@@ -5,6 +5,7 @@ import type {
   DraftStatus,
   LayerResultStatus,
   DifficultyLevel,
+  PromptCategory,
 } from './enums';
 
 /** 运行状态映射 */
@@ -70,6 +71,24 @@ export const SOURCE_MAP: Record<string, string> = {
   json_import: '导入',
   book_generated: '书籍生成',
   mixed: '混合',
+};
+
+/** 提示词分类映射 */
+export const PROMPT_CATEGORY_MAP: Record<PromptCategory, { label: string; color: string }> = {
+  rag_retrieval: { label: 'RAG 检索', color: 'blue' },
+  rag_generation: { label: 'RAG 生成', color: 'cyan' },
+  assessment: { label: '评估', color: 'green' },
+  scoring: { label: '评分', color: 'orange' },
+  reporting: { label: '报告', color: 'purple' },
+  test_case_generation: { label: '测试用例生成', color: 'magenta' },
+  rag_eval: { label: 'RAG 评估', color: 'geekblue' },
+};
+
+/** 影响风险等级映射 */
+export const RISK_LEVEL_MAP: Record<string, { label: string; color: string }> = {
+  low: { label: '低风险', color: 'success' },
+  medium: { label: '中风险', color: 'warning' },
+  high: { label: '高风险', color: 'error' },
 };
 
 /** 三层指标元数据 —— 中文名称与解释说明 */

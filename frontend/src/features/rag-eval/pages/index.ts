@@ -6,3 +6,7 @@ export { RunPage } from './RunPage';
 export { ReportPage } from './ReportPage';
 export { ReportDetailPage } from './ReportDetailPage';
 export { TuningPage } from './TuningPage';
+export { PromptListPage } from './PromptListPage';
+export { PromptEditPage } from './PromptEditPage';
+export { PromptVersionComparisonPage } from './PromptVersionComparisonPage';
+export { PromptTestSandboxPage } from './PromptTestSandboxPage';

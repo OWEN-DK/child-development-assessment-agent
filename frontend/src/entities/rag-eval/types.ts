@@ -5,6 +5,7 @@ import type {
   IssueSeverity,
   TuningActionStatus,
   TestCaseSource,
+  PromptCategory,
 } from './enums';
 
 // ─── 通用 ───────────────────────────────────────────
@@ -366,4 +367,77 @@ export interface RunFilters {
   status?: TestRunStatus;
   page?: number;
   page_size?: number;
+}
+
+// ─── 提示词管理 ─────────────────────────────────────
+
+/** 提示词元数据 */
+export interface PromptMetadata {
+  id: string;
+  prompt_key: string;
+  name_zh: string;
+  purpose: string;
+  category: PromptCategory;
+  subcategory?: string | null;
+  is_active: boolean;
+  is_system: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** 提示词版本 */
+export interface PromptVersion {
+  id: string;
+  prompt_key: string;
+  version_label: string;
+  version_number: number;
+  content: string;
+  variables_extracted?: string[] | null;
+  change_impact?: Record<string, unknown> | null;
+  change_summary?: string | null;
+  created_at?: string | null;
+  created_by?: string | null;
+}
+
+/** 提示词详情（含版本列表） */
+export interface PromptDetail {
+  metadata: PromptMetadata;
+  current_version?: PromptVersion | null;
+  versions: PromptVersion[];
+}
+
+/** 提示词列表响应 */
+export interface PromptListResponse {
+  items: PromptMetadata[];
+  total: number;
+}
+
+/** 影响分析结果 */
+export interface ImpactAnalysis {
+  code_references: { file: string; line: number; function?: string }[];
+  variable_changes: { added: string[]; removed: string[]; modified: string[] };
+  config_dependencies: { param: string; category: string; description: string }[];
+  affected_files: string[];
+  risk_level: 'low' | 'medium' | 'high';
+}
+
+/** 提示词测试响应 */
+export interface PromptTestResult {
+  rendered_prompt: string;
+  variables_used: string[];
+  variables_missing: string[];
+}
+
+/** 版本对比响应 */
+export interface PromptComparison {
+  version_1: PromptVersion;
+  version_2: PromptVersion;
+  diff: { added_chars: number; version_1_length: number; version_2_length: number };
+}
+
+/** 提示词筛选参数 */
+export interface PromptFilters {
+  category?: PromptCategory;
+  is_active?: boolean;
+  search?: string;
 }

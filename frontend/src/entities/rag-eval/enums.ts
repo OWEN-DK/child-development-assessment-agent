@@ -59,3 +59,13 @@ export type DocumentStatus = 'uploaded' | 'parsing' | 'ready' | 'archived';
 
 /** 报告导出格式 */
 export type ReportExportFormat = 'markdown' | 'json' | 'csv';
+
+/** 提示词分类 */
+export type PromptCategory =
+  | 'rag_retrieval'
+  | 'rag_generation'
+  | 'assessment'
+  | 'scoring'
+  | 'reporting'
+  | 'test_case_generation'
+  | 'rag_eval';
