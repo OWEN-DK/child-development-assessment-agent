@@ -71,6 +71,10 @@ def _init_services(app, session_factory, redis_client):
     app.state.rebuild_service = RebuildService(session_factory)
     app.state.migration_service = MigrationService(session_factory)
 
+    # Phase 3: 管道引擎
+    from src.service.pipeline.pipeline_service import PipelineService
+    app.state.pipeline_service = PipelineService(session_factory)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -226,9 +230,9 @@ def create_app() -> FastAPI:
     app.include_router(user_router)
     app.include_router(role_router)
 
-    # 占位：管道引擎路由（Phase 3）
-    # from src.controller.pipeline.pipeline_controller import router as pipeline_router
-    # app.include_router(pipeline_router)
+    # 管道引擎路由（Phase 3）
+    from src.controller.pipeline.pipeline_controller import router as pipeline_router
+    app.include_router(pipeline_router)
 
     # 知识库路由（Phase 2）
     from src.controller.knowledge.kb_controller import router as kb_router
