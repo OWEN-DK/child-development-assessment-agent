@@ -31,6 +31,47 @@ from fastapi.exceptions import RequestValidationError
 from src.utils.logger import logger
 
 
+def _init_services(app, session_factory, redis_client):
+    """初始化所有业务服务并挂载到 app.state
+
+    集中管理服务依赖，避免 lifespan 函数过于臃肿。
+    """
+    from src.core.auth.jwt_service import JWTService
+    from src.repository.auth.tenant_repo import TenantRepository
+    from src.repository.auth.user_repo import UserRepository, UserRoleRepository
+    from src.repository.auth.role_repo import RoleRepository
+    from src.repository.auth.audit_repo import AuditRepository
+    from src.service.auth.tenant_service import TenantService
+    from src.service.auth.user_service import UserService
+    from src.service.auth.role_service import RoleService
+    from src.service.auth.god_mode_service import GodModeService
+    from src.service.knowledge.kb_service import KnowledgeBaseService
+    from src.service.knowledge.document_service import DocumentService
+    from src.service.knowledge.rebuild_service import RebuildService
+    from src.service.knowledge.migration_service import MigrationService
+
+    # Phase 1: 认证与权限
+    jwt_service = JWTService(secret_key=settings.jwt_secret)
+    app.state.jwt_service = jwt_service
+
+    app.state.tenant_repo = TenantRepository(session_factory)
+    app.state.user_repo = UserRepository(session_factory)
+    app.state.user_role_repo = UserRoleRepository(session_factory)
+    app.state.role_repo = RoleRepository(session_factory)
+    app.state.audit_repo = AuditRepository(session_factory)
+
+    app.state.tenant_service = TenantService(session_factory)
+    app.state.user_service = UserService(session_factory)
+    app.state.role_service = RoleService(session_factory)
+    app.state.god_mode_service = GodModeService(session_factory, jwt_service, redis_client)
+
+    # Phase 2: 知识库管理
+    app.state.kb_service = KnowledgeBaseService(session_factory)
+    app.state.document_service = DocumentService(session_factory)
+    app.state.rebuild_service = RebuildService(session_factory)
+    app.state.migration_service = MigrationService(session_factory)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -56,63 +97,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"ConfigCache 初始化失败，热重载未启用: {e}")
 
-    # 初始化认证与权限服务
-    from src.core.auth.jwt_service import JWTService
-    from src.repository.auth.tenant_repo import TenantRepository
-    from src.repository.auth.user_repo import UserRepository, UserRoleRepository
-    from src.repository.auth.role_repo import RoleRepository
-    from src.repository.auth.audit_repo import AuditRepository
-    from src.service.auth.tenant_service import TenantService
-    from src.service.auth.user_service import UserService
-    from src.service.auth.role_service import RoleService
-    from src.service.auth.god_mode_service import GodModeService
+    # 初始化所有服务
     from src.core.database import async_session_factory
-
-    # 创建 JWT 服务
-    jwt_service = JWTService(secret_key=settings.jwt_secret)
-    app.state.jwt_service = jwt_service
-
-    # 创建 Repository 实例
-    tenant_repo = TenantRepository(async_session_factory)
-    user_repo = UserRepository(async_session_factory)
-    user_role_repo = UserRoleRepository(async_session_factory)
-    role_repo = RoleRepository(async_session_factory)
-    audit_repo = AuditRepository(async_session_factory)
-
-    app.state.tenant_repo = tenant_repo
-    app.state.user_repo = user_repo
-    app.state.user_role_repo = user_role_repo
-    app.state.role_repo = role_repo
-    app.state.audit_repo = audit_repo
-
-    # 创建 Service 实例
-    tenant_service = TenantService(async_session_factory)
-    user_service = UserService(async_session_factory)
-    role_service = RoleService(async_session_factory)
-    god_mode_service = GodModeService(async_session_factory, jwt_service, redis_client)
-
-    app.state.tenant_service = tenant_service
-    app.state.user_service = user_service
-    app.state.role_service = role_service
-    app.state.god_mode_service = god_mode_service
-
-    # 创建知识库服务（Phase 2）
-    from src.service.knowledge.kb_service import KnowledgeBaseService
-    from src.service.knowledge.document_service import DocumentService
-    from src.service.knowledge.rebuild_service import RebuildService
-    from src.service.knowledge.migration_service import MigrationService
-
-    kb_service = KnowledgeBaseService(async_session_factory)
-    document_service = DocumentService(async_session_factory)
-    rebuild_service = RebuildService(async_session_factory)
-    migration_service = MigrationService(async_session_factory)
-
-    app.state.kb_service = kb_service
-    app.state.document_service = document_service
-    app.state.rebuild_service = rebuild_service
-    app.state.migration_service = migration_service
-
-    logger.info("[4/5] Auth services initialized")
+    _init_services(app, async_session_factory, redis_client)
+    logger.info("[4/5] Services initialized")
 
     # 存储 session 工厂供中间件使用
     app.state.db_session_factory = async_session_factory

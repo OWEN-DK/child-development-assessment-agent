@@ -161,7 +161,14 @@ class KnowledgeBaseService:
 
         级联删除：文档 → 分块 → 向量 → BM25 → 重建任务
         """
-        # TODO: 检查管道引用（force=False 时）
+        # 检查管道引用（force=False 时）
+        if not force:
+            references = await self._check_pipeline_references(kb_id, tenant_id)
+            if references:
+                raise ValueError(
+                    f"知识库被 {len(references)} 个管道引用，无法删除。"
+                    f"使用 force=true 强制删除。"
+                )
 
         # 删除向量存储
         kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
@@ -261,6 +268,33 @@ class KnowledgeBaseService:
             "target_backend": target_backend.value,
             "rebuild_task_id": task_id,
         }
+
+    async def _check_pipeline_references(self, kb_id: str, tenant_id: str) -> list[dict]:
+        """检查知识库是否被管道引用
+
+        Returns:
+            引用该知识库的管道列表 [{"pipeline_id": str, "pipeline_name": str}, ...]
+        """
+        try:
+            async with self.db_session_factory() as session:
+                from sqlalchemy import text
+                # 查询 pipeline_versions 中 config_snapshot 引用了该 kb_id 的管道
+                stmt = text("""
+                    SELECT DISTINCT p.id, p.name
+                    FROM pipelines p
+                    JOIN pipeline_versions pv ON pv.pipeline_id = p.id
+                    WHERE p.tenant_id = :tenant_id
+                    AND pv.config_snapshot LIKE :kb_pattern
+                """)
+                result = await session.execute(stmt, {
+                    "tenant_id": tenant_id,
+                    "kb_pattern": f"%{kb_id}%",
+                })
+                rows = result.fetchall()
+                return [{"pipeline_id": row[0], "pipeline_name": row[1]} for row in rows]
+        except Exception as e:
+            logger.warning(f"检查管道引用失败: {e}")
+            return []
 
     def _generate_id(self) -> str:
         """生成唯一 ID"""

@@ -14,7 +14,7 @@ services:
     ports:
       - "51002:51002"
     environment:
-      - DATABASE_URL=mysql+asyncmy://raguser:ragpass@mysql:3306/rag_platform
+      - DATABASE_URL=mysql+aiomysql://raguser:ragpass@mysql:3306/rag_platform
       - REDIS_URL=redis://:ragredis@redis:6379/0
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-min-32-chars}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}

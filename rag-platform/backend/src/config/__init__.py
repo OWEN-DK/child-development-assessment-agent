@@ -56,8 +56,15 @@ class Settings:
 def validate_required_env_vars() -> list[str]:
     """校验必需的环境变量"""
     missing = []
-    # 基础设施变量如果缺失会使用默认值，不视为 missing
-    # 但 JWT_SECRET 如果还是默认值，在生产环境应告警
+
+    # 生产环境检查 JWT_SECRET 是否为默认值
+    env = os.getenv("ENVIRONMENT", "development")
+    jwt_secret = os.getenv("JWT_SECRET", "")
+    if env == "production" and (
+        not jwt_secret or jwt_secret == "change-me-in-production-min-32-chars"
+    ):
+        missing.append("JWT_SECRET 必须在生产环境修改为安全值")
+
     return missing
 
 

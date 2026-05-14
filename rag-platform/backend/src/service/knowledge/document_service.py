@@ -335,6 +335,42 @@ class DocumentService:
 
         logger.info(f"文档删除完成: {doc_id}")
 
+    async def update_acl(
+        self, doc_id: str, kb_id: str, tenant_id: str,
+        access_level: str, doc_acl: list[str] | None = None
+    ) -> None:
+        """更新文档 ACL
+
+        Args:
+            doc_id: 文档 ID
+            kb_id: 知识库 ID
+            tenant_id: 租户 ID
+            access_level: 权限级别（inherit/restricted）
+            doc_acl: 文档 ACL 角色列表（restricted 时必填）
+        """
+        doc = await self.doc_repo.get_by_id(doc_id, tenant_id)
+        if not doc or doc.kb_id != kb_id:
+            raise ValueError(f"文档不存在: {doc_id}")
+
+        # 校验：restricted 时必须指定 doc_acl
+        if access_level == "restricted" and not doc_acl:
+            raise ValueError("restricted 模式必须指定 doc_acl")
+
+        # 校验：doc_acl 不能超出知识库 visible_roles
+        if access_level == "restricted" and doc_acl:
+            kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
+            if kb and kb.visible_roles:
+                invalid_roles = set(doc_acl) - set(kb.visible_roles)
+                if invalid_roles:
+                    raise ValueError(f"doc_acl 包含知识库未授权的角色: {invalid_roles}")
+
+        update_data = {
+            "access_level": access_level,
+            "doc_acl": doc_acl if access_level == "restricted" else None,
+        }
+        await self.doc_repo.update(doc_id, update_data, tenant_id)
+        logger.info(f"文档 ACL 更新: {doc_id}, level={access_level}")
+
     def _generate_id(self) -> str:
         return str(uuid.uuid4()).replace("-", "")[:24]
 

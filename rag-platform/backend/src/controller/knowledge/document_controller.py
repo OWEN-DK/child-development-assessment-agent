@@ -89,5 +89,14 @@ async def update_document_acl(
     request: Request, kb_id: str, doc_id: str, data: UpdateDocAclReq
 ):
     """更新文档 ACL"""
-    # TODO: 实现 ACL 更新
-    return APIResponse.success(data={"message": "功能待实现"})
+    service: DocumentService = request.app.state.document_service
+    tenant_id = request.state.tenant_id
+
+    await service.update_acl(
+        doc_id=doc_id,
+        kb_id=kb_id,
+        tenant_id=tenant_id,
+        access_level=data.access_level.value,
+        doc_acl=data.doc_acl,
+    )
+    return APIResponse.success(data=None)
