@@ -98,8 +98,19 @@ async def lifespan(app: FastAPI):
 
     # 创建知识库服务（Phase 2）
     from src.service.knowledge.kb_service import KnowledgeBaseService
+    from src.service.knowledge.document_service import DocumentService
+    from src.service.knowledge.rebuild_service import RebuildService
+    from src.service.knowledge.migration_service import MigrationService
+
     kb_service = KnowledgeBaseService(async_session_factory)
+    document_service = DocumentService(async_session_factory)
+    rebuild_service = RebuildService(async_session_factory)
+    migration_service = MigrationService(async_session_factory)
+
     app.state.kb_service = kb_service
+    app.state.document_service = document_service
+    app.state.rebuild_service = rebuild_service
+    app.state.migration_service = migration_service
 
     logger.info("[4/5] Auth services initialized")
 
@@ -233,7 +244,11 @@ def create_app() -> FastAPI:
 
     # 知识库路由（Phase 2）
     from src.controller.knowledge.kb_controller import router as kb_router
+    from src.controller.knowledge.document_controller import router as document_router
+    from src.controller.knowledge.rebuild_controller import router as rebuild_router
     app.include_router(kb_router)
+    app.include_router(document_router)
+    app.include_router(rebuild_router)
 
     # 占位：搜索 API 路由（Phase 4）
     # from src.controller.search_controller import router as search_router

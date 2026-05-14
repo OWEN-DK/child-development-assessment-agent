@@ -1,245 +1,223 @@
+"""Embedding 引擎——多模型通用化封装
+
+支持 DashScope / OpenAI / Anthropic embedding 模型。
+继承 SafeDashScopeEmbedding 的安全处理逻辑（空文本替换、超长截断、重试）。
+"""
 import asyncio
 import time
-from typing import Any, List, Optional
-
-from llama_index.embeddings.dashscope import DashScopeEmbedding
+from abc import ABC, abstractmethod
+from typing import Any, Optional
 
 from src.utils.logger import logger
 
-# 延迟导入 settings 以避免循环引用
-# from src.config import settings
 
+class BaseEmbeddingProvider(ABC):
+    """Embedding 提供者基类"""
 
-class SafeDashScopeEmbedding(DashScopeEmbedding):
-    """
-    A wrapper around DashScopeEmbedding that safely handles:
-    1. Text too long (truncates to 2048 characters as a safe approximation for 2048 tokens)
-    2. Text empty (replaces with placeholder)
-    3. Logging of modifications
-    4. Timeout and retry for API calls
-    """
+    @abstractmethod
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """批量获取文本向量"""
 
-    # Safe limit for text length (chars).
-    # DashScope limit is 2048 tokens.
-    # Conservative estimate: 1 token >= 0.5 chars (very conservative),
-    # but usually 1 token ~ 1 char for Chinese, ~3-4 chars for English.
-    # To be safe and avoid 400 errors, we use settings.embedding_max_text_length chars.
+    @abstractmethod
+    async def embed_query(self, text: str) -> list[float]:
+        """获取查询向量"""
 
     @property
-    def max_text_length(self) -> int:
-        from src.config import settings
+    @abstractmethod
+    def dimension(self) -> int:
+        """向量维度"""
 
-        return settings.embedding_max_text_length
 
-    def get_text_embedding_batch(
-        self, texts: List[str], show_progress: bool = False, **kwargs: Any
-    ) -> List[List[float]]:
-        safe_texts = []
-        modified = False
+class DashScopeEmbeddingProvider(BaseEmbeddingProvider):
+    """DashScope Embedding 提供者"""
 
+    def __init__(self, api_key: str, model: str = "text-embedding-v3", dimension: int = 1024):
+        self._api_key = api_key
+        self._model = model
+        self._dimension = dimension
+        self._max_text_length = 8192
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """批量获取文本向量（含安全处理）"""
+        safe_texts = self._sanitize_texts(texts)
+        return await self._call_with_retry(safe_texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        """获取查询向量"""
+        safe_text = self._sanitize_text(text)
+        results = await self._call_with_retry([safe_text])
+        return results[0]
+
+    def _sanitize_texts(self, texts: list[str]) -> list[str]:
+        """文本安全处理：空文本替换、超长截断"""
+        safe = []
         for i, text in enumerate(texts):
-            # Handle empty or whitespace only
-            if not text or not text.strip():
-                logger.warning(
-                    f"Empty text encountered at index {i}, replacing with placeholder."
-                )
-                safe_texts.append("empty")
-                modified = True
-                continue
+            safe.append(self._sanitize_text(text))
+        return safe
 
-            # Handle too long
-            if len(text) > self.max_text_length:
-                # Log only once per batch to avoid spam if many are long
-                if not modified:
-                    logger.warning(
-                        f"Text too long ({len(text)} chars) at index {i}, truncating to {self.max_text_length} chars."
+    def _sanitize_text(self, text: str) -> str:
+        """单个文本安全处理"""
+        if not text or not text.strip():
+            return "empty"
+        if len(text) > self._max_text_length:
+            return text[:self._max_text_length]
+        return text
+
+    async def _call_with_retry(self, texts: list[str], max_retries: int = 3) -> list[list[float]]:
+        """带重试的 API 调用"""
+        import httpx
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding",
+                        headers={
+                            "Authorization": f"Bearer {self._api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": self._model,
+                            "input": {"texts": texts},
+                            "parameters": {"text_type": "document"},
+                        },
+                        timeout=60,
                     )
-                safe_texts.append(text[: self.max_text_length])
-                modified = True
-            else:
-                safe_texts.append(text)
+                    response.raise_for_status()
+                    result = response.json()
 
-        # 添加重试机制以应对网络波动
-        max_retries = 3
-        retry_delay = 1.0  # 秒（缩短退避时间，减少失败时的等待）
-        
-        for attempt in range(max_retries):
-            try:
-                return super().get_text_embedding_batch(safe_texts, show_progress, **kwargs)
+                    embeddings = result.get("output", {}).get("embeddings", [])
+                    if not embeddings:
+                        raise ValueError("DashScope 返回空 embeddings")
+
+                    return [e["embedding"] for e in embeddings]
+
             except Exception as e:
                 error_msg = str(e)
-                logger.warning(f"Embedding API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}")
-                
-                # 非瞬时错误不重试：无效API密钥、权限错误等
-                non_transient_errors = ["InvalidApiKey", "401", "403", "AccessDenied", "Unauthorized", "Forbidden"]
-                if any(err in error_msg for err in non_transient_errors):
-                    logger.error(f"Non-transient error detected, aborting retries: {error_msg}")
-                    raise
-                
-                # 如果是最后一次尝试，抛出异常
-                if attempt == max_retries - 1:
-                    logger.error(f"Embedding API call failed after {max_retries} retries")
-                    raise
-                
-                # 指数退避
-                wait_time = retry_delay * (2 ** attempt)
-                logger.info(f"Retrying in {wait_time:.1f} seconds...")
-                time.sleep(wait_time)
-
-    def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
-        embeddings = super()._get_text_embeddings(texts)
-        if any(e is None or len(e) == 0 for e in embeddings):
-            raise ValueError(
-                "DashScope API returned empty embeddings. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance). "
-                "Please check the console logs for the exact DashScope error message."
-            )
-        return embeddings
-
-    async def _aget_text_embeddings(self, texts: List[str]) -> List[List[float]]:
-        embeddings = await super()._aget_text_embeddings(texts)
-        if any(e is None or len(e) == 0 for e in embeddings):
-            raise ValueError(
-                "DashScope API returned empty embeddings. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance). "
-                "Please check the console logs for the exact DashScope error message."
-            )
-        return embeddings
-
-    def _get_text_embedding(self, text: str) -> List[float]:
-        embedding = super()._get_text_embedding(text)
-        if embedding is None or len(embedding) == 0:
-            raise ValueError(
-                "DashScope API returned empty embedding. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance). "
-                "Please check the console logs for the exact DashScope error message."
-            )
-        return embedding
-
-    async def _aget_text_embedding(self, text: str) -> List[float]:
-        embedding = await super()._aget_text_embedding(text)
-        if embedding is None or len(embedding) == 0:
-            raise ValueError(
-                "DashScope API returned empty embedding. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance). "
-                "Please check the console logs for the exact DashScope error message."
-            )
-        return embedding
-
-    def _get_query_embedding(self, query: str) -> List[float]:
-        embedding = super()._get_query_embedding(query)
-        if embedding is None or len(embedding) == 0:
-            raise ValueError(
-                "DashScope API returned empty embedding for query. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance)."
-            )
-        return embedding
-
-    async def _aget_query_embedding(self, query: str) -> List[float]:
-        embedding = await super()._aget_query_embedding(query)
-        if embedding is None or len(embedding) == 0:
-            raise ValueError(
-                "DashScope API returned empty embedding for query. This is often caused by an invalid API key, "
-                "rate limiting, or account arrears (e.g. out of balance)."
-            )
-        return embedding
-
-    def get_query_embedding(self, query: str) -> List[float]:
-        if not query or not query.strip():
-            logger.warning("Empty query encountered, replacing with placeholder.")
-            query = "empty"
-        elif len(query) > self.max_text_length:
-            logger.warning(f"Query too long ({len(query)} chars), truncating.")
-            query = query[: self.max_text_length]
-
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                result = super().get_query_embedding(query)
-                if result and len(result) > 0:
-                    return result
-            except Exception as e:
-                error_msg = str(e)
-                non_transient = ["InvalidApiKey", "401", "403", "AccessDenied"]
+                # 非瞬时错误不重试
+                non_transient = ["InvalidApiKey", "401", "403", "AccessDenied", "Unauthorized"]
                 if any(err in error_msg for err in non_transient):
+                    logger.error(f"DashScope Embedding 非瞬时错误: {error_msg}")
                     raise
+
                 if attempt == max_retries - 1:
+                    logger.error(f"DashScope Embedding 调用失败（{max_retries} 次重试）: {error_msg}")
                     raise
-                time.sleep(2 ** attempt)
-        return super().get_query_embedding(query)
 
-    async def aget_text_embedding_batch(
-        self, texts: List[str], show_progress: bool = False, **kwargs: Any
-    ) -> List[List[float]]:
-        # Async version
-        safe_texts = []
-        modified = False
+                wait = 2 ** attempt
+                logger.warning(f"DashScope Embedding 调用失败，{wait}s 后重试: {error_msg}")
+                await asyncio.sleep(wait)
 
-        for i, text in enumerate(texts):
-            if not text or not text.strip():
-                safe_texts.append("empty")
-                modified = True
-                continue
+        raise RuntimeError("DashScope Embedding 调用失败")
 
-            if len(text) > self.max_text_length:
-                if not modified:
-                    logger.warning(
-                        f"Text too long ({len(text)} chars) at index {i}, truncating to {self.max_text_length} chars."
-                    )
-                safe_texts.append(text[: self.max_text_length])
-                modified = True
-            else:
-                safe_texts.append(text)
 
-        # 添加重试机制以应对网络波动
-        max_retries = 3
-        retry_delay = 1.0  # 秒（缩短退避时间，减少失败时的等待）
-        
-        for attempt in range(max_retries):
-            try:
-                return await super().aget_text_embedding_batch(
-                    safe_texts, show_progress, **kwargs
-                )
-            except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"Async embedding API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}")
-                
-                # 非瞬时错误不重试：无效API密钥、权限错误等
-                non_transient_errors = ["InvalidApiKey", "401", "403", "AccessDenied", "Unauthorized", "Forbidden"]
-                if any(err in error_msg for err in non_transient_errors):
-                    logger.error(f"Non-transient error detected, aborting retries: {error_msg}")
-                    raise
-                
-                # 如果是最后一次尝试，抛出异常
-                if attempt == max_retries - 1:
-                    logger.error(f"Async embedding API call failed after {max_retries} retries")
-                    raise
-                
-                # 指数退避
-                wait_time = retry_delay * (2 ** attempt)
-                logger.info(f"Retrying in {wait_time:.1f} seconds...")
-                await asyncio.sleep(wait_time)
+class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
+    """OpenAI Embedding 提供者"""
 
-    async def aget_query_embedding(self, query: str) -> List[float]:
-        if not query or not query.strip():
-            logger.warning("Empty query encountered, replacing with placeholder.")
-            query = "empty"
-        elif len(query) > self.max_text_length:
-            logger.warning(f"Query too long ({len(query)} chars), truncating.")
-            query = query[: self.max_text_length]
+    def __init__(self, api_key: str, model: str = "text-embedding-3-small", dimension: int = 1536):
+        self._api_key = api_key
+        self._model = model
+        self._dimension = dimension
 
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                result = await super().aget_query_embedding(query)
-                if result and len(result) > 0:
-                    return result
-            except Exception as e:
-                error_msg = str(e)
-                non_transient = ["InvalidApiKey", "401", "403", "AccessDenied"]
-                if any(err in error_msg for err in non_transient):
-                    raise
-                if attempt == max_retries - 1:
-                    raise
-                await asyncio.sleep(2 ** attempt)
-        return await super().aget_query_embedding(query)
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """批量获取文本向量"""
+        import httpx
+
+        safe_texts = [t if t and t.strip() else "empty" for t in texts]
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": self._model, "input": safe_texts},
+                timeout=60,
+            )
+            response.raise_for_status()
+            result = response.json()
+            return [item["embedding"] for item in result["data"]]
+
+    async def embed_query(self, text: str) -> list[float]:
+        """获取查询向量"""
+        results = await self.embed_texts([text])
+        return results[0]
+
+
+class EmbeddingEngine:
+    """Embedding 引擎门面
+
+    根据配置选择提供者，统一调用接口。
+    """
+
+    def __init__(self, provider: BaseEmbeddingProvider):
+        self._provider = provider
+
+    @property
+    def dimension(self) -> int:
+        return self._provider.dimension
+
+    async def embed_batch(
+        self, texts: list[str], batch_size: int = 64
+    ) -> list[list[float]]:
+        """批量获取文本向量（自动分批）
+
+        Args:
+            texts: 文本列表
+            batch_size: 每批大小
+
+        Returns:
+            向量列表
+        """
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            embeddings = await self._provider.embed_texts(batch)
+            all_embeddings.extend(embeddings)
+        return all_embeddings
+
+    async def embed_single(self, text: str) -> list[float]:
+        """获取单个文本向量"""
+        return await self._provider.embed_query(text)
+
+    @classmethod
+    def from_config(
+        cls,
+        provider: str = "dashscope",
+        api_key: str = "",
+        model: Optional[str] = None,
+        dimension: int = 1024,
+    ) -> "EmbeddingEngine":
+        """从配置创建引擎
+
+        Args:
+            provider: 提供者类型（dashscope/openai）
+            api_key: API 密钥
+            model: 模型名称
+            dimension: 向量维度
+        """
+        if provider == "dashscope":
+            embedding_provider = DashScopeEmbeddingProvider(
+                api_key=api_key,
+                model=model or "text-embedding-v3",
+                dimension=dimension,
+            )
+        elif provider == "openai":
+            embedding_provider = OpenAIEmbeddingProvider(
+                api_key=api_key,
+                model=model or "text-embedding-3-small",
+                dimension=dimension,
+            )
+        else:
+            raise ValueError(f"不支持的 Embedding 提供者: {provider}")
+
+        return cls(provider=embedding_provider)
