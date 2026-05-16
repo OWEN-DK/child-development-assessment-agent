@@ -54,10 +54,27 @@ class DomainDispatchExecutor(BaseNodeExecutor):
         )
 
     def _filter_by_permission(self, domain_plans: list, context: NodeContext) -> list:
-        """根据用户权限裁剪域列表"""
+        """根据用户权限裁剪域列表
+
+        检查域配置中知识库的 visibility / visible_roles / owner_id。
+        域配置应由调用方 enrich KB 元数据。
+        """
         if context.auth.is_superadmin:
             return domain_plans
 
-        # 实际实现应检查知识库 visibility + visible_roles
-        # 简化实现：全部通过
-        return domain_plans
+        filtered = []
+        for plan in domain_plans:
+            visibility = plan.get("visibility", "public")
+
+            if visibility == "public":
+                filtered.append(plan)
+            elif visibility == "private":
+                owner_id = plan.get("owner_id", "")
+                if owner_id == context.auth.user_id:
+                    filtered.append(plan)
+            elif visibility == "role_scoped":
+                visible_roles = plan.get("visible_roles", []) or []
+                if any(slug in visible_roles for slug in context.auth.role_slugs):
+                    filtered.append(plan)
+
+        return filtered

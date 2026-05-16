@@ -56,6 +56,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.user_id = payload.get("sub")
             request.state.tenant_id = payload.get("tenant_id")
             request.state.roles = payload.get("roles", [])
+            request.state.role_slugs = payload.get("role_slugs", [])
             request.state.is_superadmin = payload.get("is_superadmin", False)
 
             # 设置 contextvars 上下文（供下游服务直接使用）

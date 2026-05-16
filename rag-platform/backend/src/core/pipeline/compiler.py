@@ -2,87 +2,40 @@
 
 将管道 JSON 配置编译为可执行的 CompiledPipeline，并驱动执行。
 使用 Kahn 拓扑排序 + asyncio.gather 并行。
-支持域管道并行执行 + 条件边路由。
+支持域管道并行执行 + 条件边路由 + 降级链。
 """
 import asyncio
 import time
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
-from src.core.pipeline.base_node import BaseNodeExecutor
+from src.core.pipeline.compiled_pipeline import (
+    CompiledPipeline,
+    ExecutionPlan,
+    PipelineState,
+    PlanNode,
+)
 from src.core.pipeline.defaults import NODE_DEFAULTS
 from src.core.pipeline.exceptions import (
     DomainTimeoutError,
-    NodeExecutionError,
     PipelineCompilationError,
 )
+from src.core.pipeline.degradation import DegradationRegistry, NodeExecutorWrapper
 from src.core.pipeline.node_context import AuthContext, NodeContext
 from src.core.pipeline.node_result import NodeResult
 from src.core.pipeline.registry import registry
 from src.utils.logger import logger
 
 
-@dataclass
-class PlanNode:
-    """执行计划节点"""
-    node_id: str
-    node_type: str
-    config: dict[str, Any] = field(default_factory=dict)
-    domain_id: str = ""
-    knowledge_base_id: str = ""
-    depends_on: list[str] = field(default_factory=list)
-    downstream: list[str] = field(default_factory=list)
-    is_aggregation: bool = False
-
-
-@dataclass
-class ExecutionPlan:
-    """执行计划"""
-    nodes: dict[str, PlanNode] = field(default_factory=dict)
-    sorted_ids: list[str] = field(default_factory=list)
-    parallel_groups: list[list[str]] = field(default_factory=list)
-    conditional_routes: dict[str, dict[str, str]] = field(default_factory=dict)
-    degradation_routes: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # 域管道：domain_id → 域内节点拓扑排序列表
-    domain_plans: dict[str, list[str]] = field(default_factory=dict)
-
-
-@dataclass
-class PipelineState:
-    """管道执行状态"""
-    query: str = ""
-    params: dict[str, Any] = field(default_factory=dict)
-    auth: AuthContext = field(default_factory=lambda: AuthContext(tenant_id="", user_id=""))
-
-    # 所有节点的输出（node_id → output）
-    node_outputs: dict[str, Any] = field(default_factory=dict)
-
-    # 域执行结果
-    domain_results: list[dict[str, Any]] = field(default_factory=list)
-
-    # 最终结果
-    answer: str = ""
-    sources: list[dict[str, Any]] = field(default_factory=list)
-
-    # 快捷路径
-    shortcut_activated: bool = False
-
-    # 降级事件
-    degradation_events: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
-class CompiledPipeline:
-    """编译后的管道"""
-    config: dict[str, Any] = field(default_factory=dict)
-    execution_plan: ExecutionPlan = field(default_factory=ExecutionPlan)
-    domain_configs: list[dict[str, Any]] = field(default_factory=list)
-    aggregation_config: dict[str, Any] = field(default_factory=dict)
-
-
 class PipelineCompiler:
-    """管道编译器"""
+    """管道编译器
+
+    编译管道 JSON → CompiledPipeline → 驱动执行。
+    """
+
+    def __init__(self):
+        self._degradation = DegradationRegistry()
+        self._wrapper = NodeExecutorWrapper(self._degradation)
 
     def compile(self, pipeline_config: dict[str, Any]) -> CompiledPipeline:
         """编译管道配置为可执行的 CompiledPipeline"""
@@ -93,6 +46,10 @@ class PipelineCompiler:
         errors = self._validate_nodes(pipeline_config)
         if errors:
             raise PipelineCompilationError("节点配置校验失败", errors)
+
+        # 从配置构建降级路由
+        self._degradation.clear()
+        self._degradation.build_from_pipeline_config(pipeline_config)
 
         execution_plan = self._build_execution_plan(pipeline_config)
 
@@ -116,6 +73,10 @@ class PipelineCompiler:
 
         start_time = time.time()
 
+        # 重新从配置构建降级路由（execute 可能用不同的 compiler 实例）
+        if not self._degradation._routes:
+            self._degradation.build_from_pipeline_config(compiled.config)
+
         # 1. 并行执行各域管道
         if plan.domain_plans and not state.shortcut_activated:
             domain_results = await self._execute_domain_pipelines(
@@ -136,6 +97,8 @@ class PipelineCompiler:
             "execution_time_ms": execution_time_ms,
         }
 
+    # ── 校验 ──────────────────────────────────────────
+
     def _validate_structure(self, config: dict[str, Any]) -> list[str]:
         """校验管道结构"""
         errors = []
@@ -151,7 +114,6 @@ class PipelineCompiler:
         """校验节点配置"""
         errors = []
 
-        # 校验域内节点
         for domain in config.get("domains", []):
             for node in domain.get("pipeline", {}).get("nodes", []):
                 node_type = node.get("type")
@@ -165,7 +127,6 @@ class PipelineCompiler:
                 except KeyError:
                     errors.append(f"节点类型未注册: {node_type}")
 
-        # 校验聚合节点
         for node in config.get("aggregation", {}).get("nodes", []):
             node_type = node.get("type")
             if not node_type:
@@ -180,6 +141,8 @@ class PipelineCompiler:
 
         return errors
 
+    # ── 编译 ──────────────────────────────────────────
+
     def _build_execution_plan(self, config: dict[str, Any]) -> ExecutionPlan:
         """构建执行计划"""
         plan = ExecutionPlan()
@@ -189,41 +152,50 @@ class PipelineCompiler:
             domain_id = domain.get("id", "")
             domain_nodes = domain.get("pipeline", {}).get("nodes", [])
             domain_edges = domain.get("pipeline", {}).get("edges", [])
+            deg_edges = domain.get("pipeline", {}).get("degradation_edges", [])
 
-            # 收集域内节点
             all_domain_nodes: dict[str, dict] = {}
             for node in domain_nodes:
                 node_id = node.get("id", node.get("type"))
                 all_domain_nodes[node_id] = node
+
+                # 提取降级信息
+                deg_strategies, alt_node = self._extract_degradation(node_id, deg_edges)
                 plan.nodes[node_id] = PlanNode(
                     node_id=node_id,
                     node_type=node.get("type", ""),
                     config=node.get("config", {}),
                     domain_id=domain_id,
                     knowledge_base_id=domain.get("knowledge_base_id", ""),
+                    degradation_strategies=deg_strategies,
+                    alternate_node_id=alt_node,
                 )
 
-            # 拓扑排序域内节点
             domain_sorted = self._topo_sort_nodes(all_domain_nodes, domain_edges)
             plan.domain_plans[domain_id] = domain_sorted
 
         # 2. 构建聚合层执行计划
         agg_config = config.get("aggregation", {})
         agg_nodes: dict[str, dict] = {}
+        agg_deg_edges = agg_config.get("degradation_edges", [])
         for node in agg_config.get("nodes", []):
             node_id = node.get("id", node.get("type"))
             agg_nodes[node_id] = node
+
+            deg_strategies, alt_node = self._extract_degradation(node_id, agg_deg_edges)
             plan.nodes[node_id] = PlanNode(
                 node_id=node_id,
                 node_type=node.get("type", ""),
                 config=node.get("config", {}),
                 is_aggregation=True,
+                degradation_strategies=deg_strategies,
+                alternate_node_id=alt_node,
             )
 
         agg_edges = agg_config.get("edges", [])
         plan.sorted_ids = self._topo_sort_nodes(agg_nodes, agg_edges)
 
-        # 构建邻接表用于并行组检测
+        # 构建邻接表
         adjacency: dict[str, set[str]] = {nid: set() for nid in agg_nodes}
         indegree: dict[str, int] = {nid: 0 for nid in agg_nodes}
         for edge in agg_edges:
@@ -240,6 +212,20 @@ class PipelineCompiler:
         plan.parallel_groups = self._detect_parallel_groups(plan.sorted_ids, indegree)
 
         return plan
+
+    def _extract_degradation(
+        self, node_id: str, deg_edges: list[dict]
+    ) -> tuple[list[str], str]:
+        """从降级边中提取节点降级策略"""
+        for edge in deg_edges:
+            if edge.get("source") == node_id:
+                return (
+                    edge.get("strategies", ["skip_node"]),
+                    edge.get("alternate_node_id", ""),
+                )
+        return ([], "")
+
+    # ── 拓扑排序 ──────────────────────────────────────
 
     def _topo_sort_nodes(
         self, nodes: dict[str, dict], edges: list[dict]
@@ -284,6 +270,8 @@ class PipelineCompiler:
             groups[level].append(node_id)
         return [groups[level] for level in sorted(groups.keys())]
 
+    # ── 执行 ──────────────────────────────────────────
+
     async def _execute_domain_pipelines(
         self,
         plan: ExecutionPlan,
@@ -291,10 +279,8 @@ class PipelineCompiler:
         state: PipelineState,
     ) -> list[dict[str, Any]]:
         """并行执行各域管道"""
-        # 权限裁剪
         filtered_domains = self._filter_domains_by_permission(domain_configs, state)
 
-        # 并行执行
         tasks = []
         for domain in filtered_domains:
             domain_id = domain.get("id", "")
@@ -332,7 +318,7 @@ class PipelineCompiler:
         all_nodes: dict[str, PlanNode],
         state: PipelineState,
     ) -> dict[str, Any]:
-        """执行单个域管道"""
+        """执行单个域管道（含降级支持）"""
         domain_node_outputs: dict[str, Any] = {}
 
         for node_id in node_ids:
@@ -340,13 +326,9 @@ class PipelineCompiler:
             if not plan_node:
                 continue
 
-            # 获取输入：依赖节点的输出或原始查询
             input_data = self._get_input_data(plan_node, domain_node_outputs, state)
-
-            # 合并配置
             config = self._merge_params(state.params, plan_node.config)
 
-            # 创建上下文
             context = NodeContext(
                 input_data=input_data,
                 config=config,
@@ -357,23 +339,12 @@ class PipelineCompiler:
                 knowledge_base_id=plan_node.knowledge_base_id,
             )
 
-            # 执行节点
-            try:
-                executor = registry.create_executor(plan_node.node_type)
-                result = await executor.execute(context)
-                domain_node_outputs[node_id] = result.output
-                state.node_outputs[f"{domain_id}:{node_id}"] = result.output
-            except Exception as e:
-                logger.error(f"域节点执行失败 [{domain_id}:{node_id}]: {e}")
-                domain_node_outputs[node_id] = None
-                state.degradation_events.append({
-                    "domain_id": domain_id,
-                    "node_id": node_id,
-                    "error": str(e),
-                    "strategy": "skip",
-                })
+            result = await self._execute_node_with_degradation(
+                plan_node, context, state
+            )
+            domain_node_outputs[node_id] = result.output
+            state.node_outputs[f"{domain_id}:{node_id}"] = result.output
 
-        # 域管道最终输出（最后一个节点的输出）
         candidates = []
         if node_ids:
             last_output = domain_node_outputs.get(node_ids[-1])
@@ -391,19 +362,15 @@ class PipelineCompiler:
     async def _execute_aggregation_plan(
         self, plan: ExecutionPlan, state: PipelineState
     ) -> None:
-        """按拓扑顺序执行聚合层节点"""
+        """按拓扑顺序执行聚合层节点（含降级支持）"""
         for node_id in plan.sorted_ids:
             plan_node = plan.nodes.get(node_id)
             if not plan_node or not plan_node.is_aggregation:
                 continue
 
-            # 获取输入
             input_data = self._get_aggregation_input(plan_node, state)
-
-            # 合并配置
             config = self._merge_params(state.params, plan_node.config)
 
-            # 创建上下文
             context = NodeContext(
                 input_data=input_data,
                 config=config,
@@ -412,30 +379,54 @@ class PipelineCompiler:
                 node_type=plan_node.node_type,
             )
 
-            # 执行节点
-            try:
-                executor = registry.create_executor(plan_node.node_type)
-                result = await executor.execute(context)
-                state.node_outputs[node_id] = result.output
+            result = await self._execute_node_with_degradation(
+                plan_node, context, state
+            )
+            state.node_outputs[node_id] = result.output
+            self._update_state_from_result(node_id, plan_node.node_type, result, state)
 
-                # 更新状态关键字段
-                self._update_state_from_result(node_id, plan_node.node_type, result, state)
+    async def _execute_node_with_degradation(
+        self,
+        plan_node: PlanNode,
+        context: NodeContext,
+        state: PipelineState,
+    ) -> NodeResult:
+        """使用降级包装器执行节点
 
-            except Exception as e:
-                logger.error(f"聚合节点执行失败 [{node_id}]: {e}")
-                state.degradation_events.append({
-                    "node_id": node_id,
-                    "error": str(e),
-                    "strategy": "skip",
-                })
+        节点失败时通过 DegradationRegistry 查降级策略，
+        按 skip_node → reroute → degrade_cache → abort 顺序尝试。
+        """
+        try:
+            return await self._wrapper.execute(plan_node.node_id, context)
+        except Exception as exc:
+            logger.error(
+                f"节点执行失败 [{plan_node.node_id}]: {exc}"
+            )
+            state.degradation_events.append({
+                "domain_id": plan_node.domain_id,
+                "node_id": plan_node.node_id,
+                "node_type": plan_node.node_type,
+                "error": str(exc),
+                "strategy": "abort",
+            })
+            # 记录失败并返回空结果以不阻塞管道
+            return NodeResult(
+                output=None,
+                degraded=True,
+                degradation_strategy="abort",
+                degradation_reason=str(exc),
+                node_id=plan_node.node_id,
+                node_type=plan_node.node_type,
+            )
+
+    # ── 输入数据映射 ──────────────────────────────────
 
     def _get_input_data(
         self, plan_node: PlanNode, node_outputs: dict[str, Any], state: PipelineState
     ) -> Any:
         """获取域内节点输入数据"""
         if not plan_node.depends_on:
-            return state.query  # 无依赖，返回原始查询
-        # 返回最后一个依赖节点的输出
+            return state.query
         last_dep = plan_node.depends_on[-1]
         return node_outputs.get(last_dep, state.query)
 
@@ -445,7 +436,6 @@ class PipelineCompiler:
         """获取聚合节点输入数据"""
         node_type = plan_node.node_type
 
-        # 特殊节点的输入映射
         if node_type == "query_analyzer":
             return state.query
         elif node_type == "domain_dispatch":
@@ -463,11 +453,12 @@ class PipelineCompiler:
                 "conflict_report": state.node_outputs.get("conflict_detect", {}),
             }
 
-        # 通用：从依赖节点获取
         if plan_node.depends_on:
             last_dep = plan_node.depends_on[-1]
             return state.node_outputs.get(last_dep, state.query)
         return state.query
+
+    # ── 状态更新 ──────────────────────────────────────
 
     def _update_state_from_result(
         self, node_id: str, node_type: str, result: NodeResult, state: PipelineState
@@ -480,6 +471,8 @@ class PipelineCompiler:
         elif node_type == "cross_dedup":
             state.sources = result.output if isinstance(result.output, list) else []
 
+    # ── 权限 ──────────────────────────────────────────
+
     def _filter_domains_by_permission(
         self, domain_configs: list[dict[str, Any]], state: PipelineState
     ) -> list[dict[str, Any]]:
@@ -487,9 +480,30 @@ class PipelineCompiler:
         if state.auth.is_superadmin:
             return domain_configs
 
-        # 实际实现应检查知识库 visibility + visible_roles
-        # 简化实现：全部通过
-        return domain_configs
+        filtered = []
+        for domain in domain_configs:
+            visibility = domain.get("visibility", "public")
+
+            if visibility == "public":
+                filtered.append(domain)
+            elif visibility == "private":
+                owner_id = domain.get("owner_id", "")
+                if owner_id == state.auth.user_id:
+                    filtered.append(domain)
+            elif visibility == "role_scoped":
+                visible_roles = domain.get("visible_roles", []) or []
+                if any(slug in visible_roles for slug in state.auth.role_slugs):
+                    filtered.append(domain)
+
+        if len(filtered) < len(domain_configs):
+            logger.info(
+                f"域权限裁剪: {len(domain_configs)} → {len(filtered)} "
+                f"(用户 {state.auth.user_id} 角色 {state.auth.role_slugs})"
+            )
+
+        return filtered
+
+    # ── 配置覆盖 ──────────────────────────────────────
 
     def _merge_params(self, params: dict, config: dict) -> dict:
         """合并参数（L3 > L2 > L0）"""

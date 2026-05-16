@@ -90,3 +90,32 @@ class DocumentRepository(BaseRepository[KbDocument]):
                 if error_message:
                     doc.error_message = error_message
                 await session.commit()
+
+    async def mark_frozen(self, doc_ids: list[str], tenant_id: str) -> None:
+        """标记文档为冻结状态（防止快照期间被删除/重建覆盖）"""
+        async with self.db_session_factory() as session:
+            stmt = select(KbDocument).where(
+                KbDocument.id.in_(doc_ids),
+                KbDocument.tenant_id == tenant_id,
+            )
+            result = await session.execute(stmt)
+            docs = result.scalars().all()
+            for doc in docs:
+                if doc.metadata is None:
+                    doc.metadata = {}
+                doc.metadata["frozen"] = True
+            await session.commit()
+
+    async def unmark_frozen(self, doc_ids: list[str], tenant_id: str) -> None:
+        """解除文档冻结状态"""
+        async with self.db_session_factory() as session:
+            stmt = select(KbDocument).where(
+                KbDocument.id.in_(doc_ids),
+                KbDocument.tenant_id == tenant_id,
+            )
+            result = await session.execute(stmt)
+            docs = result.scalars().all()
+            for doc in docs:
+                if doc.metadata and "frozen" in doc.metadata:
+                    del doc.metadata["frozen"]
+            await session.commit()

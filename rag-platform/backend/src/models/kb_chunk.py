@@ -1,5 +1,6 @@
 """知识库分块数据模型"""
-from sqlalchemy import JSON, Column, Integer, MEDIUMTEXT, String
+from sqlalchemy import JSON, Column, Integer, String
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 
 from src.models.base import Base
 

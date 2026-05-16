@@ -19,7 +19,8 @@ class PipelineCompilationError(PipelineError):
 
     def __init__(self, message: str, errors: list[str] | None = None):
         self.errors = errors or []
-        super().__init__(message)
+        full = f"{message}: {', '.join(self.errors)}" if self.errors else message
+        super().__init__(full)
 
 
 class NodeExecutionError(PipelineError):

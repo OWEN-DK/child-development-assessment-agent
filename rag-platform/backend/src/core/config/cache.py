@@ -11,8 +11,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import async_session_factory
-from src.models.rag_eval.config import EvalConfigVersion
 from src.utils.logger import logger
+
+# EvalConfigVersion 仅在旧 backend/ 中存在，rag-platform 中可能缺失
+try:
+    from src.models.rag_eval.config import EvalConfigVersion  # noqa: F811
+except ImportError:
+    EvalConfigVersion = None  # type: ignore[assignment]
+    logger.warning("EvalConfigVersion 不可用，ConfigCache 将跳过数据库加载")
 
 
 class ConfigCache:
@@ -96,6 +102,8 @@ class ConfigCache:
 
         使用锁防止并发刷新。
         """
+        if EvalConfigVersion is None:
+            return
         async with self._lock:
             try:
                 async with async_session_factory() as session:

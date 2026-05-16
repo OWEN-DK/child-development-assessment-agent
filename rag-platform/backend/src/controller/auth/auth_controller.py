@@ -44,10 +44,12 @@ async def login(request: Request, data: LoginRequest):
     # 获取用户角色
     role_ids = await user_role_repo.get_roles_by_user(user.id)
     roles = []
+    role_slugs = []
     for role_id in role_ids:
         role = await role_repo.get_by_id(role_id)
         if role:
             roles.extend(role.permissions)
+            role_slugs.append(role.slug)
 
     # 签发令牌
     access_token = jwt_service.issue_access_token(
@@ -55,6 +57,7 @@ async def login(request: Request, data: LoginRequest):
         tenant_id=user.tenant_id,
         roles=roles,
         is_superadmin=is_superadmin,
+        role_slugs=role_slugs,
     )
     refresh_token = jwt_service.issue_refresh_token(user_id=user.id)
 
@@ -77,6 +80,8 @@ async def refresh_token(request: Request, data: TokenRefresh):
     """刷新令牌"""
     jwt_service: JWTService = request.app.state.jwt_service
     user_repo: UserRepository = request.app.state.user_repo
+    user_role_repo: UserRoleRepository = request.app.state.user_role_repo
+    role_repo: RoleRepository = request.app.state.role_repo
 
     try:
         payload = jwt_service.decode(data.refresh_token)
@@ -87,13 +92,23 @@ async def refresh_token(request: Request, data: TokenRefresh):
         if user is None:
             return APIResponse.error(code=404, message="用户不存在", error_code="USER_NOT_FOUND")
 
-        # TODO: 获取用户角色
+        # 获取用户角色权限
+        role_ids = await user_role_repo.get_roles_by_user(user.id)
+        roles = []
+        role_slugs = []
+        for role_id in role_ids:
+            role = await role_repo.get_by_id(role_id)
+            if role:
+                roles.extend(role.permissions)
+                role_slugs.append(role.slug)
+
         new_access, new_refresh = jwt_service.refresh_with_user_info(
             refresh_token=data.refresh_token,
             user_id=user.id,
             tenant_id=user.tenant_id,
-            roles=[],  # TODO: 获取实际角色
+            roles=roles,
             is_superadmin=user.tenant_id is None,
+            role_slugs=role_slugs,
         )
 
         return APIResponse.success(data={

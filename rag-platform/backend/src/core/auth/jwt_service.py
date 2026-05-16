@@ -28,6 +28,7 @@ class JWTService:
         tenant_id: str | None,
         roles: list[str],
         is_superadmin: bool = False,
+        role_slugs: list[str] | None = None,
         extra_claims: dict[str, Any] | None = None,
     ) -> str:
         """签发访问令牌
@@ -35,8 +36,9 @@ class JWTService:
         Args:
             user_id: 用户 ID
             tenant_id: 租户 ID（超管为 None）
-            roles: 角色列表
+            roles: 权限列表
             is_superadmin: 是否超管
+            role_slugs: 角色标识列表（用于 KB 可见性过滤）
             extra_claims: 额外声明
 
         Returns:
@@ -46,6 +48,7 @@ class JWTService:
         payload = {
             "sub": user_id,
             "roles": roles,
+            "role_slugs": role_slugs or [],
             "is_superadmin": is_superadmin,
             "iat": now,
             "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -92,9 +95,9 @@ class JWTService:
             payload = jwt.decode(token, self._secret, algorithms=[JWT_ALGORITHM])
             return payload
         except jwt.ExpiredSignatureError:
-            raise AuthenticationError(message="令牌已过期")
+            raise AuthenticationError(status_code=401, code=401, message="令牌已过期")
         except jwt.InvalidTokenError as e:
-            raise AuthenticationError(message=f"无效令牌: {e}")
+            raise AuthenticationError(status_code=401, code=401, message=f"无效令牌: {e}")
 
     def refresh(self, refresh_token: str) -> tuple[str, str]:
         """用刷新令牌换取新的访问令牌和刷新令牌
@@ -110,7 +113,7 @@ class JWTService:
         """
         payload = self.decode(refresh_token)
         if payload.get("type") != "refresh":
-            raise AuthenticationError(message="非刷新令牌")
+            raise AuthenticationError(status_code=401, code=401, message="非刷新令牌")
 
         user_id = payload["sub"]
         # 注意：刷新时无法获取原始 tenant_id 和 roles，需要从数据库查询
@@ -126,6 +129,7 @@ class JWTService:
         tenant_id: str | None,
         roles: list[str],
         is_superadmin: bool = False,
+        role_slugs: list[str] | None = None,
     ) -> tuple[str, str]:
         """用刷新令牌换取新的访问令牌（带用户信息）
 
@@ -133,8 +137,9 @@ class JWTService:
             refresh_token: 刷新令牌
             user_id: 用户 ID
             tenant_id: 租户 ID
-            roles: 角色列表
+            roles: 权限列表
             is_superadmin: 是否超管
+            role_slugs: 角色标识列表
 
         Returns:
             (new_access_token, new_refresh_token)
@@ -142,9 +147,9 @@ class JWTService:
         # 验证刷新令牌
         payload = self.decode(refresh_token)
         if payload.get("type") != "refresh":
-            raise AuthenticationError(message="非刷新令牌")
+            raise AuthenticationError(status_code=401, code=401, message="非刷新令牌")
         if payload.get("sub") != user_id:
-            raise AuthenticationError(message="刷新令牌与用户不匹配")
+            raise AuthenticationError(status_code=401, code=401, message="刷新令牌与用户不匹配")
 
         # 签发新令牌
         new_access = self.issue_access_token(
@@ -152,6 +157,7 @@ class JWTService:
             tenant_id=tenant_id,
             roles=roles,
             is_superadmin=is_superadmin,
+            role_slugs=role_slugs,
         )
         new_refresh = self.issue_refresh_token(user_id=user_id)
         return new_access, new_refresh

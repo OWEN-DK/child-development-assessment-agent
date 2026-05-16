@@ -44,11 +44,15 @@ def _init_services(app, session_factory, redis_client):
     from src.service.auth.tenant_service import TenantService
     from src.service.auth.user_service import UserService
     from src.service.auth.role_service import RoleService
+    from src.core.auth.invitation import InvitationService
     from src.service.auth.god_mode_service import GodModeService
     from src.service.knowledge.kb_service import KnowledgeBaseService
     from src.service.knowledge.document_service import DocumentService
     from src.service.knowledge.rebuild_service import RebuildService
     from src.service.knowledge.migration_service import MigrationService
+    from src.service.rag_eval.case_service import TestCaseService
+    from src.service.rag_eval.set_service import TestSetService
+    from src.service.rag_eval.draft_service import DraftService
 
     # Phase 1: 认证与权限
     jwt_service = JWTService(secret_key=settings.jwt_secret)
@@ -60,8 +64,11 @@ def _init_services(app, session_factory, redis_client):
     app.state.role_repo = RoleRepository(session_factory)
     app.state.audit_repo = AuditRepository(session_factory)
 
+    invitation_service = InvitationService(secret_key=settings.jwt_secret)
+    app.state.invitation_service = invitation_service
+
     app.state.tenant_service = TenantService(session_factory)
-    app.state.user_service = UserService(session_factory)
+    app.state.user_service = UserService(session_factory, invitation_service)
     app.state.role_service = RoleService(session_factory)
     app.state.god_mode_service = GodModeService(session_factory, jwt_service, redis_client)
 
@@ -73,7 +80,42 @@ def _init_services(app, session_factory, redis_client):
 
     # Phase 3: 管道引擎
     from src.service.pipeline.pipeline_service import PipelineService
+    from src.service.pipeline.compound_service import CompoundNodeService
     app.state.pipeline_service = PipelineService(session_factory)
+    app.state.compound_service = CompoundNodeService(session_factory)
+
+    # Phase 4: 搜索 API
+    from src.core.pipeline.compiler import PipelineCompiler
+    from src.repository.pipeline.pipeline_repo import PipelineRepository
+    from src.repository.pipeline.version_repo import PipelineVersionRepository
+    from src.repository.search.publish_repo import PublishedEndpointRepository
+    from src.service.search.search_service import SearchService
+    from src.service.search.publish_service import PublishService
+    from src.service.search.rate_limit_service import RateLimitService
+    from src.service.search.search_auth_service import SearchAuthService
+
+    compiler = PipelineCompiler()
+    app.state.search_service = SearchService(compiler)
+    app.state.publish_service = PublishService(session_factory)
+    app.state.rate_limit_service = RateLimitService(redis_client)
+    app.state.search_auth_service = SearchAuthService(jwt_service)
+    app.state.pipeline_repo = PipelineRepository(session_factory)
+    app.state.version_repo = PipelineVersionRepository(session_factory)
+
+    # 动态搜索路由：注入真实依赖（create_app 中已创建空壳并 include_router）
+    publish_repo = PublishedEndpointRepository(session_factory)
+    app.state.dynamic_search_router.configure(
+        search_service=app.state.search_service,
+        auth_service=app.state.search_auth_service,
+        rate_limit_service=app.state.rate_limit_service,
+        publish_repo=publish_repo,
+        pipeline_repo=app.state.pipeline_repo,
+    )
+
+    # Phase 5: RAG 评估
+    app.state.case_service = TestCaseService(session_factory)
+    app.state.set_service = TestSetService(session_factory)
+    app.state.draft_service = DraftService(session_factory)
 
 
 @asynccontextmanager
@@ -105,6 +147,11 @@ async def lifespan(app: FastAPI):
     from src.core.database import async_session_factory
     _init_services(app, async_session_factory, redis_client)
     logger.info("[4/5] Services initialized")
+
+    # 加载动态搜索路由
+    dynamic_router = app.state.dynamic_search_router
+    await dynamic_router.load_all_on_startup()
+    logger.info("[4.5/5] Dynamic search routes loaded")
 
     # 存储 session 工厂供中间件使用
     app.state.db_session_factory = async_session_factory
@@ -196,9 +243,9 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
     app.add_middleware(TenantMiddleware)
 
-    # 4. 占位：限流中间件（Phase 4）
-    # from src.middleware.rate_limit_middleware import RateLimitMiddleware
-    # app.add_middleware(RateLimitMiddleware)
+    # 4. 限流中间件（Phase 4：两层独立限流——端点级 + 用户级）
+    from src.middleware.rate_limit_middleware import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware)
 
     # 5. CORS
     app.add_middleware(
@@ -232,7 +279,11 @@ def create_app() -> FastAPI:
 
     # 管道引擎路由（Phase 3）
     from src.controller.pipeline.pipeline_controller import router as pipeline_router
+    from src.controller.pipeline.node_type_controller import router as node_type_router
+    from src.controller.pipeline.compound_controller import router as compound_router
     app.include_router(pipeline_router)
+    app.include_router(node_type_router)
+    app.include_router(compound_router)
 
     # 知识库路由（Phase 2）
     from src.controller.knowledge.kb_controller import router as kb_router
@@ -242,9 +293,22 @@ def create_app() -> FastAPI:
     app.include_router(document_router)
     app.include_router(rebuild_router)
 
-    # 占位：搜索 API 路由（Phase 4）
-    # from src.controller.search_controller import router as search_router
-    # app.include_router(search_router)
+    # 搜索 API 路由（Phase 4）
+    from src.controller.search.search_controller import router as search_router
+    from src.controller.search.stream_controller import router as stream_router
+    from src.controller.search.publish_controller import router as publish_router
+    app.include_router(search_router)
+    app.include_router(stream_router)
+    app.include_router(publish_router)
+
+    # RAG 评估路由（Phase 5）
+    from src.controller.rag_eval.eval_controller import router as eval_router
+    app.include_router(eval_router)
+    # 动态搜索路由（发布 URL → /search/{url_path}）
+    # 先创建空壳并 include，lifespan 中 configure() 注入依赖 + load_all_on_startup()
+    from src.service.search.dynamic_search_router import DynamicSearchRouter
+    app.state.dynamic_search_router = DynamicSearchRouter()
+    app.include_router(app.state.dynamic_search_router.router)
 
     # ── Prometheus 指标 ─────────────────────────────────
 

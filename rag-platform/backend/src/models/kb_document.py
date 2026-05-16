@@ -1,7 +1,8 @@
 """知识库文档数据模型"""
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, Integer, MEDIUMTEXT, String
+from sqlalchemy import JSON, Column, DateTime, Integer, String
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 
 from src.models.base import Base
 

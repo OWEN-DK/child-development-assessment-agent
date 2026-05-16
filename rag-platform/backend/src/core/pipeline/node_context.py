@@ -12,6 +12,7 @@ class AuthContext:
     tenant_id: str
     user_id: str
     roles: list[str] = field(default_factory=list)
+    role_slugs: list[str] = field(default_factory=list)
     is_superadmin: bool = False
     is_god_mode: bool = False
 

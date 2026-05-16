@@ -1,7 +1,8 @@
 """PipelineCompiler 单元测试"""
 import pytest
 
-from src.core.pipeline.compiler import PipelineCompiler, CompiledPipeline, ExecutionPlan
+from src.core.pipeline.compiler import PipelineCompiler
+from src.core.pipeline.compiled_pipeline import CompiledPipeline, ExecutionPlan
 from src.core.pipeline.exceptions import PipelineCompilationError
 
 
