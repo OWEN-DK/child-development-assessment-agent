@@ -1,10 +1,11 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Spin } from 'antd'
+import AppLayout from '@/components/AppLayout'
 
-// 占位组件
-const Dashboard = () => <div>RAG Platform Dashboard</div>
-const NotFound = () => <div>404 - 页面不存在</div>
+// 登录页 & 首页仪表盘（lazy）
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 
 // Phase 5: 管道编辑器（lazy 加载）
 const PipelineListPage = lazy(() => import('@/features/pipeline/pages/PipelineListPage'))
@@ -31,35 +32,41 @@ function AppRouter() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        {/* 首页 */}
-        <Route path="/" element={<Dashboard />} />
+        {/* 登录页（独立，无 AppLayout 外壳） */}
+        <Route path="/login" element={<LoginPage />} />
 
-        {/* Phase 5: 管道管理 */}
-        <Route path="/pipelines" element={<PipelineListPage />} />
-        <Route path="/pipelines/:id" element={<Navigate to="edit" replace />} />
-        <Route path="/pipelines/:id/edit" element={<PipelineWorkbench />} />
-        <Route path="/pipelines/:id/evaluate" element={<PipelineWorkbench />} />
-        <Route path="/pipelines/:id/publish" element={<PipelineWorkbench />} />
+        {/* AppLayout 外壳包裹所有页面 */}
+        <Route element={<AppLayout />}>
+          {/* 首页 */}
+          <Route index element={<DashboardPage />} />
 
-        {/* Phase 6: 知识库管理 */}
-        <Route path="/knowledge" element={<KnowledgeListPage />} />
-        <Route path="/knowledge/test-data" element={<Navigate to="cases" replace />} />
-        <Route path="/knowledge/test-data/cases" element={<TestDataPage />} />
-        <Route path="/knowledge/test-data/sets" element={<TestDataPage />} />
-        <Route path="/knowledge/test-data/drafts" element={<TestDataPage />} />
-        <Route path="/knowledge/:id" element={<KnowledgeDetailPage />} />
-        <Route path="/knowledge/:id/documents" element={<KnowledgeDetailPage />} />
-        <Route path="/knowledge/:id/chunks" element={<KnowledgeDetailPage />} />
-        <Route path="/knowledge/:id/permissions" element={<KnowledgeDetailPage />} />
-        <Route path="/knowledge/:id/settings" element={<KnowledgeDetailPage />} />
+          {/* Phase 5: 管道管理 */}
+          <Route path="pipelines" element={<PipelineListPage />} />
+          <Route path="pipelines/:id" element={<Navigate to="edit" replace />} />
+          <Route path="pipelines/:id/edit" element={<PipelineWorkbench />} />
+          <Route path="pipelines/:id/evaluate" element={<PipelineWorkbench />} />
+          <Route path="pipelines/:id/publish" element={<PipelineWorkbench />} />
 
-        {/* Phase 9: 管理页面 */}
-        <Route path="/admin/tenants" element={<TenantListPage />} />
-        <Route path="/admin/users" element={<UserListPage />} />
-        <Route path="/admin/roles" element={<RoleListPage />} />
+          {/* Phase 6: 知识库管理 */}
+          <Route path="knowledge" element={<KnowledgeListPage />} />
+          <Route path="knowledge/test-data" element={<Navigate to="cases" replace />} />
+          <Route path="knowledge/test-data/cases" element={<TestDataPage />} />
+          <Route path="knowledge/test-data/sets" element={<TestDataPage />} />
+          <Route path="knowledge/test-data/drafts" element={<TestDataPage />} />
+          <Route path="knowledge/:id" element={<KnowledgeDetailPage />} />
+          <Route path="knowledge/:id/documents" element={<KnowledgeDetailPage />} />
+          <Route path="knowledge/:id/chunks" element={<KnowledgeDetailPage />} />
+          <Route path="knowledge/:id/permissions" element={<KnowledgeDetailPage />} />
+          <Route path="knowledge/:id/settings" element={<KnowledgeDetailPage />} />
 
-        {/* 404 */}
-        <Route path="*" element={<NotFound />} />
+          {/* Phase 9: 管理页面 */}
+          <Route path="admin/tenants" element={<TenantListPage />} />
+          <Route path="admin/users" element={<UserListPage />} />
+          <Route path="admin/roles" element={<RoleListPage />} />
+
+          {/* 404 */}
+          <Route path="*" element={<div>404 - 页面不存在</div>} />
+        </Route>
       </Routes>
     </Suspense>
   )

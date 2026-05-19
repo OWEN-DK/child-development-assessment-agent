@@ -109,5 +109,5 @@ class RagChunkingSettings(BaseSettings):
     )
 
     class Config:
-        env_file = str(BASE_DIR / ".env.dev")
+        env_file = str(BASE_DIR / ".env")
         env_file_encoding = "utf-8"

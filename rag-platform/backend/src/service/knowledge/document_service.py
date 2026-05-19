@@ -99,7 +99,8 @@ class DocumentService:
 
                 # 保存文件
                 doc_id = self._generate_id()
-                storage_dir = os.getenv("RAG_STORAGE_DIR", "./app_data/storage")
+                from src.config import settings
+                storage_dir = settings.rag_storage_dir
                 file_dir = Path(storage_dir) / "documents" / tenant_id / kb_id
                 file_dir.mkdir(parents=True, exist_ok=True)
                 file_path = file_dir / f"{doc_id}{ext}"
@@ -176,7 +177,7 @@ class DocumentService:
                     "chunk_index": i,
                     "content": chunk.content,
                     "token_count": chunk.token_count,
-                    "metadata": chunk.metadata,
+                    "metadata": chunk.chunk_metadata,
                 })
 
             if chunk_records:
@@ -231,19 +232,26 @@ class DocumentService:
             await self.doc_repo.update_parse_status(doc_id, tenant_id, "error", str(e))
 
     def _get_api_key(self, provider: str) -> str:
-        """获取 API Key"""
-        import os
+        """获取 API Key（通过 Settings 统一管理）"""
+        from src.config import settings
+
         key_map = {
-            "dashscope": "DASHSCOPE_API_KEY",
-            "openai": "OPENAI_API_KEY",
+            "dashscope": settings.dashscope_api_key,
+            "openai": settings.openai_api_key,
         }
-        env_key = key_map.get(provider, "")
-        return os.getenv(env_key, "")
+        return key_map.get(provider, "") or ""
 
     def _get_env(self, key: str) -> str:
-        """获取环境变量"""
-        import os
-        return os.getenv(key, "") or None
+        """获取环境变量（通过 Settings 统一管理）"""
+        from src.config import settings
+
+        key_map = {
+            "ES_URL": settings.es_url,
+            "MILVUS_HOST": settings.milvus_host,
+        }
+        if key in key_map:
+            return key_map[key] or None
+        return getattr(settings, key.lower(), None) or None
 
     async def list_documents(
         self,
@@ -292,7 +300,7 @@ class DocumentService:
             parse_status=doc.parse_status,
             error_message=doc.error_message,
             text_content=doc.text_content[:5000] if doc.text_content else None,
-            metadata=doc.metadata,
+            metadata=doc.doc_metadata,
             access_level=doc.access_level,
             doc_acl=doc.doc_acl,
             owner_id=doc.owner_id,
@@ -326,7 +334,8 @@ class DocumentService:
 
         # 删除文件
         try:
-            storage_dir = os.getenv("RAG_STORAGE_DIR", "./app_data/storage")
+            from src.config import settings
+            storage_dir = settings.rag_storage_dir
             file_dir = Path(storage_dir) / "documents" / tenant_id / kb_id
             for f in file_dir.glob(f"{doc_id}.*"):
                 f.unlink()

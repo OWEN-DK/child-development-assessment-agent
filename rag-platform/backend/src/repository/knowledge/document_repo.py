@@ -101,9 +101,9 @@ class DocumentRepository(BaseRepository[KbDocument]):
             result = await session.execute(stmt)
             docs = result.scalars().all()
             for doc in docs:
-                if doc.metadata is None:
-                    doc.metadata = {}
-                doc.metadata["frozen"] = True
+                if doc.doc_metadata is None:
+                    doc.doc_metadata = {}
+                doc.doc_metadata["frozen"] = True
             await session.commit()
 
     async def unmark_frozen(self, doc_ids: list[str], tenant_id: str) -> None:
@@ -116,6 +116,6 @@ class DocumentRepository(BaseRepository[KbDocument]):
             result = await session.execute(stmt)
             docs = result.scalars().all()
             for doc in docs:
-                if doc.metadata and "frozen" in doc.metadata:
-                    del doc.metadata["frozen"]
+                if doc.doc_metadata and "frozen" in doc.doc_metadata:
+                    del doc.doc_metadata["frozen"]
             await session.commit()

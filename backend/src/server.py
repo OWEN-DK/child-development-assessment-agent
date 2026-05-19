@@ -32,31 +32,38 @@ async def lifespan(app: FastAPI):
     logger.info("Application startup begins")
     logger.info("=" * 60)
 
+    # 自动创建数据库表（幂等操作，已存在的表跳过）
+    import src.models  # noqa: F811 — 确保所有模型注册到 Base.metadata
+    from src.core.database import Base, engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("[1/6] Database tables auto-created")
+
     # 启动 LLM 日志收集器
     LLMLogCollector.start()
-    logger.info("[1/5] LLMLogCollector started")
+    logger.info("[2/6] LLMLogCollector started")
 
     # 启动 TraceWriter 异步队列
     trace_writer = get_trace_writer()
     await trace_writer.start()
-    logger.info("[2/5] TraceWriter started")
+    logger.info("[3/6] TraceWriter started")
 
     # 初始化默认提示词（幂等操作，已存在则跳过）
     from src.core.prompt_impl.initializer import init_default_prompts
 
     await init_default_prompts()
-    logger.info("[3/5] Default prompts initialized")
+    logger.info("[4/6] Default prompts initialized")
 
     # 启动定时任务调度器
     start_scheduler()
-    logger.info("[4/5] APScheduler started")
+    logger.info("[5/6] APScheduler started")
 
     # 初始化配置热重载缓存
     try:
         redis_client = RedisClient.get_client()
         config_cache = ConfigCache.get_instance()
         await config_cache.initialize(redis_client)
-        logger.info("[5/5] ConfigCache initialized with hot-reload")
+        logger.info("[6/6] ConfigCache initialized with hot-reload")
     except Exception as e:
         logger.warning(f"ConfigCache 初始化失败，热重载未启用: {e}")
 

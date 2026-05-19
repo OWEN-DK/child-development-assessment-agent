@@ -5,7 +5,6 @@
 """
 import asyncio
 import json
-import os
 from typing import Any, Optional
 
 import httpx
@@ -61,14 +60,16 @@ def _detect_provider(model: str) -> str:
 
 
 def _get_api_key(provider: str) -> str:
-    """获取 API Key"""
+    """获取 API Key（通过 Settings 统一管理）"""
+    from src.config import settings
+
     key_map = {
-        "dashscope": "DASHSCOPE_API_KEY",
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
+        "dashscope": settings.dashscope_api_key,
+        "openai": settings.openai_api_key,
+        "anthropic": settings.anthropic_api_key,
+        "deepseek": settings.deepseek_api_key,
     }
-    return os.getenv(key_map.get(provider, ""), "")
+    return key_map.get(provider, "")
 
 
 async def _call_dashscope(
@@ -111,7 +112,12 @@ async def _call_openai(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+    from src.config import settings
+
+    base_url = (
+        settings.llm_providers.get("openai", None)
+        and settings.llm_providers["openai"].base_url
+    ) or "https://api.openai.com"
 
     async with httpx.AsyncClient() as client:
         response = await client.post(

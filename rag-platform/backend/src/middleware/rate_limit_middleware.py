@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.search.rate_limit import RateLimitResult
 from src.utils.logger import logger
 
@@ -112,7 +112,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "limit_level": limit_level,
                     "reset_after_ms": result.reset_after_ms,
                 },
-            ).model_dump(),
+            ),
             headers={
                 "Retry-After": str(result.reset_after_ms // 1000 + 1),
                 "X-RateLimit-Remaining": str(result.remaining),

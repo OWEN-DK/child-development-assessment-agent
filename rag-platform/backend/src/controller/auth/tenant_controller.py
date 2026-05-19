@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.auth.tenant import TenantCreate, TenantUpdate
 from src.schemas.auth.god_mode import GodModeEnter, GodModeExtend
 from src.service.auth.tenant_service import TenantService
@@ -14,7 +14,7 @@ from src.utils.logger import logger
 router = APIRouter(prefix="/api/v1/admin/tenants", tags=["租户管理"])
 
 
-@router.post("/")
+@router.post("")
 async def create_tenant(request: Request, data: TenantCreate):
     """创建租户"""
     tenant_service: TenantService = request.app.state.tenant_service
@@ -24,7 +24,7 @@ async def create_tenant(request: Request, data: TenantCreate):
     return APIResponse.success(data=result.model_dump())
 
 
-@router.get("/")
+@router.get("")
 async def list_tenants(request: Request, skip: int = 0, limit: int = 100):
     """列出所有租户"""
     tenant_service: TenantService = request.app.state.tenant_service

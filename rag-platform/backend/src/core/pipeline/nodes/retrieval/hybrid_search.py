@@ -3,7 +3,6 @@
 BM25 + 向量并行检索 → RRF 融合。
 """
 import asyncio
-import os
 from typing import Any
 
 from src.core.pipeline.base_node import BaseNodeExecutor
@@ -92,9 +91,11 @@ class HybridSearchExecutor(BaseNodeExecutor):
         from src.core.knowledge_base.vector_store.factory import VectorStoreAdapterFactory
         from src.core.knowledge_base.acl_filter import get_acl_filter_builder
 
+        from src.config import settings
+
         embedding_config = context.config.get("embedding_config", {})
         provider = embedding_config.get("provider", "dashscope")
-        api_key = os.getenv(f"{provider.upper()}_API_KEY", "")
+        api_key = (settings.llm_providers.get(provider) and settings.llm_providers[provider].api_key) or ""
         dimension = embedding_config.get("dimension", 1024)
 
         engine = EmbeddingEngine.from_config(provider=provider, api_key=api_key, dimension=dimension)
@@ -105,7 +106,7 @@ class HybridSearchExecutor(BaseNodeExecutor):
         filter_condition = builder.build_filter(context.auth.roles)
 
         adapter = VectorStoreAdapterFactory.get_adapter(
-            backend_type, es_url=os.getenv("ES_URL"), milvus_host=os.getenv("MILVUS_HOST")
+            backend_type, es_url=settings.es_url or None, milvus_host=settings.milvus_host or None
         )
         return await adapter.search(kb_id, tenant_id, query_embedding, top_k, filter_condition or None)
 

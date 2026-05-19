@@ -7,7 +7,12 @@ from collections import defaultdict
 from typing import Any, Callable
 
 from src.core.events import BaseEvent
-from src.utils.logger import logger
+
+
+def _get_logger():
+    """延迟导入 logger 避免循环引用"""
+    from src.utils.logger import logger
+    return logger
 
 
 class EventBus:
@@ -34,7 +39,7 @@ class EventBus:
             try:
                 callback(event)
             except Exception as e:
-                logger.error(f"事件回调失败 ({event_type.__name__}): {e}")
+                _get_logger().error(f"事件回调失败 ({event_type.__name__}): {e}")
 
 
 event_bus = EventBus()

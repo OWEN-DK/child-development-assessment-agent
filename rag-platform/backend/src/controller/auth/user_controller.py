@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.auth.user import UserInvite, UserAcceptInvitation, UserUpdate
 from src.service.auth.user_service import UserService
 from src.utils.logger import logger
@@ -12,7 +12,7 @@ from src.utils.logger import logger
 router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
 
 
-@router.get("/")
+@router.get("")
 async def list_users(request: Request, skip: int = 0, limit: int = 100):
     """列出用户"""
     user_service: UserService = request.app.state.user_service

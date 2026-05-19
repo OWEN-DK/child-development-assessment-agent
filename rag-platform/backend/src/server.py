@@ -315,31 +315,49 @@ def create_app() -> FastAPI:
     metrics_app = make_asgi_app()
     app.mount("/metrics", metrics_app)
 
-    # ── SPA 回退路由 ────────────────────────────────────
+    # ── SPA 回退路由（仅生产模式） ────────────────────────
 
     frontend_dist_dir = os.path.join(os.path.dirname(__file__), "../../frontend/dist")
     spa_enabled = os.path.isfile(os.path.join(frontend_dist_dir, "index.html"))
 
-    @app.get("/{full_path:path}")
-    async def spa_fallback(full_path: str):
-        """SPA 回退：非 API 路径返回 index.html"""
-        if not spa_enabled:
+    if spa_enabled:
+
+        @app.get("/{full_path:path}")
+        async def spa_fallback(full_path: str):
+            """SPA 回退：非 API 路径返回 index.html"""
+            if full_path.startswith(
+                ("api/", "docs", "openapi.json", "metrics", "health", "search/")
+            ):
+                raise ResourceNotFoundException(message="页面不存在")
+
+            file_path = os.path.join(frontend_dist_dir, full_path)
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+
+            index_path = os.path.join(frontend_dist_dir, "index.html")
+            if os.path.isfile(index_path):
+                return FileResponse(index_path)
+
             raise ResourceNotFoundException(message="页面不存在")
-
-        if full_path.startswith(
-            ("api/", "docs", "openapi.json", "metrics", "health", "search/")
-        ):
-            raise ResourceNotFoundException(message="页面不存在")
-
-        file_path = os.path.join(frontend_dist_dir, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-
-        index_path = os.path.join(frontend_dist_dir, "index.html")
-        if os.path.isfile(index_path):
-            return FileResponse(index_path)
-
-        raise ResourceNotFoundException(message="页面不存在")
 
     logger.info("RAG Platform initialized successfully")
     return app
+
+
+def main():
+    import uvicorn
+
+    workers = 1 if settings.app_reload else settings.app_workers
+
+    uvicorn.run(
+        "src.server:create_app",
+        host=settings.app_host,
+        port=int(settings.app_port),
+        reload=settings.app_reload,
+        workers=workers,
+        factory=True,
+    )
+
+
+if __name__ == "__main__":
+    main()

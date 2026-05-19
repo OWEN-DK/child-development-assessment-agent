@@ -96,7 +96,7 @@ def start_config_watcher() -> Optional[Observer]:
     observer = Observer()
     config_dir = Path(__file__).parent.parent
     observer.schedule(event_handler, str(config_dir), recursive=False)
-    env_file = BASE_DIR / ".env.dev"
+    env_file = BASE_DIR / ".env"
     if env_file.exists():
         observer.schedule(event_handler, str(env_file), recursive=False)
     observer.start()

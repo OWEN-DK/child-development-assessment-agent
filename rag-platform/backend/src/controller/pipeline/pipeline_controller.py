@@ -25,7 +25,7 @@ async def list_node_types():
     return APIResponse(data=result.model_dump())
 
 
-@router.post("/")
+@router.post("")
 async def create_pipeline(request: Request, data: PipelineCreate):
     """创建管道"""
     service: PipelineService = request.app.state.pipeline_service
@@ -36,7 +36,7 @@ async def create_pipeline(request: Request, data: PipelineCreate):
     return APIResponse.success(data=result.model_dump())
 
 
-@router.get("/")
+@router.get("")
 async def list_pipelines(
     request: Request,
     status: Optional[str] = Query(default=None),

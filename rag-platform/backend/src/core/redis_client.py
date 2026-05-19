@@ -23,7 +23,7 @@ class RedisClient:
         if cls._instance is not None:
             return cls._instance
 
-        from src.config import settings
+        from src.config import redis_settings
 
         retry = Retry(
             backoff=ExponentialBackoff(cap=3, base=0.5),
@@ -36,10 +36,10 @@ class RedisClient:
             ),
         )
         cls._pool = ConnectionPool.from_url(
-            settings.redis_url,
-            max_connections=10,
-            socket_timeout=5,
-            socket_connect_timeout=5,
+            redis_settings.redis_url,
+            max_connections=redis_settings.redis_max_connections,
+            socket_timeout=redis_settings.redis_socket_timeout,
+            socket_connect_timeout=redis_settings.redis_socket_connect_timeout,
             decode_responses=True,
             retry=retry,
             retry_on_timeout=True,

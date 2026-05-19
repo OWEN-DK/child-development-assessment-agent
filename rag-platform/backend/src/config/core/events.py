@@ -8,11 +8,12 @@ from src.core.events import BaseEvent
 
 class ConfigChangedEvent(BaseEvent):
     """配置变更事件"""
-    def __init__(self, config_key: str = "", old_value=None, new_value=None):
+    def __init__(self, config_key: str = "", old_value=None, new_value=None, changed_keys=None):
         super().__init__()
         self.config_key = config_key
         self.old_value = old_value
         self.new_value = new_value
+        self.changed_keys = changed_keys or ([config_key] if config_key else [])
 
 
 class ConfigRollbackEvent(BaseEvent):

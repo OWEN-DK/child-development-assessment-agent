@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.auth.role import RoleCreate, RoleUpdate
 from src.service.auth.role_service import RoleService
 from src.utils.logger import logger
@@ -12,7 +12,7 @@ from src.utils.logger import logger
 router = APIRouter(prefix="/api/v1/roles", tags=["角色管理"])
 
 
-@router.get("/")
+@router.get("")
 async def list_roles(request: Request, skip: int = 0, limit: int = 100):
     """列出角色"""
     role_service: RoleService = request.app.state.role_service
@@ -22,7 +22,7 @@ async def list_roles(request: Request, skip: int = 0, limit: int = 100):
     return APIResponse.success(data=result.model_dump())
 
 
-@router.post("/")
+@router.post("")
 async def create_role(request: Request, data: RoleCreate):
     """创建角色"""
     role_service: RoleService = request.app.state.role_service

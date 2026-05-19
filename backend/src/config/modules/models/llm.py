@@ -48,7 +48,7 @@ class LLMSettings(BaseSettings):
     """LLM 多提供商统一配置（向后兼容）"""
 
     model_config = SettingsConfigDict(
-        env_file=str(BASE_DIR / ".env.dev"),
+        env_file=str(BASE_DIR / ".env"),
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",

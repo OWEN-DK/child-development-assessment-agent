@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 
 router = APIRouter(tags=["健康检查"])
 

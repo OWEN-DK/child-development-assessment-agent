@@ -112,7 +112,7 @@ class RebuildService:
                         "chunk_index": j,
                         "content": chunk.content,
                         "token_count": chunk.token_count,
-                        "metadata": chunk.metadata,
+                        "metadata": chunk.chunk_metadata,
                     })
 
                 if chunk_records:

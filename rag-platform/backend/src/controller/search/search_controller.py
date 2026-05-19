@@ -15,7 +15,7 @@ from src.utils.logger import logger
 router = APIRouter(prefix="/api/v1/search", tags=["搜索"])
 
 
-@router.post("/")
+@router.post("")
 async def generic_search(request: Request, data: GenericSearchRequest):
     """通用端点同步搜索"""
     search_service: SearchService = request.app.state.search_service

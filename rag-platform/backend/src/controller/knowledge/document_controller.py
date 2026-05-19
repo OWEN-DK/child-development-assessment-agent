@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.knowledge.document import UpdateDocAclReq
 from src.service.knowledge.document_service import DocumentService
 from src.utils.logger import logger
@@ -17,7 +17,7 @@ router = APIRouter(
 )
 
 
-@router.post("/")
+@router.post("")
 async def upload_documents(
     request: Request,
     kb_id: str,
@@ -38,7 +38,7 @@ async def upload_documents(
     return APIResponse.success(data=result.model_dump())
 
 
-@router.get("/")
+@router.get("")
 async def list_documents(
     request: Request,
     kb_id: str,

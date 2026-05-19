@@ -16,5 +16,5 @@ class KbChunk(Base):
     chunk_index = Column(Integer, nullable=False, comment="分块序号")
     content = Column(MEDIUMTEXT, nullable=False, comment="分块内容")
     token_count = Column(Integer, comment="Token 数量")
-    metadata = Column(JSON, comment="分块元数据")
+    chunk_metadata = Column("metadata", JSON, comment="分块元数据")
     vector_id = Column(String(100), comment="向量存储中的 ID")

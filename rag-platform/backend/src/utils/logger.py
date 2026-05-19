@@ -6,7 +6,13 @@ from pathlib import Path
 
 from loguru import logger
 
-from src.config import settings as log_config
+
+def _get_log_config():
+    """延迟导入配置避免循环引用"""
+    from src.config import settings
+
+    return settings
+
 
 # TRACE_ID 上下文变量
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
@@ -50,7 +56,8 @@ class InterceptHandler(logging.Handler):
         ).opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 # 确保日志目录存在
-LOG_PATH = Path(log_config.log_file).parent
+_log_cfg = _get_log_config()
+LOG_PATH = Path(_log_cfg.log_file).parent
 LOG_PATH.mkdir(parents=True, exist_ok=True)
 
 # 移除默认的控制台处理器（避免重复输出）
@@ -60,14 +67,14 @@ logger.remove()
 logger.add(
     sys.stderr,
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <magenta>{extra[trace_id]:<16}</magenta> | <level>{level: <8}</level> | <cyan>{extra[name]}</cyan>:<cyan>{extra[function]}</cyan>:<cyan>{extra[line]}</cyan> - <level>{message}</level>",
-    level=log_config.log_level,
+    level=_log_cfg.log_level,
     colorize=True,
     filter=lambda record: "name" in record["extra"],
 )
 logger.add(
     sys.stderr,
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <magenta>{extra[trace_id]:<16}</magenta> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level=log_config.log_level,
+    level=_log_cfg.log_level,
     colorize=True,
     filter=lambda record: "name" not in record["extra"],
 )
@@ -75,7 +82,7 @@ logger.add(
 # 添加文件日志（按天切割 + 保留7天 + 压缩）
 logger.add(
     LOG_PATH.joinpath("{time:YYYY-MM-DD}.log"),
-    level=log_config.log_level,
+    level=_log_cfg.log_level,
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {extra[trace_id]:<16} | {level: <8} | {extra[name]}:{extra[function]}:{extra[line]} - {message}",
     rotation="00:00",  # 每天零点切割
     retention="7 days",  # 保留7天
@@ -87,7 +94,7 @@ logger.add(
 )
 logger.add(
     LOG_PATH.joinpath("{time:YYYY-MM-DD}.log"),
-    level=log_config.log_level,
+    level=_log_cfg.log_level,
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {extra[trace_id]:<16} | {level: <8} | {name}:{function}:{line} - {message}",
     rotation="00:00",  # 每天零点切割
     retention="7 days",  # 保留7天

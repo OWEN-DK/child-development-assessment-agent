@@ -122,3 +122,4 @@ chroma/
 *.bin
 .worktrees/
 .opencode/
+.playwright-mcp

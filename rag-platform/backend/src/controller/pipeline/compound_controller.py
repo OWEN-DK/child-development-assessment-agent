@@ -21,7 +21,7 @@ def _get_auth(request: Request):
     return user_id, tenant_id
 
 
-@router.get("/")
+@router.get("")
 async def list_compound_nodes(request: Request):
     """列出当前租户的所有复合节点"""
     user_id, tenant_id = _get_auth(request)
@@ -30,7 +30,7 @@ async def list_compound_nodes(request: Request):
     return APIResponse.success([n.model_dump() for n in nodes])
 
 
-@router.post("/")
+@router.post("")
 async def create_compound_node(data: CompoundNodeCreate, request: Request):
     """创建复合节点"""
     user_id, tenant_id = _get_auth(request)

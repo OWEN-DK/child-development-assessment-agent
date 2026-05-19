@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.knowledge.knowledge_base import (
     CreateKnowledgeBaseReq,
     MigrateBackendReq,
@@ -20,7 +20,7 @@ from src.utils.logger import logger
 router = APIRouter(prefix="/api/v1/knowledge-bases", tags=["知识库管理"])
 
 
-@router.post("/")
+@router.post("")
 async def create_knowledge_base(request: Request, data: CreateKnowledgeBaseReq):
     """创建知识库"""
     service: KnowledgeBaseService = request.app.state.kb_service
@@ -31,7 +31,7 @@ async def create_knowledge_base(request: Request, data: CreateKnowledgeBaseReq):
     return APIResponse.success(data=result.model_dump())
 
 
-@router.get("/")
+@router.get("")
 async def list_knowledge_bases(
     request: Request,
     keyword: Optional[str] = Query(default=None, description="名称搜索"),

@@ -87,7 +87,8 @@ rag-platform/
 
 ## 常用命令
 
-- **后端**: `cd backend && uv sync && uv run uvicorn src.server:create_app --host 0.0.0.0 --port 51002 --factory`
+- **后端启动**: `cd backend && uv run start`（等价于 `uv run python src/server.py`）
+- **后端开发**: `cd backend && uv run uvicorn src.server:create_app --host 0.0.0.0 --port 51002 --reload --factory`
 - **前端**: `cd frontend && npm install && npm run dev`
 - **Docker**: `docker compose up -d`
 

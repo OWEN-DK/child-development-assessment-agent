@@ -10,7 +10,6 @@
 
 任一步骤失败则整体回滚（DB 事务 + 文件系统清理）。
 """
-import os
 import uuid
 from pathlib import Path
 
@@ -61,7 +60,8 @@ class ProvisioningService:
                 logger.info(f"[1/6] 租户创建成功: {data.name} ({data.slug})")
 
                 # 2. 创建存储目录（事务外，失败需手动清理）
-                storage_base = os.getenv("RAG_STORAGE_DIR", "./app_data/storage")
+                from src.config import settings
+                storage_base = settings.rag_storage_dir
                 storage_path = Path(storage_base) / data.slug
                 try:
                     for subdir in ["documents", "chroma", "bm25", "exports"]:

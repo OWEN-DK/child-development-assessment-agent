@@ -67,7 +67,7 @@ reranker = [
 ]
 
 [project.scripts]
-start = "src.server:create_app"
+start = "src.server:main"
 
 [build-system]
 requires = ["hatchling"]

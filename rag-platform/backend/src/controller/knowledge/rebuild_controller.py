@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.service.knowledge.rebuild_service import RebuildService
 from src.utils.logger import logger
 
@@ -15,7 +15,7 @@ router = APIRouter(
 )
 
 
-@router.post("/")
+@router.post("")
 async def trigger_rebuild(request: Request, kb_id: str):
     """触发重建"""
     service: RebuildService = request.app.state.rebuild_service

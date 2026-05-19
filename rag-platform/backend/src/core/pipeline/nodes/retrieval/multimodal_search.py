@@ -2,7 +2,6 @@
 
 文本/图片/表格多模态检索 → 融合。
 """
-import os
 from typing import Any
 
 from src.core.pipeline.base_node import BaseNodeExecutor
@@ -30,12 +29,14 @@ class MultimodalSearchExecutor(BaseNodeExecutor):
         # 简化实现：仅使用文本检索
         # 实际实现应分别检索文本/图片/表格，然后融合
         try:
+            from src.config import settings
+
             from src.core.knowledge_base.embedding.engine import EmbeddingEngine
             from src.core.knowledge_base.vector_store.factory import VectorStoreAdapterFactory
 
             embedding_config = context.config.get("embedding_config", {})
             provider = embedding_config.get("provider", "dashscope")
-            api_key = os.getenv(f"{provider.upper()}_API_KEY", "")
+            api_key = (settings.llm_providers.get(provider) and settings.llm_providers[provider].api_key) or ""
             dimension = embedding_config.get("dimension", 1024)
 
             engine = EmbeddingEngine.from_config(provider=provider, api_key=api_key, dimension=dimension)
@@ -43,7 +44,7 @@ class MultimodalSearchExecutor(BaseNodeExecutor):
 
             backend_type = context.config.get("vector_backend", "chroma")
             adapter = VectorStoreAdapterFactory.get_adapter(
-                backend_type, es_url=os.getenv("ES_URL"), milvus_host=os.getenv("MILVUS_HOST")
+                backend_type, es_url=settings.es_url or None, milvus_host=settings.milvus_host or None
             )
 
             kb_id = context.knowledge_base_id or context.config.get("knowledge_base_id", "")

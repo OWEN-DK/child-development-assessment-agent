@@ -9,15 +9,15 @@ from src.utils.logger import logger
 
 def _create_engine():
     """创建异步数据库引擎"""
-    from src.config import settings
+    from src.config import database_settings
 
     return create_async_engine(
-        settings.database_url,
+        database_settings.database_url,
         echo=False,
-        pool_size=10,
-        max_overflow=20,
-        pool_timeout=30,
-        pool_recycle=3600,
+        pool_size=database_settings.pool_size,
+        max_overflow=database_settings.max_overflow,
+        pool_timeout=database_settings.pool_timeout,
+        pool_recycle=database_settings.pool_recycle,
         pool_pre_ping=True,
         pool_use_lifo=True,
     )
@@ -30,6 +30,9 @@ async_session_factory = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+# 兼容旧模块引用（monitoring_service 等使用 db_session_factory）
+db_session_factory = async_session_factory
 
 
 async def get_pool_status() -> dict:

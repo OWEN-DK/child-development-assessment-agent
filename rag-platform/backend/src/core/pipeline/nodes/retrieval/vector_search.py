@@ -3,7 +3,6 @@
 向量相似度检索，支持 ACL 过滤。
 集成 EmbeddingEngine + VectorStoreAdapter。
 """
-import os
 from typing import Any
 
 from src.core.pipeline.base_node import BaseNodeExecutor
@@ -29,11 +28,13 @@ class VectorSearchExecutor(BaseNodeExecutor):
         similarity_threshold = context.config.get("similarity_threshold", 0.0)
 
         try:
+            from src.config import settings
+
             # 1. 获取查询向量
             from src.core.knowledge_base.embedding.engine import EmbeddingEngine
             embedding_config = context.config.get("embedding_config", {})
             provider = embedding_config.get("provider", "dashscope")
-            api_key = os.getenv(f"{provider.upper()}_API_KEY", "")
+            api_key = (settings.llm_providers.get(provider) and settings.llm_providers[provider].api_key) or ""
             dimension = embedding_config.get("dimension", 1024)
 
             engine = EmbeddingEngine.from_config(
@@ -51,8 +52,8 @@ class VectorSearchExecutor(BaseNodeExecutor):
             from src.core.knowledge_base.vector_store.factory import VectorStoreAdapterFactory
             adapter = VectorStoreAdapterFactory.get_adapter(
                 backend_type,
-                es_url=os.getenv("ES_URL"),
-                milvus_host=os.getenv("MILVUS_HOST"),
+                es_url=settings.es_url or None,
+                milvus_host=settings.milvus_host or None,
             )
 
             kb_id = context.knowledge_base_id or context.config.get("knowledge_base_id", "")

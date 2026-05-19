@@ -22,7 +22,7 @@ class KbDocument(Base):
     parse_status = Column(String(20), nullable=False, default="pending", index=True, comment="解析状态：pending/parsing/parsed/error")
     error_message = Column(String(500), comment="错误信息")
     text_content = Column(MEDIUMTEXT, comment="提取的文本内容")
-    metadata = Column(JSON, comment="文档元数据")
+    doc_metadata = Column("metadata", JSON, comment="文档元数据")
     access_level = Column(String(20), nullable=False, default="inherit", comment="权限级别：inherit/restricted")
     doc_acl = Column(JSON, comment="文档 ACL 角色列表")
     owner_id = Column(String(64), nullable=False, comment="上传者ID")

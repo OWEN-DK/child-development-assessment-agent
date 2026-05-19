@@ -301,14 +301,14 @@ class KnowledgeBaseService:
         return str(uuid.uuid4()).replace("-", "")[:24]
 
     def _get_es_url(self) -> Optional[str]:
-        """获取 ES URL"""
-        import os
-        return os.getenv("ES_URL") or None
+        """获取 ES URL（通过 Settings 统一管理）"""
+        from src.config import settings
+        return settings.es_url or None
 
     def _get_milvus_host(self) -> Optional[str]:
-        """获取 Milvus Host"""
-        import os
-        return os.getenv("MILVUS_HOST") or None
+        """获取 Milvus Host（通过 Settings 统一管理）"""
+        from src.config import settings
+        return settings.milvus_host or None
 
     def _to_summary(self, kb: KnowledgeBase) -> KnowledgeBaseSummary:
         """转换为摘要模型"""

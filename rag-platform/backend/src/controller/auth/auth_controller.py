@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Request
 
-from src.api.json_response import APIResponse
+from src.schemas.common import APIResponse
 from src.schemas.auth.auth import LoginRequest, LoginResponse, TokenRefresh, TokenRefreshResponse, SwitchRoleRequest
 from src.core.auth.password import verify_password
 from src.core.auth.jwt_service import JWTService
