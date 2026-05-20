@@ -8,6 +8,7 @@ from injector import singleton
 from src.config.core.manager import ConfigManager
 from src.config.core.events import ConfigChangedEvent
 from src.core.event_bus import event_bus
+from src.utils.exceptions import InvalidParamsException, ServiceUnavailableException
 from src.utils.logger import logger
 
 
@@ -40,7 +41,7 @@ class RerankerFactory:
             ValueError: 不支持的提供商
         """
         if self._shutdown:
-            raise RuntimeError("Factory is shutting down")
+            raise ServiceUnavailableException(message="Factory is shutting down")
 
         cache_key = "reranker:default"
 
@@ -49,7 +50,7 @@ class RerankerFactory:
                 self._cache_lock.acquire(), timeout=self.LOCK_TIMEOUT
             )
         except asyncio.TimeoutError:
-            raise RuntimeError("Failed to acquire lock for reranker")
+            raise ServiceUnavailableException(message="Failed to acquire lock for reranker")
 
         try:
             if self._instance:
@@ -73,7 +74,7 @@ class RerankerFactory:
                     self._load_cross_encoder, model
                 )
             else:
-                raise ValueError(f"Unsupported reranker provider: {provider}")
+                raise InvalidParamsException(message=f"Unsupported reranker provider: {provider}")
 
             self._active_requests[cache_key] = 1
             logger.info(f"Created reranker instance, provider {provider}")

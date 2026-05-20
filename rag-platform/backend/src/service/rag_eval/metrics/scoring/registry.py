@@ -2,6 +2,7 @@
 
 from src.core.config.cache import ConfigCache
 from src.service.rag_eval.metrics.scoring.base import MetricCalculator
+from src.utils.exceptions import DuplicateResourceException
 
 
 class MetricRegistry:
@@ -21,7 +22,7 @@ class MetricRegistry:
         layer = calculator.layer
 
         if name in self._calculators:
-            raise ValueError(f"指标计算器已注册: {name}")
+            raise DuplicateResourceException(message=f"指标计算器已注册: {name}")
 
         self._calculators[name] = calculator
         if layer not in self._by_layer:

@@ -23,6 +23,8 @@ from src.middleware.exception_handler import (
     app_exception_handler,
     global_exception_handler,
     validation_exception_handler,
+    value_error_handler,
+    key_error_handler,
 )
 from src.api.json_response import UtcJsonResponse
 from src.middleware.response_wrapper import ResponseWrapperMiddleware
@@ -259,6 +261,8 @@ def create_app() -> FastAPI:
 
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(ValueError, value_error_handler)
+    app.add_exception_handler(KeyError, key_error_handler)
     app.add_exception_handler(Exception, global_exception_handler)
 
     # ── 路由注册 ────────────────────────────────────────

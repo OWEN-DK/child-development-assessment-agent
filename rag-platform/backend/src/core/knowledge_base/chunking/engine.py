@@ -4,6 +4,8 @@
 """
 from typing import Any
 
+from src.utils.exceptions import InvalidParamsException
+
 from src.core.knowledge_base.chunking.strategies import (
     BaseChunkingStrategy,
     Chunk,
@@ -41,7 +43,7 @@ class ChunkingEngine:
         strategy_type = strategy_config.get("type", "fixed_size")
         strategy = self._strategies.get(strategy_type)
         if not strategy:
-            raise ValueError(f"不支持的分块策略: {strategy_type}")
+            raise InvalidParamsException(message=f"不支持的分块策略: {strategy_type}")
 
         chunks = strategy.chunk(text, strategy_config)
         return self._apply_constraints(chunks, strategy_config)

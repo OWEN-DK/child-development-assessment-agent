@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.models.rag_eval.config_version import EvalConfigChangeSet, EvalConfigVersion
 from src.repository.base import BaseRepository
+from src.utils.exceptions import ResourceNotFoundException
 
 
 class ConfigVersionRepository(BaseRepository[EvalConfigVersion]):
@@ -83,7 +84,7 @@ class ConfigChangeSetRepository(BaseRepository[EvalConfigChangeSet]):
             result = await session.execute(stmt)
             change_set = result.scalar_one_or_none()
             if change_set is None:
-                raise ValueError(f"EvalConfigChangeSet with id={id} not found")
+                raise ResourceNotFoundException(message=f"EvalConfigChangeSet not found: id={id}")
             change_set.status = status
             if reason is not None:
                 change_set.rollback_reason = reason

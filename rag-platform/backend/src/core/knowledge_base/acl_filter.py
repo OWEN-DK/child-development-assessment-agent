@@ -6,6 +6,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from src.utils.exceptions import InvalidParamsException
+
 
 class ACLFilterBuilder(ABC):
     """ACL 过滤器构建器基类"""
@@ -98,5 +100,5 @@ def get_acl_filter_builder(backend_type: str) -> ACLFilterBuilder:
     }
     builder_class = builders.get(backend_type)
     if not builder_class:
-        raise ValueError(f"不支持的向量后端: {backend_type}")
+        raise InvalidParamsException(message=f"不支持的向量后端: {backend_type}")
     return builder_class()

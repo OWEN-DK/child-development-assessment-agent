@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 from src.core.auth.exceptions import MissingTenantContextError
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 
 ModelType = TypeVar("ModelType", bound=DeclarativeBase)
 
@@ -118,7 +119,7 @@ class BaseRepository(Generic[ModelType]):
             result = await session.execute(stmt)
             db_obj = result.scalar_one_or_none()
             if db_obj is None:
-                raise ValueError(f"{self.model.__name__} with id={obj_id} not found")
+                raise ResourceNotFoundException(message=f"{self.model.__name__} not found: id={obj_id}")
             for field, value in obj_data.items():
                 setattr(db_obj, field, value)
             await session.commit()
@@ -151,9 +152,7 @@ class BaseRepository(Generic[ModelType]):
             stmt = self._add_tenant_filter(stmt, tenant_id)
             for field, value in filters.items():
                 if not hasattr(self.model, field):
-                    raise ValueError(
-                        f"Invalid filter field '{field}' for model {self.model.__name__}"
-                    )
+                    raise InvalidParamsException(message=f"Invalid filter field '{field}' for model {self.model.__name__}")
                 stmt = stmt.where(getattr(self.model, field) == value)
             if order_by is not None:
                 stmt = stmt.order_by(order_by)
@@ -168,9 +167,7 @@ class BaseRepository(Generic[ModelType]):
             stmt = self._add_tenant_filter(stmt, tenant_id)
             for field, value in filters.items():
                 if not hasattr(self.model, field):
-                    raise ValueError(
-                        f"Invalid filter field '{field}' for model {self.model.__name__}"
-                    )
+                    raise InvalidParamsException(message=f"Invalid filter field '{field}' for model {self.model.__name__}")
                 stmt = stmt.where(getattr(self.model, field) == value)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()

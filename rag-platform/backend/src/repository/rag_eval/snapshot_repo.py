@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.models.rag_eval.snapshot import KnowledgeSnapshot
 from src.repository.base import BaseRepository
+from src.utils.exceptions import ResourceNotFoundException
 
 
 class SnapshotRepository(BaseRepository[KnowledgeSnapshot]):
@@ -73,7 +74,7 @@ class SnapshotRepository(BaseRepository[KnowledgeSnapshot]):
             result = await session.execute(stmt)
             snapshot = result.scalar_one_or_none()
             if snapshot is None:
-                raise ValueError(f"KnowledgeSnapshot with id={id} not found")
+                raise ResourceNotFoundException(message=f"KnowledgeSnapshot not found: id={id}")
             snapshot.status = status
             await session.commit()
             await session.refresh(snapshot)

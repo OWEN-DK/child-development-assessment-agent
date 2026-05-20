@@ -14,6 +14,7 @@ from src.core.pipeline.compiler import PipelineCompiler
 from src.repository.rag_eval.config_version_repo import ConfigVersionRepository
 from src.repository.rag_eval.tuning_repo import TuningSuggestionRepository
 from src.repository.pipeline.pipeline_repo import PipelineRepository
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -68,12 +69,12 @@ class ConfigChanger:
         suggested_value = suggestion.get("suggested_value", "")
 
         if not target_node_id or not target_param:
-            raise ValueError(f"建议 {suggestion_id} 缺少 target_node_id 或 target_param")
+            raise InvalidParamsException(message=f"建议 {suggestion_id} 缺少 target_node_id 或 target_param")
 
         # 1. 获取当前管道配置
         pipeline = await self._pipeline_repo.get_by_id(pipeline_id, tenant_id)
         if not pipeline:
-            raise ValueError(f"管道不存在: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道不存在: {pipeline_id}")
 
         # 取最新版本的配置快照
         latest_config = None
@@ -96,7 +97,7 @@ class ConfigChanger:
             if version_row:
                 latest_config = version_row.config_snapshot or {}
             else:
-                raise ValueError(f"管道 {pipeline_id} 没有可用版本")
+                raise ResourceNotFoundException(message=f"管道 {pipeline_id} 没有可用版本")
 
         # 记录变更前配置快照
         config_before = json.dumps(latest_config, ensure_ascii=False)
@@ -182,11 +183,11 @@ class ConfigChanger:
         """
         version = await self._config_version_repo.get_by_id(config_version_id, tenant_id)
         if not version:
-            raise ValueError(f"配置版本不存在: {config_version_id}")
+            raise ResourceNotFoundException(message=f"配置版本不存在: {config_version_id}")
 
         config_snapshot = version.config_snapshot or {}
         if not config_snapshot:
-            raise ValueError(f"配置版本 {config_version_id} 的快照为空")
+            raise ResourceNotFoundException(message=f"配置版本 {config_version_id} 的快照为空")
 
         # 更新管道的配置版本记录
         from src.models.pipeline_version import PipelineVersion

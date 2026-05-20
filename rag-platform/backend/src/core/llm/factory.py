@@ -12,6 +12,11 @@ from src.core.llm.adapters.langchain import LangChainLLMAdapter
 from src.core.llm.adapters.llamaindex import LlamaIndexLLMAdapter
 from src.core.llm.base import LLMService
 from src.core.llm.provider_registry import ProviderRegistry
+from src.utils.exceptions import (
+    InternalServerErrorException,
+    InvalidParamsException,
+    ServiceUnavailableException,
+)
 from src.utils.logger import logger
 
 
@@ -113,7 +118,7 @@ class LLMServiceFactory:
             ValueError: 未知场景或提供商
         """
         if self._shutdown:
-            raise RuntimeError("Factory is shutting down")
+            raise ServiceUnavailableException(message="Factory is shutting down")
 
         cache_key = f"{scene}:{framework}"
 
@@ -123,7 +128,7 @@ class LLMServiceFactory:
                 self._cache_lock.acquire(), timeout=self.LOCK_TIMEOUT
             )
         except asyncio.TimeoutError:
-            raise RuntimeError(f"Failed to acquire lock for {cache_key}")
+            raise ServiceUnavailableException(message=f"Failed to acquire lock for {cache_key}")
 
         try:
             # 先检查缓存
@@ -141,7 +146,7 @@ class LLMServiceFactory:
                 from src.config import settings as app_settings
                 scene_obj = app_settings.llm_scene_configs.get(scene)
                 if not scene_obj:
-                    raise ValueError(f"Unknown LLM scene: {scene}")
+                    raise InvalidParamsException(message=f"Unknown LLM scene: {scene}")
                 scene_config_data = scene_obj.model_dump()
 
             # 使用 Pydantic 校验（复用 LLMSceneConfig 的约束）
@@ -150,19 +155,19 @@ class LLMServiceFactory:
             try:
                 scene_config = LLMSceneConfig(**scene_config_data)
             except Exception as e:
-                raise ValueError(f"Invalid LLM config for scene {scene}: {e}")
+                raise InvalidParamsException(message=f"Invalid LLM config for scene {scene}: {e}")
 
             # 获取提供商配置（config_snapshot 中键名为 llm_providers，非 llm_llm_providers）
             llm_providers = full_config.get("llm_providers", {})
             provider_config = llm_providers.get(scene_config.provider)
             if not provider_config:
-                raise ValueError(f"Unknown LLM provider: {scene_config.provider}")
+                raise InvalidParamsException(message=f"Unknown LLM provider: {scene_config.provider}")
 
             # 从注册表获取 LLM 类
             llm_cls = self.provider_registry.get(scene_config.provider, framework)
             if not llm_cls:
-                raise ValueError(
-                    f"No adapter found for provider {scene_config.provider}, framework {framework}"
+                raise InvalidParamsException(
+                    message=f"No adapter found for provider {scene_config.provider}, framework {framework}"
                 )
 
             # 按提供商白名单过滤参数
@@ -208,7 +213,7 @@ class LLMServiceFactory:
                     elif framework == LLMFramework.LLAMAINDEX:
                         instance = LlamaIndexLLMAdapter(llm_instance, scene_config.model)
                     else:
-                        raise ValueError(f"Unsupported framework: {framework}")
+                        raise InvalidParamsException(message=f"Unsupported framework: {framework}")
 
             except Exception as e:
                 # 实例创建失败，保留旧实例（若有）
@@ -220,7 +225,7 @@ class LLMServiceFactory:
                         self._active_requests.get(cache_key, 0) + 1
                     )
                     return self._instances[scene][framework]
-                raise RuntimeError(f"Failed to create LLM instance for {scene}: {e}")
+                raise InternalServerErrorException(message=f"Failed to create LLM instance for {scene}: {e}")
 
             # 缓存实例
             if scene not in self._instances:

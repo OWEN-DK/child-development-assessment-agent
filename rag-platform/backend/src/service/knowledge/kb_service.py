@@ -24,6 +24,7 @@ from src.schemas.knowledge.knowledge_base import (
     UpdateKnowledgeBaseReq,
     VectorBackend,
 )
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -138,7 +139,7 @@ class KnowledgeBaseService:
         """获取知识库详情"""
         kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
         if not kb:
-            raise ValueError(f"知识库不存在: {kb_id}")
+            raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
         return self._to_detail(kb)
 
     async def update(
@@ -165,8 +166,8 @@ class KnowledgeBaseService:
         if not force:
             references = await self._check_pipeline_references(kb_id, tenant_id)
             if references:
-                raise ValueError(
-                    f"知识库被 {len(references)} 个管道引用，无法删除。"
+                raise InvalidParamsException(
+                    message=f"知识库被 {len(references)} 个管道引用，无法删除。"
                     f"使用 force=true 强制删除。"
                 )
 
@@ -242,10 +243,10 @@ class KnowledgeBaseService:
         """迁移向量后端"""
         kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
         if not kb:
-            raise ValueError(f"知识库不存在: {kb_id}")
+            raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
 
         if kb.vector_backend == target_backend.value:
-            raise ValueError("目标后端与当前后端相同")
+            raise InvalidParamsException(message="目标后端与当前后端相同")
 
         # 创建重建任务
         task_id = self._generate_id()

@@ -13,6 +13,7 @@ from src.core.pipeline.exceptions import (
 from src.core.pipeline.node_context import NodeContext
 from src.core.pipeline.node_result import NodeResult
 from src.core.pipeline.registry import registry
+from src.utils.exceptions import InvalidParamsException
 from src.utils.logger import logger
 
 
@@ -171,7 +172,7 @@ class NodeExecutorWrapper:
         elif strategy == "reroute":
             alt_node_id = self._degradation.get_alternate_node(node_id)
             if not alt_node_id or depth >= 1:
-                raise ValueError("reroute 需要备选节点且不允许递归降级")
+                raise InvalidParamsException(message="reroute 需要备选节点且不允许递归降级")
 
             alt_ctx = alternate_context or context
             alt_ctx.node_id = alt_node_id
@@ -193,11 +194,11 @@ class NodeExecutorWrapper:
         elif strategy == "degrade_cache":
             cache_key = self._degradation.get_cache_key(node_id)
             if not cache_key:
-                raise ValueError("degrade_cache 需要缓存键")
+                raise InvalidParamsException(message="degrade_cache 需要缓存键")
 
             cached = await self._get_cached_result(cache_key)
             if cached is None:
-                raise ValueError("无可用缓存")
+                raise InvalidParamsException(message="无可用缓存")
             return NodeResult(
                 output=cached,
                 degraded=True,

@@ -12,6 +12,7 @@ from src.schemas.rag_eval.test_case import (
     TestCaseRead,
     UpdateTestCaseReq,
 )
+from src.utils.exceptions import TestCaseNotFoundException
 from src.utils.logger import logger
 
 
@@ -49,7 +50,7 @@ class TestCaseService:
         """获取单个测试用例"""
         case = await self._repo.get_by_id(case_id, tenant_id)
         if not case:
-            raise ValueError(f"测试用例不存在: {case_id}")
+            raise TestCaseNotFoundException(case_id=case_id)
         return self._to_read(case)
 
     async def create_case(self, tenant_id: str, data: CreateTestCaseReq) -> TestCaseRead:
@@ -88,7 +89,7 @@ class TestCaseService:
         """删除测试用例"""
         deleted = await self._repo.delete(case_id, tenant_id)
         if not deleted:
-            raise ValueError(f"测试用例不存在: {case_id}")
+            raise TestCaseNotFoundException(case_id=case_id)
         logger.info(f"测试用例删除成功: {case_id}")
 
     async def batch_delete(self, tenant_id: str, case_ids: list[str]) -> None:

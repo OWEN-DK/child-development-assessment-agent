@@ -15,6 +15,7 @@ from src.repository.knowledge.document_repo import DocumentRepository
 from src.repository.knowledge.kb_repo import KnowledgeBaseRepository
 from src.repository.rag_eval.snapshot_repo import SnapshotRepository
 from src.schemas.rag_eval.snapshot import SnapshotRead
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 # 快照默认有效期（30 天）
@@ -65,12 +66,12 @@ class SnapshotManager:
         # 1. 获取知识库信息
         kb = await self._kb_repo.get_by_id(kb_id, tenant_id)
         if not kb:
-            raise ValueError(f"知识库不存在: {kb_id}")
+            raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
 
         # 2. 获取向量后端信息
         adapter = self._vector_store_factory.get_adapter(kb.vector_backend)
         if adapter is None:
-            raise ValueError(f"向量后端不可用: {kb.vector_backend}")
+            raise InvalidParamsException(message=f"向量后端不可用: {kb.vector_backend}")
 
         # 3. 获取文档列表和分块统计
         docs = await self._doc_repo.list_by_kb(

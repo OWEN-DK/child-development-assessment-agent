@@ -5,6 +5,7 @@
 from typing import Optional
 
 from src.core.pipeline.base_node import BaseNodeExecutor
+from src.utils.exceptions import InvalidParamsException
 from src.utils.logger import logger
 
 
@@ -45,7 +46,7 @@ class NodeRegistry:
             KeyError: 节点类型未注册
         """
         if node_type not in self._registry:
-            raise KeyError(f"节点类型未注册: {node_type}")
+            raise InvalidParamsException(message=f"节点类型未注册: {node_type}")
         return self._registry[node_type]
 
     def create_executor(self, node_type: str) -> BaseNodeExecutor:

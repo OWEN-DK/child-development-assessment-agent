@@ -20,6 +20,7 @@ from src.core.auth.password import hash_password
 from src.models.tenant import Tenant
 from src.models.user import User, UserRole
 from src.models.role import Role
+from src.utils.exceptions import InternalServerErrorException
 from src.utils.logger import logger
 
 
@@ -68,7 +69,7 @@ class ProvisioningService:
                         (storage_path / subdir).mkdir(parents=True, exist_ok=True)
                     logger.info(f"[2/6] 存储目录创建完成: {storage_path}")
                 except Exception as e:
-                    raise RuntimeError(f"存储目录创建失败: {e}")
+                    raise InternalServerErrorException(message=f"存储目录创建失败: {e}")
 
                 # 3. 初始化默认角色
                 role_ids = {}

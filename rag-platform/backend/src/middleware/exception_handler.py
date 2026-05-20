@@ -3,7 +3,8 @@
 按优先级从高到低:
 1. AppException - 自定义业务异常
 2. RequestValidationError - 请求参数校验异常
-3. Exception - 兜底处理
+3. ValueError / KeyError - 业务校验/数据缺失异常 (→ 400)
+4. Exception - 兜底处理 (→ 500)
 """
 
 import uuid
@@ -55,6 +56,40 @@ async def validation_exception_handler(
             message="请求参数校验失败",
             error_code="INVALID_PARAMS",
             details={"errors": messages},
+        ),
+    )
+
+
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """处理 ValueError: 通常是业务校验或数据缺失,返回 400"""
+    logger.warning(
+        "ValueError in request: %s | path=%s",
+        exc,
+        request.url.path,
+    )
+    return JSONResponse(
+        status_code=400,
+        content=APIResponse.error(
+            code=10001,
+            message=str(exc),
+            error_code="INVALID_PARAMS",
+        ),
+    )
+
+
+async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:
+    """处理 KeyError: 键/类型缺失,返回 400"""
+    logger.warning(
+        "KeyError in request: %s | path=%s",
+        exc,
+        request.url.path,
+    )
+    return JSONResponse(
+        status_code=400,
+        content=APIResponse.error(
+            code=10001,
+            message=str(exc),
+            error_code="INVALID_PARAMS",
         ),
     )
 

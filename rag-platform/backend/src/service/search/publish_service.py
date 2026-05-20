@@ -20,6 +20,11 @@ from src.schemas.search.publish import (
     PublishStatus,
     UnpublishResult,
 )
+from src.utils.exceptions import (
+    DuplicateResourceException,
+    InvalidParamsException,
+    ResourceNotFoundException,
+)
 from src.utils.logger import logger
 
 # URL 路径格式校验
@@ -55,12 +60,12 @@ class PublishService:
         # 校验管道存在
         pipeline = await self._pipeline_repo.get_by_id(pipeline_id, tenant_id)
         if not pipeline:
-            raise ValueError(f"管道不存在: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道不存在: {pipeline_id}")
 
         # 校验版本存在（简化：检查 bound_version <= active_version）
         if config.bound_version > pipeline.active_version:
-            raise ValueError(
-                f"版本 {config.bound_version} 不存在，当前活动版本: {pipeline.active_version}"
+            raise ResourceNotFoundException(
+                message=f"版本 {config.bound_version} 不存在，当前活动版本: {pipeline.active_version}"
             )
 
         # 检查是否已有端点
@@ -82,7 +87,7 @@ class PublishService:
             if existing.url_path != config.url_path:
                 conflict = await self._publish_repo.check_url_path_conflict(config.url_path)
                 if conflict:
-                    raise ValueError(f"URL 路径已被占用: {config.url_path}")
+                    raise DuplicateResourceException(message=f"URL 路径已被占用: {config.url_path}")
 
             updated = await self._publish_repo.update(existing.id, update_data)
             logger.info(f"管道发布更新: {pipeline_id} → {config.url_path}")
@@ -91,7 +96,7 @@ class PublishService:
         # 新建
         conflict = await self._publish_repo.check_url_path_conflict(config.url_path)
         if conflict:
-            raise ValueError(f"URL 路径已被占用: {config.url_path}")
+            raise DuplicateResourceException(message=f"URL 路径已被占用: {config.url_path}")
 
         endpoint_id = str(uuid.uuid4()).replace("-", "")[:24]
         create_data = {
@@ -120,7 +125,7 @@ class PublishService:
         """
         endpoint = await self._publish_repo.get_by_pipeline_id(pipeline_id, tenant_id)
         if not endpoint:
-            raise ValueError(f"管道未发布: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道未发布: {pipeline_id}")
 
         url_path = endpoint.url_path
 
@@ -199,7 +204,7 @@ class PublishService:
             tenant_id=tenant_id, endpoint_id=endpoint_id
         )
         if not endpoint:
-            raise ValueError(f"端点不存在: {endpoint_id}")
+            raise ResourceNotFoundException(message=f"端点不存在: {endpoint_id}")
 
         # 取第一条（endpoint_id 全局唯一）
         ep = endpoint[0] if isinstance(endpoint, list) else endpoint
@@ -210,9 +215,9 @@ class PublishService:
     def _validate_url_path(self, url_path: str) -> None:
         """校验 URL 路径格式"""
         if len(url_path) < 4 or len(url_path) > 50:
-            raise ValueError(f"URL 路径长度必须在 4-50 之间: {url_path}")
+            raise InvalidParamsException(message=f"URL 路径长度必须在 4-50 之间: {url_path}")
         if not _URL_PATH_PATTERN.match(url_path):
-            raise ValueError(f"URL 路径仅允许字母数字下划线连字符: {url_path}")
+            raise InvalidParamsException(message=f"URL 路径仅允许字母数字下划线连字符: {url_path}")
 
     def _to_result(self, ep: PublishedEndpoint) -> PublishResult:
         """转换为 PublishResult"""

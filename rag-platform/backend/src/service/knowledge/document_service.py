@@ -32,6 +32,7 @@ from src.service.knowledge.constants import (
     MAX_FILE_SIZE_BYTES,
     SUPPORTED_FILE_TYPES,
 )
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -283,7 +284,7 @@ class DocumentService:
         """获取文档详情（含分块预览）"""
         doc = await self.doc_repo.get_by_id(doc_id, tenant_id)
         if not doc or doc.kb_id != kb_id:
-            raise ValueError(f"文档不存在: {doc_id}")
+            raise ResourceNotFoundException(message=f"文档不存在: {doc_id}")
 
         # 获取前 10 个分块
         chunks = await self.chunk_repo.get_by_doc_id(doc_id, tenant_id, limit=10)
@@ -321,7 +322,7 @@ class DocumentService:
         """删除文档（级联删除分块）"""
         doc = await self.doc_repo.get_by_id(doc_id, tenant_id)
         if not doc or doc.kb_id != kb_id:
-            raise ValueError(f"文档不存在: {doc_id}")
+            raise ResourceNotFoundException(message=f"文档不存在: {doc_id}")
 
         # 删除分块
         chunk_count = await self.chunk_repo.delete_by_doc_id(doc_id, tenant_id)
@@ -359,11 +360,11 @@ class DocumentService:
         """
         doc = await self.doc_repo.get_by_id(doc_id, tenant_id)
         if not doc or doc.kb_id != kb_id:
-            raise ValueError(f"文档不存在: {doc_id}")
+            raise ResourceNotFoundException(message=f"文档不存在: {doc_id}")
 
         # 校验：restricted 时必须指定 doc_acl
         if access_level == "restricted" and not doc_acl:
-            raise ValueError("restricted 模式必须指定 doc_acl")
+            raise InvalidParamsException(message="restricted 模式必须指定 doc_acl")
 
         # 校验：doc_acl 不能超出知识库 visible_roles
         if access_level == "restricted" and doc_acl:
@@ -371,7 +372,7 @@ class DocumentService:
             if kb and kb.visible_roles:
                 invalid_roles = set(doc_acl) - set(kb.visible_roles)
                 if invalid_roles:
-                    raise ValueError(f"doc_acl 包含知识库未授权的角色: {invalid_roles}")
+                    raise InvalidParamsException(message=f"doc_acl 包含知识库未授权的角色: {invalid_roles}")
 
         update_data = {
             "access_level": access_level,

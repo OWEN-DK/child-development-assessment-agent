@@ -8,6 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+from src.utils.exceptions import InvalidParamsException, InternalServerErrorException
 from src.utils.logger import logger
 
 
@@ -92,7 +93,7 @@ class DashScopeEmbeddingProvider(BaseEmbeddingProvider):
 
                     embeddings = result.get("output", {}).get("embeddings", [])
                     if not embeddings:
-                        raise ValueError("DashScope 返回空 embeddings")
+                        raise InternalServerErrorException(message="DashScope 返回空 embeddings")
 
                     return [e["embedding"] for e in embeddings]
 
@@ -112,7 +113,7 @@ class DashScopeEmbeddingProvider(BaseEmbeddingProvider):
                 logger.warning(f"DashScope Embedding 调用失败，{wait}s 后重试: {error_msg}")
                 await asyncio.sleep(wait)
 
-        raise RuntimeError("DashScope Embedding 调用失败")
+        raise InternalServerErrorException(message="DashScope Embedding 调用失败")
 
 
 class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
@@ -218,6 +219,6 @@ class EmbeddingEngine:
                 dimension=dimension,
             )
         else:
-            raise ValueError(f"不支持的 Embedding 提供者: {provider}")
+            raise InvalidParamsException(message=f"不支持的 Embedding 提供者: {provider}")
 
         return cls(provider=embedding_provider)

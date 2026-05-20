@@ -14,6 +14,7 @@ from typing import Any, Optional
 import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
+from src.utils.exceptions import UnsupportedFileTypeException
 from src.utils.logger import logger
 
 warnings.filterwarnings("ignore", category=UserWarning, module="ebooklib")
@@ -311,6 +312,6 @@ def get_parser(file_path: str):
 
     parser_class = parsers.get(ext)
     if not parser_class:
-        raise ValueError(f"不支持的文件格式: {ext}。支持: {', '.join(parsers.keys())}")
+        raise UnsupportedFileTypeException(file_type=ext)
 
     return parser_class()

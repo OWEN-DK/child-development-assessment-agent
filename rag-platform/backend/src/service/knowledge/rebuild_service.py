@@ -17,6 +17,7 @@ from src.repository.knowledge.kb_repo import KnowledgeBaseRepository
 from src.repository.knowledge.rebuild_repo import RebuildTaskRepository
 from src.schemas.knowledge.rebuild import RebuildStatusResponse, RebuildTaskSummary
 from src.service.knowledge.sse_publisher import SSEPublisher
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -48,7 +49,7 @@ class RebuildService:
         # 检查是否有正在运行的任务
         running = await self.rebuild_repo.get_latest_running(kb_id, tenant_id)
         if running:
-            raise ValueError("已有重建任务正在运行")
+            raise InvalidParamsException(message="已有重建任务正在运行")
 
         # 创建任务
         task_id = str(uuid.uuid4()).replace("-", "")[:24]
@@ -77,7 +78,7 @@ class RebuildService:
             # 1. 获取知识库配置
             kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
             if not kb:
-                raise ValueError(f"知识库不存在: {kb_id}")
+                raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
 
             chunk_config = kb.chunk_strategy or {"type": "fixed_size", "chunk_size": 512, "overlap": 50}
 

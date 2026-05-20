@@ -10,6 +10,7 @@ from src.models.prompt_metadata import PromptMetadata
 from src.models.prompt_version import PromptVersion
 from src.service.cache_service import cache_service
 from src.utils.logger import logger
+from src.utils.exceptions import ResourceNotFoundException
 from src.utils.serializers import create_serializer, safe_isoformat
 
 
@@ -182,7 +183,7 @@ class PromptStorage:
             versions = result.scalars().all()
             version_map = {v.version_label: v for v in versions if v.version_label in [version_1, version_2]}
             if len(version_map) != 2:
-                raise ValueError("版本未找到")
+                raise ResourceNotFoundException(message="提示词版本未找到")
             return version_map[version_1], version_map[version_2]
 
     async def get_or_create_metadata(

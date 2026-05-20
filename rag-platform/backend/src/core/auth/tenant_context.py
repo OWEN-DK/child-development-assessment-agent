@@ -8,6 +8,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Optional
 
+from src.utils.exceptions import UnauthorizedException
+
 
 @dataclass
 class TenantContext:
@@ -58,7 +60,7 @@ def require_tenant_id() -> str:
     """
     ctx = get_current_context()
     if ctx is None or ctx.tenant_id is None:
-        raise RuntimeError("缺少租户上下文，请确保请求经过认证中间件")
+        raise UnauthorizedException(message="缺少租户上下文，请确保请求经过认证中间件")
     return ctx.tenant_id
 
 
@@ -70,5 +72,5 @@ def require_user_id() -> str:
     """
     ctx = get_current_context()
     if ctx is None or ctx.user_id is None:
-        raise RuntimeError("缺少用户上下文，请确保请求经过认证中间件")
+        raise UnauthorizedException(message="缺少用户上下文，请确保请求经过认证中间件")
     return ctx.user_id

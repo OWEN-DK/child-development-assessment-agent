@@ -8,6 +8,7 @@ from injector import singleton
 from src.config.core.manager import ConfigManager
 from src.config.core.events import ConfigChangedEvent
 from src.core.event_bus import event_bus
+from src.utils.exceptions import InvalidParamsException, ServiceUnavailableException
 from src.utils.logger import logger
 
 
@@ -44,7 +45,7 @@ class EmbeddingFactory:
             ValueError: 不支持的框架或提供商
         """
         if self._shutdown:
-            raise RuntimeError("Factory is shutting down")
+            raise ServiceUnavailableException(message="Factory is shutting down")
 
         cache_key = f"embedding:{framework}"
 
@@ -53,7 +54,7 @@ class EmbeddingFactory:
                 self._cache_lock.acquire(), timeout=self.LOCK_TIMEOUT
             )
         except asyncio.TimeoutError:
-            raise RuntimeError(f"Failed to acquire lock for {cache_key}")
+            raise ServiceUnavailableException(message=f"Failed to acquire lock for {cache_key}")
 
         try:
             # 检查缓存
@@ -93,7 +94,7 @@ class EmbeddingFactory:
                 return self._llamaindex_instance
 
             else:
-                raise ValueError(f"Unsupported framework: {framework}")
+                raise InvalidParamsException(message=f"Unsupported framework: {framework}")
         finally:
             self._cache_lock.release()
 
@@ -147,7 +148,7 @@ class EmbeddingFactory:
                 base_url=provider_creds.get("base_url", "http://localhost:11434"),
             )
         else:
-            raise ValueError(f"Unsupported embedding provider: {provider}")
+            raise InvalidParamsException(message=f"Unsupported embedding provider: {provider}")
 
         logger.info(f"Created LangChain embedding instance, provider {provider}")
         return instance
@@ -178,7 +179,7 @@ class EmbeddingFactory:
                 base_url=provider_creds.get("base_url", "http://localhost:11434"),
             )
         else:
-            raise ValueError(f"Unsupported embedding provider: {provider}")
+            raise InvalidParamsException(message=f"Unsupported embedding provider: {provider}")
 
         logger.info(f"Created LlamaIndex embedding instance, provider {provider}")
         return instance

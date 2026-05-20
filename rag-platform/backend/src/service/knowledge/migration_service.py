@@ -12,6 +12,7 @@ from src.repository.knowledge.chunk_repo import ChunkRepository
 from src.repository.knowledge.kb_repo import KnowledgeBaseRepository
 from src.repository.knowledge.rebuild_repo import RebuildTaskRepository
 from src.schemas.knowledge.migration import MigrationEstimate
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -30,10 +31,10 @@ class MigrationService:
         """预估迁移时间"""
         kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
         if not kb:
-            raise ValueError(f"知识库不存在: {kb_id}")
+            raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
 
         if kb.vector_backend == target_backend:
-            raise ValueError("目标后端与当前后端相同")
+            raise InvalidParamsException(message="目标后端与当前后端相同")
 
         chunk_count = await self.chunk_repo.count_by_kb(kb_id, tenant_id)
         estimated_minutes = max(1, chunk_count // 1000)  # 粗略估计
@@ -63,11 +64,11 @@ class MigrationService:
         """
         kb = await self.kb_repo.get_by_id(kb_id, tenant_id)
         if not kb:
-            raise ValueError(f"知识库不存在: {kb_id}")
+            raise ResourceNotFoundException(message=f"知识库不存在: {kb_id}")
 
         source_backend = kb.vector_backend
         if source_backend == target_backend:
-            raise ValueError("目标后端与当前后端相同")
+            raise InvalidParamsException(message="目标后端与当前后端相同")
 
         # 创建任务
         task_id = str(uuid.uuid4()).replace("-", "")[:24]

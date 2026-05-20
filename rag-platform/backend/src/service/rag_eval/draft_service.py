@@ -16,6 +16,7 @@ from src.schemas.rag_eval.draft import (
     ReviewAction,
 )
 from src.schemas.rag_eval.test_case import CreateTestCaseReq, TestCaseRead
+from src.utils.exceptions import DraftNotFoundException, InvalidParamsException
 from src.utils.logger import logger
 
 
@@ -52,7 +53,7 @@ class DraftService:
         """获取单个草稿"""
         draft = await self._draft_repo.get_by_id(draft_id, tenant_id)
         if not draft:
-            raise ValueError(f"草稿不存在: {draft_id}")
+            raise DraftNotFoundException(draft_id=draft_id)
         return self._to_read(draft)
 
     async def create_draft(self, tenant_id: str, data: CreateDraftReq) -> DraftRead:
@@ -79,10 +80,10 @@ class DraftService:
         """更新草稿（部分字段）"""
         draft = await self._draft_repo.get_by_id(draft_id, tenant_id)
         if not draft:
-            raise ValueError(f"草稿不存在: {draft_id}")
+            raise DraftNotFoundException(draft_id=draft_id)
 
         if draft.status != DraftStatus.PENDING.value:
-            raise ValueError(f"草稿状态为 {draft.status}，无法编辑")
+            raise InvalidParamsException(message=f"草稿状态为 {draft.status}，无法编辑")
 
         update_data = {k: v for k, v in data.items() if v is not None}
         if "difficulty_level" in update_data and update_data["difficulty_level"] is not None:
@@ -95,7 +96,7 @@ class DraftService:
         """删除草稿"""
         deleted = await self._draft_repo.delete(draft_id, tenant_id)
         if not deleted:
-            raise ValueError(f"草稿不存在: {draft_id}")
+            raise DraftNotFoundException(draft_id=draft_id)
         logger.info(f"草稿删除成功: {draft_id}")
 
     async def review_draft(
@@ -104,10 +105,10 @@ class DraftService:
         """审核草稿（通过/拒绝）"""
         draft = await self._draft_repo.get_by_id(draft_id, tenant_id)
         if not draft:
-            raise ValueError(f"草稿不存在: {draft_id}")
+            raise DraftNotFoundException(draft_id=draft_id)
 
         if draft.status != DraftStatus.PENDING.value:
-            raise ValueError(f"草稿状态为 {draft.status}，无法审核")
+            raise InvalidParamsException(message=f"草稿状态为 {draft.status}，无法审核")
 
         if action == ReviewAction.APPROVE:
             new_status = DraftStatus.APPROVED.value
@@ -122,10 +123,10 @@ class DraftService:
         """将草稿导入为正式测试用例（原子操作）"""
         draft = await self._draft_repo.get_by_id(draft_id, tenant_id)
         if not draft:
-            raise ValueError(f"草稿不存在: {draft_id}")
+            raise DraftNotFoundException(draft_id=draft_id)
 
         if draft.status not in (DraftStatus.APPROVED.value,):
-            raise ValueError(f"草稿状态为 {draft.status}，只有 approved 状态才可导入")
+            raise InvalidParamsException(message=f"草稿状态为 {draft.status}，只有 approved 状态才可导入")
 
         case_id = self._generate_id()
         case_data = {
@@ -159,7 +160,7 @@ class DraftService:
             )
             draft_obj = (await session.execute(stmt)).scalar_one_or_none()
             if not draft_obj:
-                raise ValueError(f"草稿不存在: {draft_id}")
+                raise DraftNotFoundException(draft_id=draft_id)
             draft_obj.status = DraftStatus.IMPORTED.value
             await session.commit()
             await session.refresh(case_obj)

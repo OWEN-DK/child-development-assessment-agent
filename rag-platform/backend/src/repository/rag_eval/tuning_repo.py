@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.models.rag_eval.tuning import TuningSuggestion
 from src.repository.base import BaseRepository
+from src.utils.exceptions import ResourceNotFoundException
 
 
 class TuningSuggestionRepository(BaseRepository[TuningSuggestion]):
@@ -56,7 +57,7 @@ class TuningSuggestionRepository(BaseRepository[TuningSuggestion]):
             result = await session.execute(stmt)
             suggestion = result.scalar_one_or_none()
             if suggestion is None:
-                raise ValueError(f"TuningSuggestion with id={id} not found")
+                raise ResourceNotFoundException(message=f"TuningSuggestion not found: id={id}")
             suggestion.status = status
             if applied_version_id is not None:
                 suggestion.applied_config_version_id = applied_version_id

@@ -12,6 +12,7 @@ from src.schemas.rag_eval.test_set import (
     TestSetRead,
     UpdateTestSetReq,
 )
+from src.utils.exceptions import TestSetNotFoundException
 from src.utils.logger import logger
 
 
@@ -43,7 +44,7 @@ class TestSetService:
         """获取单个测试集"""
         test_set = await self._repo.get_by_id(set_id, tenant_id)
         if not test_set:
-            raise ValueError(f"测试集不存在: {set_id}")
+            raise TestSetNotFoundException(test_set_id=set_id)
         return self._to_read(test_set)
 
     async def create_set(
@@ -81,7 +82,7 @@ class TestSetService:
         """删除测试集"""
         deleted = await self._repo.delete(set_id, tenant_id)
         if not deleted:
-            raise ValueError(f"测试集不存在: {set_id}")
+            raise TestSetNotFoundException(test_set_id=set_id)
         logger.info(f"测试集删除成功: {set_id}")
 
     async def add_cases(self, tenant_id: str, set_id: str, case_ids: list[str]) -> None:
@@ -89,7 +90,7 @@ class TestSetService:
         # 先确认测试集存在
         test_set = await self._repo.get_by_id(set_id, tenant_id)
         if not test_set:
-            raise ValueError(f"测试集不存在: {set_id}")
+            raise TestSetNotFoundException(test_set_id=set_id)
         await self._repo.add_cases(set_id, case_ids)
         logger.info(f"测试集 {set_id} 添加 {len(case_ids)} 个用例")
 
@@ -99,7 +100,7 @@ class TestSetService:
         """从测试集中移除用例"""
         test_set = await self._repo.get_by_id(set_id, tenant_id)
         if not test_set:
-            raise ValueError(f"测试集不存在: {set_id}")
+            raise TestSetNotFoundException(test_set_id=set_id)
         await self._repo.remove_cases(set_id, case_ids)
         logger.info(f"测试集 {set_id} 移除 {len(case_ids)} 个用例")
 

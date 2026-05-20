@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 import httpx
 
+from src.utils.exceptions import InvalidParamsException
 from src.utils.logger import logger
 
 
@@ -36,14 +37,14 @@ async def call_llm(
     api_key = _get_api_key(provider)
 
     if not api_key:
-        raise ValueError(f"未配置 {provider} API Key")
+        raise InvalidParamsException(message=f"未配置 {provider} API Key")
 
     if provider == "dashscope":
         return await _call_dashscope(prompt, model, temperature, max_tokens, system_prompt, api_key)
     elif provider == "openai":
         return await _call_openai(prompt, model, temperature, max_tokens, system_prompt, api_key)
     else:
-        raise ValueError(f"不支持的 LLM 提供商: {provider}")
+        raise InvalidParamsException(message=f"不支持的 LLM 提供商: {provider}")
 
 
 def _detect_provider(model: str) -> str:

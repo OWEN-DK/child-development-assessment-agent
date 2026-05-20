@@ -23,6 +23,7 @@ from src.schemas.pipeline.version import (
     PipelineVersionRead,
     VersionCompareResult,
 )
+from src.utils.exceptions import InvalidParamsException, ResourceNotFoundException
 from src.utils.logger import logger
 
 
@@ -71,7 +72,7 @@ class PipelineService:
         """获取管道详情"""
         pipeline = await self.pipeline_repo.get_by_id(pipeline_id, tenant_id)
         if not pipeline:
-            raise ValueError(f"管道不存在: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道不存在: {pipeline_id}")
         return self._to_read(pipeline)
 
     async def list(
@@ -102,7 +103,7 @@ class PipelineService:
         """更新管道配置（触发版本递增）"""
         pipeline = await self.pipeline_repo.get_by_id(pipeline_id, tenant_id)
         if not pipeline:
-            raise ValueError(f"管道不存在: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道不存在: {pipeline_id}")
 
         # 更新基本信息
         update_data = data.model_dump(exclude_unset=True, exclude={"config", "change_log"})
@@ -115,7 +116,7 @@ class PipelineService:
             try:
                 self.compiler.compile(data.config)
             except Exception as e:
-                raise ValueError(f"管道配置校验失败: {e}")
+                raise InvalidParamsException(message=f"管道配置校验失败: {e}")
 
             new_version = await self.version_repo.get_next_version_number(pipeline_id, tenant_id)
             version_data = {
@@ -137,7 +138,7 @@ class PipelineService:
         # TODO: 检查发布 URL 引用
         pipeline = await self.pipeline_repo.get_by_id(pipeline_id, tenant_id)
         if not pipeline:
-            raise ValueError(f"管道不存在: {pipeline_id}")
+            raise ResourceNotFoundException(message=f"管道不存在: {pipeline_id}")
 
         # 删除所有版本
         versions = await self.version_repo.list_by_pipeline(pipeline_id, tenant_id)
@@ -171,7 +172,7 @@ class PipelineService:
             pipeline_id, version_number, tenant_id
         )
         if not version:
-            raise ValueError(f"版本不存在: v{version_number}")
+            raise ResourceNotFoundException(message=f"版本不存在: v{version_number}")
 
         return PipelineVersionRead(
             id=version.id,
@@ -190,7 +191,7 @@ class PipelineService:
             pipeline_id, target_version, tenant_id
         )
         if not target:
-            raise ValueError(f"目标版本不存在: v{target_version}")
+            raise ResourceNotFoundException(message=f"目标版本不存在: v{target_version}")
 
         # 创建新版本（复制目标版本的配置）
         new_version = await self.version_repo.get_next_version_number(pipeline_id, tenant_id)
@@ -216,7 +217,7 @@ class PipelineService:
         version2 = await self.version_repo.get_by_version(pipeline_id, v2, tenant_id)
 
         if not version1 or not version2:
-            raise ValueError(f"版本不存在: v{v1} 或 v{v2}")
+            raise ResourceNotFoundException(message=f"版本不存在: v{v1} 或 v{v2}")
 
         config1 = json.loads(version1.config_snapshot)
         config2 = json.loads(version2.config_snapshot)
