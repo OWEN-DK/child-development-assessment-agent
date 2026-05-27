@@ -76,7 +76,7 @@ export const ProgressPanel: React.FC = () => {
           ? ('process' as const)
           : undefined,
     };
-  };
+  });
 
   return (
     <Card size="small" style={{ marginTop: 24 }}>
