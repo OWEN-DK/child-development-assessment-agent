@@ -157,6 +157,11 @@ class LLMSettings(BaseSettings):
                 output_per_million=8.0,
                 currency="CNY",
             ),
+            "qwen3.5-27b": ModelPricingConfig(
+                input_per_million=1.0,
+                output_per_million=4.0,
+                currency="CNY",
+            ),
         },
         description="模型定价配置（每百万 Token 费用，单位：元）",
     )
@@ -207,6 +212,11 @@ class LLMSettings(BaseSettings):
         validation_alias="MODEL_RAG_EVAL",
         description="RAG 评估指标计算使用的模型（性价比之王，JSON 输出稳定）",
     )
+    model_knowledge_qa: str = Field(
+        default="qwen3.5-27b",
+        validation_alias="MODEL_KNOWLEDGE_QA",
+        description="知识问答使用的模型（指令遵循能力强，支持 function calling + structured output）",
+    )
 
     # ===== 新增：从旧字段自动构建的场景配置 =====
     @property
@@ -256,6 +266,11 @@ class LLMSettings(BaseSettings):
             "rag_eval": LLMSceneConfig(
                 provider="dashscope",
                 model=self.model_rag_eval or "qwen-plus",
+                max_tokens=4000,
+            ),
+            "knowledge_qa": LLMSceneConfig(
+                provider="dashscope",
+                model=self.model_knowledge_qa or "qwen3.5-27b",
                 max_tokens=4000,
             ),
         }

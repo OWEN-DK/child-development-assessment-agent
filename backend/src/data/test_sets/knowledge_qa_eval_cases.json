@@ -1,0 +1,109 @@
+{
+  "cases": [
+    {
+      "query": "注意力不集中 儿童 运动干预 改善方法",
+      "description": "match_books 模式：测试书籍匹配查询，检索关于儿童注意力问题的运动干预方法",
+      "expected_keywords": ["注意", "运动", "儿童", "大脑"],
+      "difficulty_level": "medium",
+      "book_ids": []
+    },
+    {
+      "query": "儿童注意力缺陷 大脑发育 抑制功能",
+      "description": "match_books 模式：测试关于儿童注意力和大脑抑制功能的书籍内容检索",
+      "expected_keywords": ["注意", "抑制", "大脑", "儿童"],
+      "difficulty_level": "hard",
+      "book_ids": ["8691571acbdceb2f53b899dd9899554a"]
+    },
+    {
+      "query": "学龄前儿童 注意力 发展特征 行为表现",
+      "description": "analyze_child 模式：测试孩子行为特征的专业背景知识检索",
+      "expected_keywords": ["注意", "儿童", "婴儿", "意识"],
+      "difficulty_level": "medium",
+      "book_ids": ["8691571acbdceb2f53b899dd9899554a"]
+    },
+    {
+      "query": "婴幼儿意识 注意力集中程度 大脑发育阶段",
+      "description": "analyze_child 模式：测试婴幼儿意识与注意力发展的专业知识检索",
+      "expected_keywords": ["意识", "注意", "婴儿", "大脑"],
+      "difficulty_level": "medium",
+      "book_ids": []
+    },
+    {
+      "query": "ADD 注意力缺陷障碍 儿童 课堂表现 学校",
+      "description": "identify_problems 模式：测试问题诊断类查询，检索ADD相关的书籍内容",
+      "expected_keywords": ["注意", "缺陷", "学校", "课堂"],
+      "difficulty_level": "medium",
+      "book_ids": ["8691571acbdceb2f53b899dd9899554a"]
+    },
+    {
+      "query": "儿童 抑制干扰能力 神经发育 遗传与环境",
+      "description": "identify_problems 模式：测试关于儿童抑制控制和神经发育的专业内容",
+      "expected_keywords": ["抑制", "神经", "遗传", "环境"],
+      "difficulty_level": "hard",
+      "book_ids": []
+    },
+    {
+      "query": "有氧运动 改善儿童注意力 大脑可塑性",
+      "description": "recommend_types 模式：测试运动类型推荐相关的检索",
+      "expected_keywords": ["运动", "大脑", "有氧"],
+      "difficulty_level": "medium",
+      "book_ids": ["6399b9028564015952ff9ef948c72339"]
+    },
+    {
+      "query": "运动 儿童大脑发育 认知能力 神经连接",
+      "description": "recommend_types 模式：测试运动对儿童认知能力影响的检索",
+      "expected_keywords": ["运动", "大脑", "认知", "神经"],
+      "difficulty_level": "medium",
+      "book_ids": []
+    },
+    {
+      "query": "儿童运动方案 分阶段设计 频率 强度 原则",
+      "description": "plan_outline 模式：测试运动方案大纲设计原则的检索",
+      "expected_keywords": ["运动", "阶段", "训练"],
+      "difficulty_level": "medium",
+      "book_ids": ["6399b9028564015952ff9ef948c72339"]
+    },
+    {
+      "query": "儿童 每日运动计划 周计划 训练安排",
+      "description": "plan_outline 模式：测试运动计划时间安排的检索",
+      "expected_keywords": ["运动", "计划", "训练"],
+      "difficulty_level": "easy",
+      "book_ids": []
+    },
+    {
+      "query": "儿童 平衡训练 组数 次数 具体参数 方案",
+      "description": "plan_expand 模式：测试具体运动参数细节的检索",
+      "expected_keywords": ["平衡", "训练"],
+      "difficulty_level": "hard",
+      "book_ids": ["6399b9028564015952ff9ef948c72339"]
+    },
+    {
+      "query": "儿童 热身活动 放松活动 运动安全 注意事项",
+      "description": "plan_expand 模式：测试运动安全和辅助活动的检索",
+      "expected_keywords": ["运动", "热身", "安全"],
+      "difficulty_level": "easy",
+      "book_ids": []
+    },
+    {
+      "query": "儿童发展 运动改善注意力 科学证据 研究结论",
+      "description": "conclusion 模式：测试归纳总结类查询，检索科学证据支持",
+      "expected_keywords": ["运动", "注意", "研究", "发展"],
+      "difficulty_level": "hard",
+      "book_ids": []
+    },
+    {
+      "query": "童年经验 塑造人格 先天后天 环境影响 基因",
+      "description": "conclusion 模式：测试关于儿童发展先天后天因素的检索",
+      "expected_keywords": ["童年", "基因", "环境", "先天"],
+      "difficulty_level": "hard",
+      "book_ids": ["8691571acbdceb2f53b899dd9899554a"]
+    },
+    {
+      "query": "婴儿意识 感知外在世界 自我认知 发展心理学",
+      "description": "analyze_child/identify_problems 交叉模式：测试跨领域查询",
+      "expected_keywords": ["婴儿", "意识", "感知", "自我"],
+      "difficulty_level": "medium",
+      "book_ids": ["8691571acbdceb2f53b899dd9899554a"]
+    }
+  ]
+}

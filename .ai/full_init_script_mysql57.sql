@@ -12,11 +12,11 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 -- 1. 创建数据库
 -- ----------------------------
-CREATE DATABASE IF NOT EXISTS `child_dev_assessment_dev`
+CREATE DATABASE IF NOT EXISTS `child_dev_assessment_test`
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
-USE `child_dev_assessment_dev`;
+USE `child_dev_assessment_test`;
 
 -- ----------------------------
 -- 2. 配置版本表
@@ -63,7 +63,9 @@ DROP TABLE IF EXISTS `source_documents`;
 CREATE TABLE `source_documents` (
                                     `id` varchar(64) NOT NULL COMMENT '文档ID (UUID)',
                                     `title` varchar(500) NOT NULL COMMENT '文档标题',
+                                    `author` varchar(200) DEFAULT NULL COMMENT '作者/编著者',
                                     `file_type` enum('pdf','epub','txt') NOT NULL COMMENT '文件类型',
+                                    `source_type` enum('book','paper','guideline','manual') NOT NULL DEFAULT 'book' COMMENT '文献类型',
                                     `file_path` varchar(1000) NOT NULL COMMENT '文件路径',
                                     `file_hash` varchar(64) NOT NULL COMMENT '文件哈希 (SHA-256)',
                                     `content_summary` text DEFAULT NULL COMMENT '内容摘要',
@@ -101,6 +103,7 @@ CREATE TABLE `document_records` (
                                     `ref_doc_ids` json DEFAULT NULL COMMENT '关联文档ID列表',
                                     `status` enum('pending','processing','indexed','failed') NOT NULL DEFAULT 'pending' COMMENT '导入状态',
                                     `progress` int NOT NULL DEFAULT 0 COMMENT '导入进度 (0-100)',
+                                    `graph_ready` tinyint(1) NOT NULL DEFAULT 0 COMMENT '知识图谱是否构建完成',
                                     `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                     `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                     PRIMARY KEY (`id`),
@@ -187,6 +190,7 @@ CREATE TABLE `test_cases` (
     `difficulty_level` VARCHAR(16) COMMENT 'easy/medium/hard',
     `professional_terms` JSON COMMENT '专业术语列表',
     `relevance_scores` JSON COMMENT '相关度评分',
+    `book_ids` JSON DEFAULT NULL COMMENT '限定检索的书籍 file_hash 列表',
     `source` VARCHAR(16) NOT NULL DEFAULT 'manual' COMMENT 'manual/draft/import',
     `source_draft_id` VARCHAR(64) COMMENT '来源草稿 ID',
     `source_document_id` VARCHAR(64) COMMENT '来源文档 ID',
@@ -564,6 +568,75 @@ CREATE TABLE `traces` (
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ----------------------------
+-- 22-25. 知识图谱表（LazyGraphRAG）
+-- ----------------------------
+
+-- 22. 知识图谱实体表
+DROP TABLE IF EXISTS `graph_entities`;
+
+CREATE TABLE graph_entities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(200) NOT NULL COMMENT '实体名称',
+    entity_type ENUM('development_concept','symptom_behavior','intervention_method',
+                     'assessment_tool','brain_region','age_milestone','clinical_population') NOT NULL COMMENT '实体类型',
+    description TEXT COMMENT '实体描述',
+    aliases JSON COMMENT '别名列表 ["别名1", "别名2"]',
+    book_id VARCHAR(64) NOT NULL COMMENT '所属书籍ID(UUID)',
+    chunk_ids JSON COMMENT '关联块ID列表 [101, 102, 103]',
+    embedding JSON COMMENT '可选，跨书实体去重用',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_graph_entity_book (book_id),
+    INDEX idx_graph_entity_type (entity_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识图谱实体表';
+
+-- 23. 知识图谱关系表
+DROP TABLE IF EXISTS `graph_relations`;
+
+CREATE TABLE graph_relations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    source_entity_id INT NOT NULL COMMENT '源实体ID',
+    target_entity_id INT NOT NULL COMMENT '目标实体ID',
+    relation_type ENUM('causes','treats','assesses','related_to','contraindicates','develops_at') NOT NULL COMMENT '关系类型',
+    description TEXT COMMENT '关系描述',
+    confidence FLOAT DEFAULT 1.0 COMMENT '置信度 0-1',
+    book_id VARCHAR(64) NOT NULL COMMENT '所属书籍ID(UUID)',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_graph_rel_source (source_entity_id),
+    INDEX idx_graph_rel_target (target_entity_id),
+    INDEX idx_graph_rel_type (relation_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识图谱关系表';
+
+-- 24. 层级社区树表
+DROP TABLE IF EXISTS `graph_community_tree`;
+
+CREATE TABLE graph_community_tree (
+    node_id VARCHAR(64) PRIMARY KEY COMMENT '社区节点ID',
+    parent_id VARCHAR(64) COMMENT '父节点ID',
+    level INT NOT NULL DEFAULT 0 COMMENT '层级深度',
+    scope ENUM('book','global') NOT NULL DEFAULT 'book' COMMENT '作用域',
+    book_id VARCHAR(64) COMMENT 'scope=book 时非空(UUID)',
+    label VARCHAR(500) COMMENT '社区标签（实体名摘要）',
+    entity_names JSON COMMENT '社区内实体名列表',
+    chunk_ids JSON COMMENT '叶子节点关联的块ID列表',
+    is_leaf BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否叶子节点',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_comm_parent (parent_id),
+    INDEX idx_comm_scope_level (scope, level)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='层级社区树表';
+
+-- 25. 块↔社区关联表
+DROP TABLE IF EXISTS `graph_community_chunks`;
+
+CREATE TABLE graph_community_chunks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    community_id VARCHAR(64) NOT NULL COMMENT '社区节点ID',
+    chunk_id INT NOT NULL COMMENT '块ID',
+    UNIQUE KEY uk_community_chunk (community_id, chunk_id),
+    INDEX idx_community (community_id),
+    INDEX idx_chunk (chunk_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='块与社区关联表';
+
+-- ----------------------------
 -- 初始化完成
 -- ----------------------------
-SELECT '数据库初始化完成，共创建21张业务表（基础10张 + RAG评估v2 11张）' AS result;
+SELECT '数据库初始化完成，共创建25张业务表（基础10张 + RAG评估v2 11张 + 知识图谱4张）' AS result;

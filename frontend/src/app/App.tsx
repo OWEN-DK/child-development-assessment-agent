@@ -27,7 +27,7 @@ function App() {
               pathname: location.pathname,
             }}
             menuDataRender={() => [
-              { path: '/', name: '首页' },
+              { path: '/', name: '知识问答' },
               { path: '/knowledge-base', name: '知识库' },
                { path: '/knowledge-search', name: '内容搜索' },
                { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
@@ -43,7 +43,7 @@ function App() {
             )}
           >
             <PageContainer
-              subTitle="基于 AI 的个性化发展评估与训练计划分析"
+              subTitle="基于知识库的智能问答与运动方案推荐"
             >
               <Outlet />
             </PageContainer>

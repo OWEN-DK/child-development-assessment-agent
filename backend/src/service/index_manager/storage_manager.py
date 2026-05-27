@@ -43,6 +43,12 @@ class StorageManager:
                     storage_context = StorageContext.from_defaults(persist_dir=index_dir, vector_store=vector_store)
                     self.index = load_index_from_storage(storage_context)
                     logger.info("Index loaded successfully.")
+                    # docstore.json 存在但内容为空时，从 Chroma 回填
+                    docstore_count = len(self.index.docstore.docs) if hasattr(self.index, 'docstore') and self.index.docstore else 0
+                    if docstore_count == 0 and settings.vector_store_type == "chroma":
+                        logger.warning("Docstore loaded from disk but is empty, rebuilding from Chroma...")
+                        self._rebuild_docstore_from_chroma()
+                        self._persist_index()
                     return
                 else:
                     logger.warning("No existing index found (missing docstore.json). Waiting for file uploads.")
@@ -50,8 +56,11 @@ class StorageManager:
                         logger.info("Attempting to load from Chroma vector store directly")
                         try:
                             storage_context = StorageContext.from_defaults(vector_store=vector_store)
-                            self.index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context)
-                            logger.info("Successfully created index from existing vector store")
+                            self.index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, store_nodes_override=True)
+                            logger.info("Successfully created index from existing vector store (store_nodes_override=True)")
+                            # 从 Chroma 重建 docstore：将向量存储中的节点回填到 docstore
+                            self._rebuild_docstore_from_chroma()
+                            self._persist_index()
                             return
                         except Exception as vc_e:
                             logger.warning(f"Failed to load from vector store: {vc_e}")
@@ -177,6 +186,58 @@ class StorageManager:
                     except Exception as rollback_error:
                         logger.error(f"Failed to rollback index: {rollback_error}")
                 raise
+
+    def _rebuild_docstore_from_chroma(self):
+        """从 Chroma 向量存储中读取节点数据，回填到 docstore。
+
+        当 docstore.json 丢失但 Chroma 数据完好时调用此方法。
+        重建后 docstore 非空，BM25 检索器和社区树遍历可正常工作。
+        """
+        if not self.index:
+            return
+        if not hasattr(self.index, "_vector_store"):
+            return
+        vs = self.index._vector_store
+        if not (hasattr(vs, "_collection") and vs._collection):
+            return
+
+        try:
+            collection = vs._collection
+            # 分批读取所有节点（避免内存溢出）
+            batch_size = 500
+            all_ids = collection.get(include=[])["ids"]
+            if not all_ids:
+                logger.warning("Chroma 中无节点数据，跳过 docstore 重建")
+                return
+
+            total = len(all_ids)
+            rebuilt = 0
+            for offset in range(0, total, batch_size):
+                batch_ids = all_ids[offset : offset + batch_size]
+                results = collection.get(ids=batch_ids, include=["metadatas", "documents"])
+                if not results or not results["ids"]:
+                    continue
+
+                from llama_index.core.schema import TextNode
+
+                for node_id, doc_text, metadata in zip(
+                    results["ids"], results["documents"], results["metadatas"]
+                ):
+                    if node_id in self.index.docstore.docs:
+                        continue
+                    node = TextNode(
+                        id_=node_id,
+                        text=doc_text or "",
+                        metadata=metadata or {},
+                    )
+                    self.index.docstore.add_documents([node])
+                    rebuilt += 1
+
+            logger.info(f"Docstore 重建完成: 从 Chroma 回填 {rebuilt} 个节点 (Chroma 总计 {total} 个)")
+            if rebuilt > 0:
+                self._dirty = True
+        except Exception as e:
+            logger.error(f"Docstore 重建失败: {e}")
 
     def _clear_index(self):
         logger.info("All documents deleted, clearing entire index")

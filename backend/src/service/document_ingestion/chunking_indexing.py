@@ -365,7 +365,10 @@ class ChunkingAndIndexing:
             
         # 索引构建完成后清理内存
         gc.collect()
-        
+
+        # Phase 1: 触发 LazyGraphRAG 图构建（异步，不阻塞索引流程）
+        _trigger_graph_build(file_hash, processed_nodes)
+
         if cancelled:
             from src.utils.exceptions import TaskCancelledException
             raise TaskCancelledException("Task cancelled during indexing")
@@ -379,3 +382,79 @@ class ChunkingAndIndexing:
         )
         
         return pending_doc, len(documents)
+
+
+def _trigger_graph_build(file_hash: str, processed_nodes: list) -> None:
+    """异步触发 LazyGraphRAG 知识图谱构建。
+
+    索引完成后调用，在后台异步执行图构建，不阻塞索引完成响应。
+    图构建失败不影响索引成功。
+    """
+    if not file_hash or not processed_nodes:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning("无事件循环，跳过图构建")
+        return
+
+    async def _run_graph_build():
+        try:
+            from src.core.knowledge_qa.graph.pipeline import build_graph_for_book
+            from src.utils.http_client import RagHttpClient
+
+            # 从 file_hash 查找文档 ID
+            doc_info = await document_manager.get_document(file_hash)
+            if not doc_info:
+                logger.warning(f"未找到文档: file_hash={file_hash}，跳过图构建")
+                return
+
+            book_id = doc_info.get("id")
+            if not book_id:
+                logger.warning(f"文档无 ID: file_hash={file_hash}，跳过图构建")
+                return
+
+            # 提取 topics
+            topics_per_chunk = []
+            for node in processed_nodes:
+                raw = node.metadata.get("topics", "[]")
+                if isinstance(raw, str):
+                    try:
+                        topics_per_chunk.append(json.loads(raw))
+                    except (json.JSONDecodeError, TypeError):
+                        topics_per_chunk.append([])
+                elif isinstance(raw, list):
+                    topics_per_chunk.append(raw)
+                else:
+                    topics_per_chunk.append([])
+
+            # 通过 HTTP 客户端调用 RAG 服务的图谱写入端点（不再直接使用 Repository）
+            http_client = RagHttpClient()
+            try:
+                result = await build_graph_for_book(
+                    book_id=book_id,
+                    chunks=processed_nodes,
+                    topics_per_chunk=topics_per_chunk,
+                    http_client=http_client,
+                )
+            finally:
+                await http_client.close()
+
+            logger.info(
+                f"知识图谱构建完成: book_id={book_id}, "
+                f"entities={result.get('entity_count', 0)}, "
+                f"communities={result.get('community_count', 0)}, "
+                f"leaf_count={result.get('leaf_count', 0)}"
+            )
+
+            # 图构建成功才标记 graph_ready
+            if not result.get("error"):
+                await document_manager.update_graph_ready(file_hash, True)
+            else:
+                logger.warning(f"图构建失败，不标记 graph_ready: {result['error']}")
+        except Exception as e:
+            logger.warning(f"知识图谱构建失败（不影响索引）: {e}")
+
+    loop.create_task(_run_graph_build())
+    logger.info(f"知识图谱构建已调度: file_hash={file_hash}")

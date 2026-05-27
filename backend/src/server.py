@@ -201,8 +201,30 @@ def create_app() -> FastAPI:
 
     PromptController().register_routes(app)
 
-    # Phase 7: RAG Eval controllers
     from src.core.di_container import injector
+
+    # 知识问答
+    from src.controller.knowledge_qa_controller import KnowledgeQAController
+    from src.service.knowledge_qa_service import KnowledgeQAService
+    from src.service.task_state_service import TaskStateService
+    from src.core.async_task import AsyncTaskManager
+    from src.core.prompt import prompt_manager
+
+    try:
+        from src.core.database import async_session_factory
+
+        _async_task = injector.get(AsyncTaskManager)
+        _task_state = injector.get(TaskStateService)
+        _qa_service = KnowledgeQAService(_async_task, _task_state, prompt_manager)
+        _qa_controller = KnowledgeQAController(_qa_service)
+        _qa_router = APIRouter(prefix="/api/v1", tags=["知识问答"])
+        _qa_controller.register(_qa_router)
+        app.include_router(_qa_router)
+        logger.info("知识问答模块已注册")
+    except Exception as e:
+        logger.warning(f"知识问答模块注册失败（非致命）: {e}")
+
+    # Phase 7: RAG Eval controllers
     from src.controller.rag_eval.registry import RagEvalControllerRegistry
 
     rag_eval_registry = injector.get(RagEvalControllerRegistry)

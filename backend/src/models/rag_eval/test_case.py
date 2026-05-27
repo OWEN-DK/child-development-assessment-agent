@@ -34,6 +34,9 @@ class TestCase(Base):
     relevance_scores: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, comment="相关度评分"
     )
+    book_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, comment="限定检索的书籍 file_hash 列表"
+    )
     source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="manual", index=True, comment="manual/draft/import"
     )

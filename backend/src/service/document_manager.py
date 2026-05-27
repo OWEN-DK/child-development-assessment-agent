@@ -151,6 +151,22 @@ class DocumentManager:
         orms = await repo.get_all(limit=10000)
         return [self._orm_to_dict(o) for o in orms]
 
+    async def update_graph_ready(self, file_hash: str, ready: bool) -> None:
+        """更新文档的 graph_ready 标记"""
+        from src.models.document import DocumentRecord
+        from sqlalchemy import update as sa_update
+
+        repo = self._get_doc_repo()
+        async with repo.db_session_factory() as session:
+            stmt = (
+                sa_update(DocumentRecord)
+                .where(DocumentRecord.file_hash == file_hash)
+                .values(graph_ready=ready)
+            )
+            await session.execute(stmt)
+            await session.commit()
+        logger.info(f"文档 graph_ready 已更新: file_hash={file_hash}, ready={ready}")
+
     @staticmethod
     def _orm_to_dict(orm) -> dict:
         """ORM 对象转字典，保持与原 Pydantic DocumentRecord 兼容的格式"""
@@ -168,6 +184,7 @@ class DocumentManager:
             "metadata": metadata,
             "status": orm.status.value if hasattr(orm.status, "value") else str(orm.status),
             "progress": float(orm.progress or 0),
+            "graph_ready": bool(getattr(orm, "graph_ready", False)),
         }
 
 

@@ -4,6 +4,7 @@ import asyncio
 import os
 import shutil
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, Query, UploadFile
 
@@ -391,20 +392,438 @@ async def list_documents():
     return APIResponse.success(data={"documents": results})
 
 
+# ===== 书籍批量解析端点（供 knowledge-qa 通过 HTTP 调用，避免直接 DB 访问） =====
+
+
+# ===== 知识图谱社区树端点（供 knowledge-qa 通过 HTTP 调用，避免直接 DB 访问） =====
+
+
+
+@router.get("/graph/nodes/{node_id}")
+async def get_graph_node(node_id: str):
+    """获取单个社区节点的详细信息。
+
+    供 knowledge-qa 的社区树遍历通过 HTTP 调用。
+    """
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphCommunityRepository(async_session_factory)
+    node = await repo.get_node(node_id)
+    if not node:
+        from src.utils.exceptions import ResourceNotFoundException
+        raise ResourceNotFoundException(message=f"社区节点 {node_id} 不存在")
+
+    return APIResponse.success(data={
+        "node": {
+            "node_id": node.node_id,
+            "parent_id": node.parent_id,
+            "label": node.label,
+            "entity_names": node.entity_names or [],
+            "chunk_ids": node.chunk_ids or [],
+            "is_leaf": node.is_leaf,
+            "scope": node.scope,
+            "book_id": node.book_id,
+        }
+    })
+
+
+@router.get("/graph/children-batch")
+async def get_graph_children_batch(
+    parent_ids: str = Query(..., description="逗号分隔的父节点 ID 列表"),
+):
+    """批量查询多个父节点的直接子节点（单次 HTTP 请求）。
+
+    供 knowledge-qa 的社区树遍历通过 HTTP 调用。
+    """
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    id_list = [pid.strip() for pid in parent_ids.split(",") if pid.strip()]
+    if not id_list:
+        return APIResponse.success(data={"children_map": {}})
+
+    repo = GraphCommunityRepository(async_session_factory)
+    children_map = await repo.get_children_batch(id_list)
+
+    result: dict[str, list[dict]] = {}
+    for pid, children in children_map.items():
+        result[pid] = [
+            {
+                "node_id": c.node_id,
+                "parent_id": c.parent_id,
+                "label": c.label,
+                "entity_names": c.entity_names or [],
+                "chunk_ids": c.chunk_ids or [],
+                "is_leaf": c.is_leaf,
+                "scope": c.scope,
+                "book_id": c.book_id,
+            }
+            for c in children
+        ]
+
+    return APIResponse.success(data={"children_map": result})
+
+
+
+@router.post("/graph/global-rebuild")
+async def trigger_global_graph_rebuild():
+    """触发全局知识图谱重建（跨书实体去重 + 全局社区检测 + 层级树存储）。
+
+    供 knowledge-qa 和调度器通过 HTTP 调用，
+    避免直接传递 async_session_factory 访问数据库。
+    """
+    from src.core.database import async_session_factory
+    from src.core.knowledge_qa.graph.global_rebuild import rebuild_global_graph
+
+    result = await rebuild_global_graph(async_session_factory)
+    if result.get("error"):
+        return APIResponse.error(
+            code=500,
+            error_code="global_rebuild_failed",
+            message=f"全局图谱重建失败: {result['error']}",
+        )
+    return APIResponse.success(result)
+
+
+@router.get("/graph/roots")
+async def get_graph_roots(
+    scope: str = Query("book", description="社区作用域: book 或 global"),
+    book_id: str | None = Query(None, description="书籍 ID（scope=book 时必填）"),
+):
+    """获取社区树的根节点列表。
+
+    供 knowledge-qa 的 prefetch_context 通过 HTTP 调用。
+    """
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    if scope not in ("book", "global"):
+        from src.utils.exceptions import InvalidParamsException
+        raise InvalidParamsException(message="scope 必须是 book 或 global")
+
+    repo = GraphCommunityRepository(async_session_factory)
+    roots = await repo.get_roots(scope=scope, book_id=book_id)
+
+    return APIResponse.success(data={
+        "roots": [
+            {
+                "node_id": r.node_id,
+                "label": r.label,
+                "entity_names": r.entity_names or [],
+                "chunk_ids": r.chunk_ids or [],
+                "is_leaf": r.is_leaf,
+                "scope": r.scope,
+                "book_id": r.book_id,
+            }
+            for r in roots
+        ]
+    })
+
+
+@router.get("/graph/children/{node_id}")
+async def get_graph_children(node_id: str):
+    """获取社区节点的直接子节点列表。
+
+    供 knowledge-qa 的社区树遍历通过 HTTP 调用。
+    """
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphCommunityRepository(async_session_factory)
+    children = await repo.get_children(node_id)
+
+    return APIResponse.success(data={
+        "children": [
+            {
+                "node_id": c.node_id,
+                "label": c.label,
+                "entity_names": c.entity_names or [],
+                "chunk_ids": c.chunk_ids or [],
+                "is_leaf": c.is_leaf,
+                "scope": c.scope,
+                "book_id": c.book_id,
+            }
+            for c in children
+        ]
+    })
+
+
+
+# ===== 知识图谱写入端点（供 knowledge-qa 通过 HTTP 调用图谱构建操作） =====
+
+@router.post("/graph/entities/upsert")
+async def upsert_graph_entities(
+    entities: list[dict],
+    book_id: str = Query(...),
+):
+    """批量 upsert 图谱实体。
+
+    供 knowledge-qa 的图谱构建流水线通过 HTTP 调用。
+    接收实体 JSON 列表，服务端处理 ORM 创建和持久化。
+    """
+    from src.models.graph import EntityType, GraphEntity
+    from src.repository.graph_repository import GraphEntityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphEntityRepository(async_session_factory)
+    entity_orms = []
+    for e in entities:
+        try:
+            etype = EntityType(e.get("entity_type", "development_concept"))
+        except ValueError:
+            etype = EntityType.DEVELOPMENT_CONCEPT
+        entity_orms.append(GraphEntity(
+            name=e["name"],
+            entity_type=etype,
+            description=e.get("description") or "",
+            aliases=e.get("aliases") or None,
+            book_id=book_id,
+            chunk_ids=e.get("chunk_ids") or None,
+        ))
+
+    count = await repo.batch_upsert(entity_orms)
+    return APIResponse.success(data={"count": count})
+
+
+@router.post("/graph/relations/insert")
+async def insert_graph_relations(
+    relations: list[dict],
+    book_id: str = Query(...),
+):
+    """批量插入图谱关系（通过实体名称关联，服务端解析 source/target 实体 ID）。
+
+    供 knowledge-qa 的图谱构建流水线通过 HTTP 调用。
+    """
+    from src.models.graph import GraphRelation, RelationType
+    from src.repository.graph_repository import GraphEntityRepository, GraphRelationRepository
+    from src.core.database import async_session_factory
+
+    entity_repo = GraphEntityRepository(async_session_factory)
+    relation_repo = GraphRelationRepository(async_session_factory)
+
+    # 查询所有实体，构建 name → id 映射
+    all_entities = await entity_repo.find_by_book(book_id)
+    name_to_ids: dict[str, list[int]] = {}
+    for ent in all_entities:
+        name_to_ids.setdefault(ent.name, []).append(ent.id)
+
+    rel_orms = []
+    for r in relations:
+        source_ids = name_to_ids.get(r["source_entity_name"], [])
+        target_ids = name_to_ids.get(r["target_entity_name"], [])
+        if not source_ids or not target_ids:
+            continue
+        try:
+            rtype = RelationType(r.get("relation_type", "related_to"))
+        except ValueError:
+            rtype = RelationType.RELATED_TO
+        rel_orms.append(GraphRelation(
+            source_entity_id=source_ids[0],
+            target_entity_id=target_ids[0],
+            relation_type=rtype,
+            description=r.get("description") or "",
+            confidence=r.get("confidence", 0.5),
+            book_id=book_id,
+        ))
+
+    count = 0
+    if rel_orms:
+        count = await relation_repo.batch_insert(rel_orms)
+    return APIResponse.success(data={"count": count})
+
+
+@router.post("/graph/communities/store")
+async def store_community_tree_endpoint(
+    tree_nodes: list[dict],
+    tree_edges: list[dict] | None = None,
+    book_id: str | None = Query(None),
+    scope: str = Query("book"),
+):
+    """存储层级社区树。
+
+    供 knowledge-qa 的图谱构建流水线通过 HTTP 调用。
+    服务端处理 ORM 创建、旧数据清理和批量写入。
+    """
+    from src.models.graph import CommunityScope, GraphCommunityNode
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphCommunityRepository(async_session_factory)
+
+    if scope == "global":
+        await repo.delete_by_scope("global")
+    elif book_id:
+        await repo.delete_by_book(book_id)
+
+    # 建立 parent_id 映射
+    node_parents: dict[str, str | None] = {}
+    for n in tree_nodes:
+        node_parents[n["node_id"]] = n.get("parent_id")
+    if tree_edges:
+        for edge in tree_edges:
+            node_parents[edge["child"]] = edge["parent"]
+
+    orm_nodes = []
+    for n in tree_nodes:
+        pid = n.get("parent_id") or node_parents.get(n["node_id"])
+        try:
+            cs = CommunityScope(scope)
+        except ValueError:
+            cs = CommunityScope.BOOK
+        orm_nodes.append(GraphCommunityNode(
+            node_id=n["node_id"],
+            parent_id=pid,
+            label=n.get("label", ""),
+            entity_names=n.get("entity_names") or [],
+            chunk_ids=n.get("chunk_ids") or [],
+            is_leaf=n.get("is_leaf", False),
+            scope=cs,
+            book_id=book_id or "",
+        ))
+
+    count = await repo.batch_insert(orm_nodes)
+    return APIResponse.success(data={"count": count})
+
+
+@router.delete("/graph/entities/book/{book_id}")
+async def delete_graph_entities_by_book(book_id: str):
+    """删除指定书籍的所有图谱实体。"""
+    from src.repository.graph_repository import GraphEntityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphEntityRepository(async_session_factory)
+    count = await repo.delete_by_book(book_id)
+    return APIResponse.success(data={"count": count})
+
+
+@router.delete("/graph/relations/book/{book_id}")
+async def delete_graph_relations_by_book(book_id: str):
+    """删除指定书籍的所有图谱关系。"""
+    from src.repository.graph_repository import GraphRelationRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphRelationRepository(async_session_factory)
+    count = await repo.delete_by_book(book_id)
+    return APIResponse.success(data={"count": count})
+
+
+@router.delete("/graph/communities/book/{book_id}")
+async def delete_graph_communities_by_book(book_id: str):
+    """删除指定书籍的所有社区节点。"""
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphCommunityRepository(async_session_factory)
+    count = await repo.delete_by_book(book_id)
+    return APIResponse.success(data={"count": count})
+
+
+@router.delete("/graph/communities/scope/{scope}")
+async def delete_graph_communities_by_scope(scope: str):
+    """删除指定作用域的所有社区节点（全局图重建前清理）。"""
+    from src.repository.graph_repository import GraphCommunityRepository
+    from src.core.database import async_session_factory
+
+    repo = GraphCommunityRepository(async_session_factory)
+    count = await repo.delete_by_scope(scope)
+    return APIResponse.success(data={"count": count})
+
+
+@router.get("/books/batch-resolve")
+async def batch_resolve_books(
+    ids: str = Query(..., description="逗号分隔的书籍标识符列表（ID、文件名或文件哈希）"),
+):
+    """批量解析书籍标识符为 {id, file_name, file_hash} 映射。
+
+    供 knowledge-qa 模块通过 HTTP 调用，避免直接访问知识库数据库。
+    后续知识库独立部署时只需迁移此端点。
+    """
+    from src.repository.document_repository import DocumentRecordRepository
+    from src.core.database import async_session_factory
+    from sqlalchemy import select, or_
+
+    id_list = [rid.strip() for rid in ids.split(",") if rid.strip()]
+    if not id_list:
+        from src.utils.exceptions import InvalidParamsException
+        raise InvalidParamsException(message="ids 参数不能为空")
+
+    repo = DocumentRecordRepository(async_session_factory)
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(DocumentRecord.id, DocumentRecord.file_name, DocumentRecord.file_hash)
+            .where(
+                or_(
+                    DocumentRecord.id.in_(id_list),
+                    DocumentRecord.file_name.in_(id_list),
+                    DocumentRecord.file_hash.in_(id_list),
+                )
+            )
+        )
+        rows = result.all()
+
+    books = []
+    for row in rows:
+        books.append({
+            "id": str(row.id),
+            "file_name": row.file_name,
+            "file_hash": row.file_hash,
+        })
+    return APIResponse.success(data={"books": books})
+
+
+@router.get("/books/graph-ready")
+async def filter_graph_ready_books(
+    book_ids: str = Query(..., description="逗号分隔的文件哈希列表"),
+):
+    """过滤出 graph_ready=True 的书籍 UUID 列表。
+
+    供 knowledge-qa 的 prefetch_context 通过 HTTP 调用。
+    """
+    from src.models.document import DocumentRecord
+    from src.core.database import async_session_factory
+    from sqlalchemy import select
+
+    id_list = [bid.strip() for bid in book_ids.split(",") if bid.strip()]
+    if not id_list:
+        return APIResponse.success(data={"ready_ids": []})
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(DocumentRecord.id)
+            .where(
+                DocumentRecord.file_hash.in_(id_list),
+                DocumentRecord.graph_ready == True,  # noqa: E712
+            )
+        )
+        ready_ids = [str(row.id) for row in result.all()]
+
+    return APIResponse.success(data={"ready_ids": ready_ids})
+
+
+
 @router.get("/search")
 async def search_knowledge_content(
-    query: str, 
+    query: str,
     limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    book_ids: Optional[str] = Query(
+        None,
+        description="按书籍 ID 过滤，逗号分隔。不传则检索全部书籍",
+    ),
 ):
     """搜索知识库内容，返回匹配的片段和元数据（支持分页）"""
     if not query.strip():
         raise InvalidParamsException(message="搜索关键词不能为空")
 
+    book_id_list = None
+    if book_ids:
+        book_id_list = [bid.strip() for bid in book_ids.split(",") if bid.strip()]
+
     try:
-        result = await rag_service.search_content(query.strip(), limit, offset)
+        result = await rag_service.search_content(query.strip(), limit, offset, book_ids=book_id_list)
         return APIResponse.success(data={
-            "total": result["total"], 
+            "total": result["total"],
             "results": result["results"]
         })
     except Exception as e:

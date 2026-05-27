@@ -126,10 +126,10 @@ class RagService:
         return success
 
     async def search_content(
-        self, query: str, limit: int = 20, offset: int = 0
+        self, query: str, limit: int = 20, offset: int = 0, book_ids: list[str] | None = None
     ) -> dict:
         """搜索内容（支持分页）"""
-        return await self.retrieval_service.search_content(query, limit, offset)
+        return await self.retrieval_service.search_content(query, limit, offset, book_ids=book_ids)
 
     def get_document_chunks(
         self, file_hash: str, page: int = 1, page_size: int = 20

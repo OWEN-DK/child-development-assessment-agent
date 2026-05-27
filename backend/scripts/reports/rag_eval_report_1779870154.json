@@ -1,0 +1,278 @@
+{
+  "timestamp": 1779870154.902619,
+  "config": {
+    "bm25_weight": 0.6,
+    "vector_weight": 0.4,
+    "bm25_top_k": 10,
+    "vector_top_k": 10,
+    "reranker_model": "qwen3-rerank",
+    "reranker_initial_k": 20,
+    "reranker_final_k": 5,
+    "chunk_size": 1024,
+    "chunk_overlap": 200
+  },
+  "metrics": {
+    "retrieval": {
+      "avg_keyword_match": 0.611111111111111,
+      "avg_latency_ms": 4252.0485719045,
+      "pipeline_distribution": {
+        "retrieval_only": 12
+      },
+      "sample_count": 12,
+      "error_count": 0
+    },
+    "answer_quality": {}
+  },
+  "recommendations": [
+    {
+      "severity": "medium",
+      "category": "performance",
+      "title": "平均延迟偏高",
+      "detail": "平均延迟 4252ms，目标 <3000ms",
+      "suggestions": [
+        "减少 reranker initial_k（当前 20 → 建议 20）",
+        "检查是否可跳过某些 pipeline 步骤"
+      ]
+    },
+    {
+      "severity": "medium",
+      "category": "routing",
+      "title": "Simple pipeline 使用率偏低",
+      "detail": "Simple pipeline 占比 0.0%，目标 ≥30%",
+      "suggestions": [
+        "降低查询复杂度分类阈值，让更多简单查询走轻量 pipeline",
+        "检查 query_classifier 的路由逻辑是否过于保守"
+      ]
+    }
+  ],
+  "sample_results": [
+    {
+      "query": "0岁儿童走路的发展情况如何",
+      "age": 0,
+      "expected_keywords": [
+        "走路",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "7b504f98-4c0c-4865-8bde-530fe6e5cdbe",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "cf9f49cd-c27b-47c6-b0b3-aad1b4190930",
+        "9912b987-e13c-45ab-a168-321c9cf6b173"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 27708.88113975525,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "0岁宝宝还不会跑步正常吗",
+      "age": 0,
+      "expected_keywords": [
+        "跑步",
+        "发育",
+        "正常"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "0d5dbe2b-13b7-426e-b421-665a931593fc",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "f411f390-915a-40cd-9049-2dfca689c061",
+        "25df63ee-72e7-48ec-9ac2-813ee31457a6"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 4785.40301322937,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练1岁儿童的走路能力",
+      "age": 1,
+      "expected_keywords": [
+        "走路",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "d5bd049f-16a3-41e5-adca-93f39a219651",
+        "74196f32-487a-4901-adab-cdaaadf51762",
+        "110975a8-fd55-4c41-baee-448153eec9d9",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "25df63ee-72e7-48ec-9ac2-813ee31457a6"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 5246.166944503784,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "1岁儿童跑步发育迟缓的表现有哪些",
+      "age": 1,
+      "expected_keywords": [
+        "跑步",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "6fed9972-c696-480d-98e1-67655c81905c"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 47.9741096496582,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁孩子走路能力落后怎么办",
+      "age": 2,
+      "expected_keywords": [
+        "走路",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "bb8249b9-53ce-49e0-8715-41b80a1c96bc",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 48.39801788330078,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁儿童大运动发展的里程碑是什么",
+      "age": 2,
+      "expected_keywords": [
+        "大运动",
+        "里程碑",
+        "发展"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "543383e6-2136-4c70-83e5-a61cf78c0ae7",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 49.64041709899902,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "促进3岁宝宝走路的游戏有哪些",
+      "age": 3,
+      "expected_keywords": [
+        "走路",
+        "游戏",
+        "促进"
+      ],
+      "knowledge_ids": [
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "857ac62c-b0bb-4ff3-81dd-ccf75917dca4",
+        "87ababa3-7071-4eaa-8ec7-8888bab56e4f",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 48.35987091064453,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "3岁儿童跑步不协调需要就医吗",
+      "age": 3,
+      "expected_keywords": [
+        "跑步",
+        "不协调",
+        "就医"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "67d7d1d1-c368-4517-942f-4089f06b987e",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 4951.179981231689,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁儿童走路的发展情况如何",
+      "age": 4,
+      "expected_keywords": [
+        "走路",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "930c0b75-40f4-456d-bed2-e8c0752bbcd4",
+        "a6f9bb18-3bb7-4f53-9e3a-04ff8084e459",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 1334.6621990203857,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁宝宝还不会跑步正常吗",
+      "age": 4,
+      "expected_keywords": [
+        "跑步",
+        "发育",
+        "正常"
+      ],
+      "knowledge_ids": [
+        "f411f390-915a-40cd-9049-2dfca689c061",
+        "7b087edd-66cf-4cab-b535-750faad7620e",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "25df63ee-72e7-48ec-9ac2-813ee31457a6",
+        "55aa25eb-e8c8-4c59-b787-6950df78c068"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 5174.203157424927,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练5岁儿童的走路能力",
+      "age": 5,
+      "expected_keywords": [
+        "走路",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "7b087edd-66cf-4cab-b535-750faad7620e",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "f411f390-915a-40cd-9049-2dfca689c061",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 1581.0372829437256,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "5岁儿童跑步发育迟缓的表现有哪些",
+      "age": 5,
+      "expected_keywords": [
+        "跑步",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "55aa25eb-e8c8-4c59-b787-6950df78c068",
+        "6fed9972-c696-480d-98e1-67655c81905c",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 48.67672920227051,
+      "pipeline": "retrieval_only"
+    }
+  ]
+}

@@ -122,7 +122,7 @@ class RunEngineFacade:
     def build_execution_functions(
         self,
     ) -> tuple[
-        Callable[[str], Awaitable[list[dict]]] | None,
+        Callable[[str, list[str] | None], Awaitable[list[dict]]] | None,
         Callable[[str, list[str]], Awaitable[str | None]] | None,
     ]:
         """构建检索和生成函数，供 execute_single 和 batch_runner 共用
@@ -130,19 +130,37 @@ class RunEngineFacade:
         两个闭包通过 _retrieved_items 共享检索结果：
         retrieval_fn 填充内容，generation_fn 读取内容生成答案。
         每次测试用例执行串行调用，不存在并发竞争。
+
+        retrieval_fn 支持可选的 book_ids 参数：
+        - 传入 book_ids 时，走 search_content 路径（与 knowledge-qa 的 search_knowledge_base 一致）
+        - 不传 book_ids 时，走原有的 retrieve_knowledge 路径
         """
         _retrieved_items: list[dict] = []
 
         retrieval_fn = None
         if self._retrieval:
-            async def _retrieval(query: str):
-                results = await self._retrieval.retrieve_knowledge(query, limit=5, skip_classification=True)
-                items = []
-                for r in (results or []):
-                    if isinstance(r, dict):
-                        items.append({"id": r.get("id", ""), "content": r.get("content", "")})
-                    else:
-                        items.append({"id": getattr(r, "id", "") or "", "content": getattr(r, "content", "") or ""})
+            async def _retrieval(query: str, book_ids: list[str] | None = None):
+                if book_ids:
+                    # knowledge-qa 路径：search_content + book_ids 过滤
+                    result = await self._retrieval.search_content(
+                        query, limit=5, book_ids=book_ids
+                    )
+                    raw_items = result.get("results", []) if isinstance(result, dict) else []
+                    items = [
+                        {"id": r.get("id", ""), "content": r.get("content", "")}
+                        for r in raw_items
+                    ]
+                else:
+                    # 原有路径：retrieve_knowledge（无 book 过滤）
+                    results = await self._retrieval.retrieve_knowledge(
+                        query, limit=5, skip_classification=True
+                    )
+                    items = []
+                    for r in (results or []):
+                        if isinstance(r, dict):
+                            items.append({"id": r.get("id", ""), "content": r.get("content", "")})
+                        else:
+                            items.append({"id": getattr(r, "id", "") or "", "content": getattr(r, "content", "") or ""})
                 _retrieved_items.clear()
                 _retrieved_items.extend(items)
                 valid_items = [i for i in items if i.get("id")]

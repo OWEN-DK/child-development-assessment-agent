@@ -65,7 +65,7 @@ class IRetrievalService(ABC):
         pass
     
     @abstractmethod
-    async def search_content(self, query: str, limit: int = 20) -> List[dict]:
+    async def search_content(self, query: str, limit: int = 20, offset: int = 0, book_ids: Optional[List[str]] = None) -> dict:
         pass
     
     @abstractmethod

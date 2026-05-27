@@ -17,6 +17,7 @@ class TestCaseCreate(BaseModel):
     expected_keywords: list[str] = []
     answer_points_summary: Optional[str] = None
     difficulty_level: Optional[DifficultyLevel] = None
+    book_ids: Optional[list[str]] = []
 
 
 class TestCaseRead(TestCaseCreate):
@@ -44,6 +45,7 @@ class TestCaseUpdate(BaseModel):
     expected_keywords: Optional[list[str]] = None
     answer_points_summary: Optional[str] = None
     difficulty_level: Optional[DifficultyLevel] = None
+    book_ids: Optional[list[str]] = None
 
 
 class TestCaseList(BaseModel):
@@ -64,6 +66,7 @@ class TestCaseImportItem(BaseModel):
     expected_keywords: list[str] = []
     answer_points_summary: Optional[str] = None
     difficulty_level: Optional[str] = None  # 校验时转为 DifficultyLevel
+    book_ids: Optional[list[str]] = []
 
 
 class TestCaseImportData(BaseModel):

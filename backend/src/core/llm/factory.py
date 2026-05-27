@@ -306,6 +306,7 @@ class LLMServiceFactory:
                     "vl_parsing",
                     "ml_scoring",
                     "rag_eval",
+                    "knowledge_qa",
                 ]
 
                 from src.config.modules.models.llm import LLMSceneConfig
@@ -427,6 +428,7 @@ class LLMServiceFactoryCompat:
     """LLM 服务工厂兼容层（保留旧的类方法接口）"""
 
     _instances: dict[str, LLMService] = {}
+    _raw_instances: dict[str, Any] = {}
 
     @classmethod
     def create(
@@ -479,6 +481,58 @@ class LLMServiceFactoryCompat:
         # 缓存实例
         cls._instances[cache_key] = instance
 
+        return instance
+
+    @classmethod
+    def create_raw(
+        cls,
+        model_name: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+    ) -> "BaseChatModel":
+        """
+        创建原始 LangChain BaseChatModel 实例（不包装为 LLMService）。
+
+        用途：create_react_agent、bind_tools、with_structured_output 等
+        需要直接操作 BaseChatModel 的场景。
+
+        统一使用 DashScope OpenAI 兼容端点（/compatible-mode/v1），
+        支持所有 Qwen 模型包括 qwen3.5/3.6 系列。
+        """
+        cache_key = f"raw:{model_name}:{temperature}"
+
+        if cache_key in cls._raw_instances:
+            return cls._raw_instances[cache_key]
+
+        model_name = model_name or "qwen-plus"
+
+        from src.config import settings
+        from langchain_openai import ChatOpenAI
+
+        class DashScopeChatOpenAI(ChatOpenAI):
+            """ChatOpenAI 子类：适配 DashScope 兼容端点的两个限制。
+
+            1. DashScope 不支持 json_schema structured outputs，
+               with_structured_output 默认 method 从 "json_schema" 改为 "function_calling"。
+            2. qwen3.5/3.6 系列默认开启思考模式，思考模式不支持 tool_choice=required，
+               因此禁用思考模式（extra_body: enable_thinking=false）。
+            """
+
+            def with_structured_output(self, schema, *, method="function_calling", **kwargs):
+                return super().with_structured_output(schema, method=method, **kwargs)
+
+        instance = DashScopeChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            streaming=True,
+            api_key=settings.dashscope_api_key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            extra_body={"enable_thinking": False},
+        )
+
+        cls._raw_instances[cache_key] = instance
+        logger.info(f"原始 BaseChatModel 实例已创建（DashScope 兼容端点）：{model_name}")
         return instance
 
     @classmethod

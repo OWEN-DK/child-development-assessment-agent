@@ -1,0 +1,264 @@
+"""第 4 节并行展开：大纲 → 分组 → 并行 LLM → 运动参数
+
+替代原来的 plan_expand_content_node 单次巨大 LLM 调用。
+改为：提取大纲中的所有运动条目 → 分组(每组3-4个) → 并行 LLM 生成参数。
+"""
+
+import asyncio
+import json
+import logging
+from typing import Any, Dict, List
+
+from src.core.knowledge_qa.nodes.base import (
+    _direct_search,
+    _format_search_context,
+    _get_prompt_pair,
+    _get_temperature,
+    _sanitize_error,
+)
+from src.schemas.knowledge_qa import (
+    ExerciseGroupResponse,
+    KnowledgeQAState,
+    push_progress,
+)
+
+logger = logging.getLogger(__name__)
+
+GROUP_SIZE = 4  # 每组最多 4 个运动
+MAX_PARALLEL = 6  # 最大并行 LLM 调用数
+
+
+def _extract_exercise_slots(outline: dict) -> List[dict]:
+    """从大纲中提取所有运动条目及其上下文，保留定位信息用于回填。
+
+    Returns:
+        [{slot_idx, phase_idx, week_idx, day_idx, exercise_idx, exercise}]
+    """
+    slots = []
+    idx = 0
+    phases = outline.get("phases", [])
+    for pi, phase in enumerate(phases):
+        for wi, week in enumerate(phase.get("weeks", [])):
+            for di, day in enumerate(week.get("days", [])):
+                for ei, ex in enumerate(day.get("main_exercises", [])):
+                    if ex.get("name"):
+                        slots.append({
+                            "slot_idx": idx,
+                            "phase_idx": pi,
+                            "week_idx": wi,
+                            "day_idx": di,
+                            "exercise_idx": ei,
+                            "exercise": {
+                                "exercise_id": ex.get("exercise_id", f"EX{idx + 1:03d}"),
+                                "name": ex.get("name", ""),
+                                "type_id": ex.get("type_id", ""),
+                                "category": ex.get("category", ""),
+                                "target_skill": ex.get("target_skill", ""),
+                                "citation_ids": ex.get("citation_ids", []),
+                            },
+                        })
+                        idx += 1
+    return slots
+
+
+def _split_into_groups(slots: List[dict], group_size: int = GROUP_SIZE) -> List[List[dict]]:
+    """将运动条目分组。"""
+    return [slots[i:i + group_size] for i in range(0, len(slots), group_size)]
+
+
+def _build_group_prompt(
+    group_slots: List[dict],
+    search_context: str,
+    state: KnowledgeQAState,
+) -> str:
+    """为一个分组的运动构建 LLM prompt。
+
+    只包含本组运动的基本信息 + 知识库搜索结果 + 前序节摘要。
+    prompt 要求 LLM 输出 ExerciseGroupResponse JSON。
+    """
+    exercises_json = []
+    for s in group_slots:
+        ex = s["exercise"]
+        ctx = f"  - phase={s['phase_idx']}, week={s['week_idx']}, day={s['day_idx']}"
+        exercises_json.append({
+            "exercise_id": ex["exercise_id"],
+            "name": ex["name"],
+            "type_id": ex["type_id"],
+            "category": ex["category"],
+            "target_skill": ex["target_skill"],
+            "citation_ids": ex["citation_ids"],
+            "_context": ctx,
+        })
+
+    # 前序节摘要
+    s1 = state.sections.get(1)
+    s2 = state.sections.get(2)
+    s3 = state.sections.get(3)
+
+    prev_parts = []
+    for i, sec in [(1, s1), (2, s2), (3, s3)]:
+        if sec and sec.content:
+            prev_parts.append(f"### 第{i}节\n{sec.content[:400]}")
+
+    # S3 运动类型列表（验证运动名称用）
+    valid_names = []
+    if s3 and s3.structured_data:
+        ets = s3.structured_data.get("exercise_types", [])
+        for et in ets:
+            if et.get("name"):
+                valid_names.append(et["name"])
+
+    parts = [
+        f"## 任务：为以下 {len(group_slots)} 项运动生成完整执行参数",
+        "",
+        "```json",
+        json.dumps(exercises_json, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## 前序分析",
+        "\n\n".join(prev_parts) if prev_parts else "（无）",
+        "",
+        "## 知识库检索结果",
+        search_context,
+    ]
+
+    if valid_names:
+        parts.append("")
+        parts.append("## 运动名称约束")
+        parts.append("所有运动的 name 必须来自以下合法名称列表（精确匹配）：")
+        parts.append("、".join(valid_names))
+
+    if state.exercise_context:
+        parts.append("")
+        parts.append(state.exercise_context)
+
+    return "\n\n".join(parts)
+
+
+async def _expand_single_group(
+    group_idx: int,
+    group_slots: List[dict],
+    search_context: str,
+    state: KnowledgeQAState,
+) -> tuple:
+    """展开单个分组：调用 LLM 生成运动参数。失败返回降级数据。"""
+    try:
+        prompt = await _get_prompt_pair("section_4_expand_group")
+        temperature = await _get_temperature("plan_expand")
+
+        from src.core.llm.factory import LLMServiceFactoryCompat
+
+        model = LLMServiceFactoryCompat.create_raw(
+            model_name="qwen3.5-27b",
+            temperature=temperature,
+        )
+        structured_model = model.with_structured_output(ExerciseGroupResponse)
+
+        user_message = _build_group_prompt(group_slots, search_context, state)
+
+        response = await asyncio.wait_for(
+            structured_model.ainvoke([
+                {"role": "system", "content": prompt["system"]},
+                {"role": "user", "content": user_message},
+            ]),
+            timeout=60,
+        )
+
+        exercises = response.model_dump().get("exercises", [])
+        logger.info(
+            f"plan_expand_parallel: 分组[{group_idx}] 完成, {len(exercises)} 个运动"
+        )
+        return (group_idx, exercises)
+
+    except Exception as e:
+        logger.warning(f"plan_expand_parallel: 分组[{group_idx}] 失败: {e}")
+        # 降级：返回空参数的基本条目
+        fallback = []
+        for s in group_slots:
+            ex = s["exercise"]
+            fallback.append({
+                "exercise_id": ex["exercise_id"],
+                "name": ex["name"],
+                "type_id": ex["type_id"],
+                "category": ex.get("category", ""),
+                "duration_min": 15,
+                "intensity": "中",
+                "intensity_hint": "",
+                "sets": None,
+                "reps": None,
+                "rest_seconds": None,
+                "target_skill": ex.get("target_skill", ""),
+                "notes": "（本组生成失败，使用默认参数）",
+                "alternatives": [],
+                "citation_ids": ex.get("citation_ids", []),
+            })
+        return (group_idx, fallback)
+
+
+async def plan_expand_parallel_node(state: KnowledgeQAState) -> Dict[str, Any]:
+    """第 4 节并行展开：提取大纲运动条目 → 分组 → 并行生成参数。"""
+    outline = state.section_4_outline
+    if not outline or not outline.get("phases"):
+        return {
+            "errors": state.errors + ["section_4_expand: 大纲为空"],
+            "current_step": ["section_4_expand_failed"],
+        }
+
+    slots = _extract_exercise_slots(outline)
+    if not slots:
+        logger.info("plan_expand_parallel: 大纲中无运动条目，跳过")
+        return {"current_step": ["section_4_expand_empty"]}
+
+    groups = _split_into_groups(slots, GROUP_SIZE)
+
+    await push_progress(
+        "section_4_expanding",
+        f"正在并行展开 {len(slots)} 项运动参数 ({len(groups)} 组)…",
+    )
+
+    # 共享搜索上下文（所有组共用同一份检索结果）
+    search_results = await _direct_search(state.question, state.matched_book_ids)
+    search_context = _format_search_context(search_results)
+
+    # 并行展开（信号量限流）
+    sem = asyncio.Semaphore(MAX_PARALLEL)
+
+    async def _limited(group_idx, group_slots):
+        async with sem:
+            return await _expand_single_group(
+                group_idx, group_slots, search_context, state
+            )
+
+    try:
+        group_results_raw = await asyncio.gather(
+            *[_limited(i, g) for i, g in enumerate(groups)],
+        )
+    except Exception as e:
+        logger.exception("plan_expand_parallel: 并行展开异常")
+        return {
+            "errors": state.errors + [f"section_4_expand: 并行展开失败: {e}"],
+            "current_step": ["section_4_expand_failed"],
+        }
+
+    # 按 group_idx 排序
+    group_results_raw.sort(key=lambda x: x[0])
+    all_results = {}
+    for gidx, exercises in group_results_raw:
+        all_results[str(gidx)] = exercises
+
+    exercise_count = sum(len(v) for v in all_results.values())
+    logger.info(
+        f"plan_expand_parallel 完成: {exercise_count} 个运动, "
+        f"{len(groups)} 组"
+    )
+
+    await push_progress(
+        "section_4_expanded",
+        f"运动参数展开完成：{exercise_count} 项",
+    )
+
+    return {
+        "section_4_group_results": all_results,
+        "section_4_slots": slots,
+        "current_step": ["section_4_expanded"],
+    }

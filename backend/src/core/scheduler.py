@@ -4,6 +4,7 @@
 - 报告清理：每天凌晨 2 点清理 30 天前的过期报告
 - 草稿清理：每天凌晨 3 点清理 7 天未审核的草稿
 - 追踪数据清理：每天凌晨 4 点清理 30 天前的过期追踪数据
+- 全局图重建：每天凌晨 5 点重建跨书知识图谱
 """
 
 from datetime import datetime, timedelta
@@ -58,6 +59,25 @@ async def cleanup_expired_traces():
         logger.error(f"过期追踪数据清理任务失败: {e}")
 
 
+async def _rebuild_global_graph_job():
+    """定时重建全局知识图谱"""
+    logger.info("开始执行全局知识图谱重建任务...")
+    try:
+        from src.core.database import async_session_factory
+        from src.core.knowledge_qa.graph.global_rebuild import rebuild_global_graph
+
+        result = await rebuild_global_graph(async_session_factory)
+        if result.get("error"):
+            logger.error(f"全局知识图谱重建失败: {result['error']}")
+        else:
+            logger.info(
+                f"全局知识图谱重建完成: {result['merged_entities']} 合并实体, "
+                f"{result['community_count']} 社区, 耗时 {result['elapsed']:.1f}s"
+            )
+    except Exception as e:
+        logger.error(f"全局知识图谱重建任务失败: {e}")
+
+
 def start_scheduler():
     """启动定时任务调度器"""
     global _scheduler_ever_started
@@ -96,11 +116,22 @@ def start_scheduler():
         max_instances=1,
     )
 
+    # 每天凌晨 5 点重建全局知识图谱
+    scheduler.add_job(
+        _rebuild_global_graph_job,
+        CronTrigger(hour=5, minute=0),
+        id="rebuild_global_graph",
+        name="重建全局知识图谱",
+        replace_existing=True,
+        max_instances=1,
+    )
+
     scheduler.start()
     logger.info("APScheduler 定时任务调度器已启动")
     logger.info("  - 清理过期报告: 每天 02:00")
     logger.info("  - 清理孤儿草稿: 每天 03:00")
     logger.info("  - 清理过期追踪数据: 每天 04:00")
+    logger.info("  - 重建全局知识图谱: 每天 05:00")
 
 
 def stop_scheduler():

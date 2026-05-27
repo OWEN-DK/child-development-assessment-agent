@@ -456,6 +456,71 @@ class PromptVariableInvalidException(AppException):
         )
 
 
+# ==================== 知识问答异常 (17000-17999) ====================
+
+
+class NoMatchingBooksException(AppException):
+    """知识库无匹配书籍"""
+
+    def __init__(self, message: str = "未在知识库中找到相关书籍，请联系管理员上传"):
+        super().__init__(
+            status_code=400,
+            code=17001,
+            message=message,
+            error_code="NO_MATCHING_BOOKS",
+        )
+
+
+class RAGUnavailableException(AppException):
+    """RAG 检索服务不可用"""
+
+    def __init__(self, message: str = "知识库检索服务暂不可用"):
+        super().__init__(
+            status_code=503,
+            code=17002,
+            message=message,
+            error_code="RAG_UNAVAILABLE",
+        )
+
+
+class KnowledgeQATooManyRequestsException(AppException):
+    """知识问答并发任务数超限"""
+
+    def __init__(self, message: str = "系统繁忙，请稍后重试"):
+        super().__init__(
+            status_code=503,
+            code=17003,
+            message=message,
+            error_code="TOO_MANY_REQUESTS",
+        )
+
+
+class KnowledgeQATaskNotFoundException(AppException):
+    """知识问答任务不存在"""
+
+    def __init__(self, task_id: Optional[str] = None):
+        details = {"task_id": task_id} if task_id else None
+        super().__init__(
+            status_code=404,
+            code=17004,
+            message="任务不存在或已过期",
+            error_code="TASK_NOT_FOUND",
+            details=details,
+        )
+
+
+class KnowledgeQAGenerationFailedException(AppException):
+    """知识问答内容生成失败"""
+
+    def __init__(self, message: str = "内容生成失败，请稍后重试"):
+        super().__init__(
+            status_code=500,
+            code=17005,
+            message=message,
+            error_code="GENERATION_FAILED",
+        )
+
+
 # ==================== 监控异常 (16000-16999) ====================
 
 

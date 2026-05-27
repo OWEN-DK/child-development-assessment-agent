@@ -271,7 +271,7 @@ class RetrievalFacade:
         return results
 
     async def search_content(
-        self, query: str, limit: int = 20, offset: int = 0
+        self, query: str, limit: int = 20, offset: int = 0, book_ids: Optional[List[str]] = None
     ) -> dict:
         """
         搜索知识库内容，返回匹配的片段和元数据（支持分页）
@@ -280,6 +280,7 @@ class RetrievalFacade:
             query: 搜索关键词
             limit: 每页数量
             offset: 偏移量
+            book_ids: 可选的书籍 ID 列表（file_hash），用于过滤检索结果
 
         Returns:
             dict: 包含 total（总数）和 results（当前页结果）
@@ -351,6 +352,14 @@ class RetrievalFacade:
                 bm25_retriever=self.retriever_manager.bm25_retriever,
                 vector_retriever=self.retriever_manager.vector_retriever,
             )
+
+            # 按书籍 ID 过滤（基于 file_hash 字段）
+            if book_ids:
+                book_id_set = set(book_ids)
+                processed_results = [
+                    r for r in processed_results
+                    if r.get("file_hash") and r["file_hash"] in book_id_set
+                ]
 
             total = len(processed_results)
             # 应用分页

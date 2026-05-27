@@ -82,6 +82,30 @@ class IndexOperations:
             logger.error(f"Failed to delete document record: {e}")
             return False
 
+        # 级联删除知识图谱数据（实体、关系、社区节点）
+        try:
+            from src.repository.graph_repository import (
+                GraphCommunityRepository,
+                GraphEntityRepository,
+                GraphRelationRepository,
+            )
+            from src.core.database import async_session_factory
+
+            book_uuid = doc["id"]
+            entity_repo = GraphEntityRepository(async_session_factory)
+            relation_repo = GraphRelationRepository(async_session_factory)
+            community_repo = GraphCommunityRepository(async_session_factory)
+
+            deleted_entities = await entity_repo.delete_by_book(book_uuid)
+            deleted_relations = await relation_repo.delete_by_book(book_uuid)
+            deleted_communities = await community_repo.delete_by_book(book_uuid)
+            logger.info(
+                f"级联删除图谱数据完成: book_id={book_uuid}, "
+                f"实体={deleted_entities}, 关系={deleted_relations}, 社区节点={deleted_communities}"
+            )
+        except Exception as e:
+            logger.warning(f"级联删除图谱数据失败 (不影响文档删除): {e}")
+
         if not self.storage_manager.index:
             logger.warning("Index not initialized, document record deleted successfully.")
             return True

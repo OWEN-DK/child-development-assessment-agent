@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
 import App from '../app/App';
-import { HomePage } from '../features/assessment';
+import { KnowledgeQAPage } from '@features/knowledge-qa';
 import { KnowledgeBasePage } from '../features/documents';
 import { KnowledgeSearchPage } from '../features/knowledge';
 import { LLMMonitoringDashboard } from '../features/monitoring';
@@ -47,7 +47,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <HomePage />,
+        element: <KnowledgeQAPage />,
       },
       {
         path: 'knowledge-base',

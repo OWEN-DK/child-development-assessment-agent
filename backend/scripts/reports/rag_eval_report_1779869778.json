@@ -1,0 +1,620 @@
+{
+  "timestamp": 1779869778.5613592,
+  "config": {
+    "bm25_weight": 0.5,
+    "vector_weight": 0.5,
+    "bm25_top_k": 10,
+    "vector_top_k": 10,
+    "reranker_model": "qwen3-rerank",
+    "reranker_initial_k": 30,
+    "reranker_final_k": 5,
+    "chunk_size": 1024,
+    "chunk_overlap": 200
+  },
+  "metrics": {
+    "retrieval": {
+      "avg_keyword_match": 0.5444444444444444,
+      "avg_latency_ms": 3579.6064058939614,
+      "pipeline_distribution": {
+        "retrieval_only": 30
+      },
+      "sample_count": 30,
+      "error_count": 0
+    },
+    "answer_quality": {}
+  },
+  "recommendations": [
+    {
+      "severity": "medium",
+      "category": "performance",
+      "title": "平均延迟偏高",
+      "detail": "平均延迟 3580ms，目标 <3000ms",
+      "suggestions": [
+        "减少 reranker initial_k（当前 30 → 建议 20）",
+        "检查是否可跳过某些 pipeline 步骤"
+      ]
+    },
+    {
+      "severity": "medium",
+      "category": "routing",
+      "title": "Simple pipeline 使用率偏低",
+      "detail": "Simple pipeline 占比 0.0%，目标 ≥30%",
+      "suggestions": [
+        "降低查询复杂度分类阈值，让更多简单查询走轻量 pipeline",
+        "检查 query_classifier 的路由逻辑是否过于保守"
+      ]
+    }
+  ],
+  "sample_results": [
+    {
+      "query": "0岁儿童走路的发展情况如何",
+      "age": 0,
+      "expected_keywords": [
+        "走路",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "7b504f98-4c0c-4865-8bde-530fe6e5cdbe",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "cf9f49cd-c27b-47c6-b0b3-aad1b4190930",
+        "9912b987-e13c-45ab-a168-321c9cf6b173"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 56091.92872047424,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "0岁宝宝还不会跑步正常吗",
+      "age": 0,
+      "expected_keywords": [
+        "跑步",
+        "发育",
+        "正常"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "0d5dbe2b-13b7-426e-b421-665a931593fc",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "f411f390-915a-40cd-9049-2dfca689c061",
+        "25df63ee-72e7-48ec-9ac2-813ee31457a6"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 4661.43798828125,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练0岁儿童的跳跃能力",
+      "age": 0,
+      "expected_keywords": [
+        "跳跃",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "ab447a18-e44c-435e-a508-c04478279ac9",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b497e7c6-bc54-41ca-8551-be5fa3c742a4",
+        "54680822-d67a-4b2a-abdb-477d3bf308cf",
+        "94b39b78-5000-45d5-a695-5ff667370713"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 1364.901065826416,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "0岁儿童攀爬发育迟缓的表现有哪些",
+      "age": 0,
+      "expected_keywords": [
+        "攀爬",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "6fed9972-c696-480d-98e1-67655c81905c",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 47.64699935913086,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "0岁孩子投球能力落后怎么办",
+      "age": 0,
+      "expected_keywords": [
+        "投球",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "8f2ab1d2-d5e0-4ba0-9daf-0d4f524b1bb1",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 47.14488983154297,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练1岁儿童的走路能力",
+      "age": 1,
+      "expected_keywords": [
+        "走路",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "65878d2c-7cb3-442e-93f6-a09882fb759b",
+        "930c0b75-40f4-456d-bed2-e8c0752bbcd4",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "a7986848-ee61-4520-a4fe-a62411129dc4"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 4594.969034194946,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "1岁儿童跑步发育迟缓的表现有哪些",
+      "age": 1,
+      "expected_keywords": [
+        "跑步",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "6fed9972-c696-480d-98e1-67655c81905c"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 52.62613296508789,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "1岁孩子跳跃能力落后怎么办",
+      "age": 1,
+      "expected_keywords": [
+        "跳跃",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "4976858b-c87d-45a7-a7ad-f06d766bce21",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 47.08290100097656,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "1岁儿童大运动发展的里程碑是什么",
+      "age": 1,
+      "expected_keywords": [
+        "大运动",
+        "里程碑",
+        "发展"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "543383e6-2136-4c70-83e5-a61cf78c0ae7",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "9102e2a3-1914-450a-81d4-ec09463df708"
+      ],
+      "keyword_match_score": 0.0,
+      "latency_ms": 49.165964126586914,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "促进1岁宝宝投球的游戏有哪些",
+      "age": 1,
+      "expected_keywords": [
+        "投球",
+        "游戏",
+        "促进"
+      ],
+      "knowledge_ids": [
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "857ac62c-b0bb-4ff3-81dd-ccf75917dca4",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "c0468842-b323-4d01-8b3a-3c6c3e7bf907",
+        "c81b289e-7518-4f34-801d-25c81ec05716"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 46.998023986816406,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁孩子走路能力落后怎么办",
+      "age": 2,
+      "expected_keywords": [
+        "走路",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "bb8249b9-53ce-49e0-8715-41b80a1c96bc",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 47.71995544433594,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁儿童大运动发展的里程碑是什么",
+      "age": 2,
+      "expected_keywords": [
+        "大运动",
+        "里程碑",
+        "发展"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "543383e6-2136-4c70-83e5-a61cf78c0ae7",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 46.74506187438965,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "促进2岁宝宝跳跃的游戏有哪些",
+      "age": 2,
+      "expected_keywords": [
+        "跳跃",
+        "游戏",
+        "促进"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "857ac62c-b0bb-4ff3-81dd-ccf75917dca4",
+        "781fdefa-d5c5-4481-8355-7bc684c82d7f",
+        "67d7d1d1-c368-4517-942f-4089f06b987e"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 46.70214653015137,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁儿童攀爬不协调需要就医吗",
+      "age": 2,
+      "expected_keywords": [
+        "攀爬",
+        "不协调",
+        "就医"
+      ],
+      "knowledge_ids": [
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "6fed9972-c696-480d-98e1-67655c81905c",
+        "5a50bfd5-98f9-4e18-a085-df5f908556b1",
+        "06614508-df44-4f37-afb3-4d181aed44c4"
+      ],
+      "keyword_match_score": 0.0,
+      "latency_ms": 4962.990999221802,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "2岁儿童投球的发展情况如何",
+      "age": 2,
+      "expected_keywords": [
+        "投球",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "210bdafd-90b5-4f63-bb02-149b9a1991df",
+        "ad77eb96-e5a1-4a5a-b339-7c45bfdd9e2c",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 1502.424955368042,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "促进3岁宝宝走路的游戏有哪些",
+      "age": 3,
+      "expected_keywords": [
+        "走路",
+        "游戏",
+        "促进"
+      ],
+      "knowledge_ids": [
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "857ac62c-b0bb-4ff3-81dd-ccf75917dca4",
+        "87ababa3-7071-4eaa-8ec7-8888bab56e4f",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 49.33571815490723,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "3岁儿童跑步不协调需要就医吗",
+      "age": 3,
+      "expected_keywords": [
+        "跑步",
+        "不协调",
+        "就医"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "67d7d1d1-c368-4517-942f-4089f06b987e",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 5068.268060684204,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "3岁儿童跳跃的发展情况如何",
+      "age": 3,
+      "expected_keywords": [
+        "跳跃",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "4976858b-c87d-45a7-a7ad-f06d766bce21",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "5b440b38-f6c7-465d-8fbe-b6e229f44739",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "ab76dbcd-5f74-41ca-b76a-9e66af2461de"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 4873.495101928711,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "3岁宝宝还不会攀爬正常吗",
+      "age": 3,
+      "expected_keywords": [
+        "攀爬",
+        "发育",
+        "正常"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "bb8249b9-53ce-49e0-8715-41b80a1c96bc",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "5b440b38-f6c7-465d-8fbe-b6e229f44739"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 4867.301940917969,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练3岁儿童的投球能力",
+      "age": 3,
+      "expected_keywords": [
+        "投球",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "743b8753-d5e1-4743-ba7d-4666c07afdd6",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "f6895fa4-8307-4aac-8436-dd4c144165f5",
+        "0ad70eb6-8dc4-4214-b76d-4852763ba3fa"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 4901.089191436768,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁儿童走路的发展情况如何",
+      "age": 4,
+      "expected_keywords": [
+        "走路",
+        "发展",
+        "里程碑"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "930c0b75-40f4-456d-bed2-e8c0752bbcd4",
+        "a6f9bb18-3bb7-4f53-9e3a-04ff8084e459",
+        "f411f390-915a-40cd-9049-2dfca689c061"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 1251.6238689422607,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁宝宝还不会跑步正常吗",
+      "age": 4,
+      "expected_keywords": [
+        "跑步",
+        "发育",
+        "正常"
+      ],
+      "knowledge_ids": [
+        "f411f390-915a-40cd-9049-2dfca689c061",
+        "7b087edd-66cf-4cab-b535-750faad7620e",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "25df63ee-72e7-48ec-9ac2-813ee31457a6",
+        "55aa25eb-e8c8-4c59-b787-6950df78c068"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 4733.748912811279,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练4岁儿童的跳跃能力",
+      "age": 4,
+      "expected_keywords": [
+        "跳跃",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "4976858b-c87d-45a7-a7ad-f06d766bce21",
+        "54680822-d67a-4b2a-abdb-477d3bf308cf",
+        "5b440b38-f6c7-465d-8fbe-b6e229f44739",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "94b39b78-5000-45d5-a695-5ff667370713"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 1668.8320636749268,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁儿童攀爬发育迟缓的表现有哪些",
+      "age": 4,
+      "expected_keywords": [
+        "攀爬",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "930c0b75-40f4-456d-bed2-e8c0752bbcd4",
+        "6fed9972-c696-480d-98e1-67655c81905c",
+        "f6895fa4-8307-4aac-8436-dd4c144165f5"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 47.093868255615234,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "4岁孩子投球能力落后怎么办",
+      "age": 4,
+      "expected_keywords": [
+        "投球",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "a7af1c41-0704-4de0-923a-07ceb80ce5a4"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 46.17881774902344,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "如何训练5岁儿童的走路能力",
+      "age": 5,
+      "expected_keywords": [
+        "走路",
+        "训练",
+        "方法"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "7b087edd-66cf-4cab-b535-750faad7620e",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "65878d2c-7cb3-442e-93f6-a09882fb759b",
+        "6fed9972-c696-480d-98e1-67655c81905c"
+      ],
+      "keyword_match_score": 1.0,
+      "latency_ms": 6082.105875015259,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "5岁儿童跑步发育迟缓的表现有哪些",
+      "age": 5,
+      "expected_keywords": [
+        "跑步",
+        "迟缓",
+        "表现"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "55aa25eb-e8c8-4c59-b787-6950df78c068",
+        "6fed9972-c696-480d-98e1-67655c81905c",
+        "e64752bb-2af4-4ee2-b590-d653ed742cb5"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 46.75412178039551,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "5岁孩子跳跃能力落后怎么办",
+      "age": 5,
+      "expected_keywords": [
+        "跳跃",
+        "落后",
+        "干预"
+      ],
+      "knowledge_ids": [
+        "4976858b-c87d-45a7-a7ad-f06d766bce21",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "9102e2a3-1914-450a-81d4-ec09463df708"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 46.83089256286621,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "5岁儿童大运动发展的里程碑是什么",
+      "age": 5,
+      "expected_keywords": [
+        "大运动",
+        "里程碑",
+        "发展"
+      ],
+      "knowledge_ids": [
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "b9c36190-8d7e-4720-ba96-f2653dc91fc9",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "6fd8b7a5-f2ce-4298-9ea6-ce4b15a8e0f1"
+      ],
+      "keyword_match_score": 0.3333333333333333,
+      "latency_ms": 46.415090560913086,
+      "pipeline": "retrieval_only"
+    },
+    {
+      "query": "促进5岁宝宝投球的游戏有哪些",
+      "age": 5,
+      "expected_keywords": [
+        "投球",
+        "游戏",
+        "促进"
+      ],
+      "knowledge_ids": [
+        "94b39b78-5000-45d5-a695-5ff667370713",
+        "506ad851-58b2-4849-832e-efde0b4f0a0f",
+        "857ac62c-b0bb-4ff3-81dd-ccf75917dca4",
+        "a454be14-deca-419c-b4af-2a6b218787fb",
+        "67d7d1d1-c368-4517-942f-4089f06b987e"
+      ],
+      "keyword_match_score": 0.6666666666666666,
+      "latency_ms": 48.63381385803223,
+      "pipeline": "retrieval_only"
+    }
+  ]
+}

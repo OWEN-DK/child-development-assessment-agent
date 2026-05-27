@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "date": "2026-05-25",
+    "description": "Knowledge QA e2e 流程测试 — 3 用例，含 Phase 1-3 修复验证",
+    "total_timeout_used": "300s (临时放宽以跑完完整流程，生产为120s)"
+  },
+  "summary": {
+    "case_b": {
+      "label": "社交能力改善 (匹配 test_child_dev_book)",
+      "status": "completed",
+      "total_time": "268s",
+      "sections_completed": "5/5",
+      "key_findings": [
+        "Phase 2 S4拆分 √: structured_data 包含 phases(1阶段)/plan_summary/caution",
+        "Phase 3 总超时 √: 120s 超时在生产环境会触发 partial，测试中放宽至300s完成全流程",
+        "P0#1 仍存在: S4 citations 全部被 verify_citations 剔除 (0条)",
+        "P1#5 仍存在: S2/S4 有孤儿引用 (enhanced fix 已部署，待下一轮验证)",
+        "S1/S3/S5 引用质量正常，无孤儿引用"
+      ]
+    },
+    "case_c": {
+      "label": "发展里程碑 (匹配 test_child_dev_book)",
+      "status": "completed",
+      "total_time": "207s",
+      "sections_completed": "5/5",
+      "key_findings": [
+        "Phase 5.2 领域分类 X: 提示词修改在 templates.py 但实际从 DB 加载，未生效",
+        "P0#3 仍存在: S4 structured_data 为空 (非运动干预场景下无法提取方案参数)",
+        "P1#5 仍存在: S2 有 3 个孤儿引用",
+        "partial=True: plan_extract_params 超时/失败导致降级标记",
+        "S4 citations 全部被剔除 (P0#1)"
+      ]
+    },
+    "case_a": {
+      "label": "注意力改善 (匹配 test_child_dev_book)",
+      "status": "failed",
+      "reason": "LLM 匹配到'运动改变大脑 .epub'(文件名含空格), batch_resolve_book_ids 无法解析",
+      "fix_needed": "match_books 的 _batch_resolve_book_ids 需增加模糊匹配或 trim 处理"
+    }
+  },
+  "phase_verification": {
+    "phase1_quick_fixes": {
+      "P1#1_orphan_citations": "部分有效 — S1/S3/S5 无孤儿，但 S2/S4 仍有余留 (LLM 正文引用与 citation 对象 ID 不对齐的边界情况，已追加增强修复)",
+      "P1#2_error_logging": "无法验证 — verify_citations 在完整流程中运行但 errors 未包含新检测项 (需检查 partial 模式下 collector 不包含 errors)",
+      "P1#3_partial_flag": "部分有效 — plan_extract_params 正确设置 partial=True (Case C)，但 verify_citations 的 partial 设置未在完整流程触发"
+    },
+    "phase2_s4_split": {
+      "status": "验证通过 (Case B)",
+      "evidence": "S4 structured_data.phases=1阶段, plan_summary={total_duration_days:84, ...}, caution 非空",
+      "caveat": "仅当问题属于运动干预领域且正文包含结构化方案时有效；Case C (发展里程碑) 正文不含方案参数，提取失败"
+    },
+    "phase3_total_timeout": {
+      "status": "验证通过",
+      "evidence": "120s 总超时正确触发 partial 响应 (首轮测试)，300s 放行完整流程",
+      "note": "当前单节耗时约 40-60s，5节串行约 200-270s，120s 硬超时在生产中会持续触发 partial"
+    },
+    "phase4_lazygraphrag": "之前已验证，本次未重测",
+    "phase5_remaining": {
+      "P1#4_sse_progress": "已实现，本次测试通过轮询 API 验证进度推送正常",
+      "P2#5_book_misclassification": "提示词修改未生效 (DB 优先加载)，需同步更新 DB 中的 prompt 记录",
+      "P2#6_relevance_pollution": "提示词修改未生效 (同上)，需同步更新 DB"
+    }
+  }
+}

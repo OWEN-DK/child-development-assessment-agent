@@ -19,7 +19,7 @@ class RagRetrievalSettings(BaseSettings):
         description="混合检索 BM25 权重",
     )
     rag_hybrid_bm25_top_k: int = Field(
-        default=10,
+        default=20,
         validation_alias="RAG_HYBRID_BM25_TOP_K",
         description="BM25 返回 Top K",
     )
@@ -34,7 +34,7 @@ class RagRetrievalSettings(BaseSettings):
         description="混合检索向量权重",
     )
     rag_hybrid_vector_top_k: int = Field(
-        default=10,
+        default=20,
         validation_alias="RAG_HYBRID_VECTOR_TOP_K",
         description="向量检索返回 Top K",
     )
@@ -121,9 +121,9 @@ class RagRetrievalSettings(BaseSettings):
         description="搜索页面向量阈值（RRF 分数）",
     )
     rag_search_relative_cutoff_ratio: float = Field(
-        default=0.5,
+        default=0.2,
         validation_alias="RAG_SEARCH_RELATIVE_CUTOFF_RATIO",
-        description="搜索页面截断比例",
+        description="搜索页面截断比例（0.2 = 保留最高分 20% 以上的结果）",
     )
     rag_search_min_similarity_threshold: float = Field(
         default=0.003,

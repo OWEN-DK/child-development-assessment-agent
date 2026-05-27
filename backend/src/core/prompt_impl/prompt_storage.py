@@ -103,7 +103,6 @@ class PromptStorage:
             version_label = f"v{next_version_number}"
 
             new_version = PromptVersion(
-                id=f"{prompt_key}_{version_label}",
                 prompt_key=prompt_key,
                 version_label=version_label,
                 version_number=next_version_number,

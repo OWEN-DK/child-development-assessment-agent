@@ -58,7 +58,8 @@ class TestCaseExecutor:
             async def _retrieve_and_generate():
                 nonlocal retrieved_ids, retrieved_contexts, actual_answer, failure_stage, retrieval_raw_count
                 if retrieval_fn:
-                    retrieved = await retrieval_fn(test_case.query)
+                    case_book_ids = getattr(test_case, "book_ids", None) or None
+                    retrieved = await retrieval_fn(test_case.query, book_ids=case_book_ids)
                     retrieval_raw_count = len(retrieved or [])
                     retrieved_ids = [
                         (d.get("id", "") if isinstance(d, dict) else getattr(d, "id", "") or "")

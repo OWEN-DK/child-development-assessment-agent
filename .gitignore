@@ -122,3 +122,6 @@ chroma/
 *.bin
 .worktrees/
 .opencode/
+.playwright-mcp
+.claude
+.codegraph

@@ -126,6 +126,8 @@ class CaseService:
                 "expected_keywords": item.expected_keywords,
                 "answer_points_summary": item.answer_points_summary,
                 "difficulty_level": difficulty_value,
+                "book_ids": item.book_ids if item.book_ids else None,
+                "professional_terms": [],
                 "source": "import",
             }
             try:

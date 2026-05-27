@@ -2,8 +2,8 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Any
 
-from sqlalchemy import (DECIMAL, JSON, DateTime, Enum, Index, Integer, String,
-                        Text, func)
+from sqlalchemy import (BOOLEAN, DECIMAL, JSON, DateTime, Enum, Index, Integer,
+                        String, Text, func)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
@@ -28,8 +28,15 @@ class SourceDocument(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
+    author: Mapped[str | None] = mapped_column(String(200), nullable=True, comment="作者/编著者")
     file_type: Mapped[str] = mapped_column(
         Enum("pdf", "epub", "txt"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(
+        Enum("book", "paper", "guideline", "manual", name="source_type_enum"),
+        nullable=False,
+        default="book",
+        comment="文献类型：book=书籍, paper=论文, guideline=指南, manual=手册",
     )
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -75,6 +82,8 @@ class DocumentRecord(Base):
 
     ref_doc_ids: Mapped[list[str] | None] = mapped_column(JSON)
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
+
+    graph_ready: Mapped[bool] = mapped_column(BOOLEAN, default=False, server_default="0")
 
     status: Mapped[ImportStatus] = mapped_column(
         Enum(ImportStatus, values_callable=lambda obj: [e.value for e in obj]),

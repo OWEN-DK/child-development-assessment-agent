@@ -13,3 +13,4 @@ class PromptCategory(enum.Enum):
     REPORTING = "reporting"
     TEST_CASE_GENERATION = "test_case_generation"
     RAG_EVAL = "rag_eval"
+    KNOWLEDGE_QA = "knowledge_qa"
