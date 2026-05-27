@@ -25,6 +25,7 @@
 |-------------|----------------|----------------|
 | **快速逻辑定位** | `.ai/business_logic_map.md` | 各大业务模块（Agent/RAG/基建/测试）的核心逻辑概述与具体代码文件入口。 |
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
+| **知识问答模块** | `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含知识图谱（graph/）、15个业务节点、子 Agent、工具集 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
 | **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |
@@ -39,7 +40,7 @@
 
 # 📌 项目宏观概览与技术栈
 
-**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含 RAG 知识检索、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
+**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（15节点 + 知识图谱）、RAG 知识检索（双流水线混合检索）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
 
 ## 技术栈
 - **语言**: Python 3.13, TypeScript 5.3
@@ -51,7 +52,8 @@
 - **文档解析**: PyMuPDF, EbookLib, BeautifulSoup, WeasyPrint (PDF 报告生成)
 - **DI/调度**: injector (依赖注入), APScheduler (定时任务)
 - **缓存/过滤**: cachetools (LRU), pybloom-live (布隆过滤器)
-- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components, @ant-design/charts, Zustand 5, React Router 7, TanStack Query 5
+- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components, @ant-design/charts 2.6, Zustand 5, React Router 7 (react-router-dom 7.13), TanStack Query 5
+- **前端测试**: Vitest 4.1, React Testing Library 16.3
 - **包管理**: uv (后端), npm (前端)
 - **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
 
@@ -61,82 +63,152 @@ backend/src/
 ├── api/                    # API 基础设施
 │   ├── json_response.py    # 统一 JSON 响应类
 │   └── sse.py              # SSE 推送基础设施
+├── data/                   # 静态数据文件（术语表/同义词/里程碑/测试集/运动清单/jieba词典/敏感词）
 ├── config/                 # 配置系统
 │   ├── core/               # 配置基础设施（管理器、持久化、事件）
 │   ├── modules/            # 按功能域拆分的配置模块
+│   │   ├── models/         # LLM/Embedding/ML 评分配置模块
+│   │   └── rag/            # RAG 配置子模块（分块/检索/向量化/测试/管道）
 │   └── rules/              # 业务规则配置层
 ├── controller/             # API 控制器层
-│   ├── rag_eval/           # RAG 评估子控制器（7个）
+│   ├── rag_eval/           # RAG 评估子控制器（8个：case/draft/metric/report/run/snapshot/tuning + registry）
 │   ├── config_controller.py
+│   ├── config_health_controller.py
+│   ├── config_management_controller.py
+│   ├── health_controller.py
+│   ├── knowledge_qa_controller.py
 │   ├── monitoring_controller.py
+│   ├── prompt_management_controller.py
 │   ├── rag_controller.py
 │   └── task_controller.py
 ├── core/                   # 核心业务逻辑
+│   ├── knowledge_qa/       # 知识问答模块（独立 LangGraph 编排）
+│   │   ├── graph/          # 知识图谱（构建/社区/抽取/遍历/重建/管道）
+│   │   ├── nodes/          # 15个业务节点（分析/识别/匹配/推荐/生成/校验等）
+│   │   ├── prompts/        # 提示词模板
+│   │   ├── _assembly.py    # 组装逻辑
+│   │   ├── sub_agents.py   # 子 Agent 定义
+│   │   └── tools.py        # Agent 工具集
 │   ├── llm/                # LLM 工厂与适配器
-│   │   ├── adapters/       # 框架适配器（LangChain/LlamaIndex/DashScope）
+│   │   ├── adapters/       # 框架适配器（LangChain/LlamaIndex/DashScope/多模态）
 │   │   ├── factory.py      # LLM 服务工厂
-│   │   └── embedding_factory.py
+│   │   ├── embedding_factory.py
+│   │   ├── reranker_factory.py    # Reranker 工厂
+│   │   ├── base.py         # LLM 基类
+│   │   ├── config_validator.py    # 配置校验
+│   │   ├── log_collector.py       # LLM 日志收集
+│   │   └── provider_registry.py   # Provider 注册表
 │   ├── tracing/            # 全链路追踪系统
 │   │   ├── writer.py       # 异步追踪写入器
 │   │   ├── context.py      # 追踪上下文管理
-│   │   └── cost.py         # 成本计算
+│   │   ├── cost.py         # 成本计算
+│   │   ├── cleanup.py      # 追踪数据清理
+│   │   ├── langgraph_middleware.py  # LangGraph 追踪中间件
+│   │   └── truncation.py   # 追踪数据截断
 │   ├── rag/                # RAG 核心模块
 │   ├── metadata/           # 文档元数据处理
 │   ├── ml/                 # ML 评分引擎
-│   ├── nodes/              # LangGraph 节点
+│   ├── nodes/              # LangGraph 节点（评估 Agent）
 │   ├── pipeline/           # RAG 查询流水线
-│   ├── prompt/             # 提示词管理
-│   ├── prompt_impl/        # 提示词实现层
+│   │   ├── orchestrator.py # 流水线编排器
+│   │   └── steps/          # 流水线步骤（缓存/去重/混合检索/页面增强/查询改写/路由/重排/融合/同义词扩展）
+│   ├── prompt/             # 提示词管理（manager + validator）
+│   ├── prompt_impl/        # 提示词实现层（facade + ab_test + initializer + storage）
 │   └── config/             # 配置缓存
 ├── middleware/              # 中间件层
 │   ├── exception_handler.py # 全局异常处理
 │   ├── response_wrapper.py  # 响应包装中间件
 │   └── trace_middleware.py  # 追踪中间件
 ├── models/                 # SQLAlchemy 数据模型
+│   ├── rag_eval/           # RAG 评估模型（11个：draft/test_case/test_run/test_set/snapshot/report/tuning/config/enums等）
+│   ├── config.py / document.py / graph.py / monitor.py / trace.py
+│   └── prompt_version.py / prompt_metadata.py / prompt_enums.py
 ├── repository/             # 数据访问层
+│   ├── rag_eval/           # RAG 评估仓库（11个）
+│   ├── base.py             # 泛型 CRUD 基类
+│   ├── config_repository.py / document_repository.py
+│   ├── graph_repository.py / monitor_repository.py
 ├── schemas/                # Pydantic 实体类
+│   ├── rag_eval/           # RAG 评估实体（diagnosis/draft/metrics/report/snapshot/test_case/test_run/test_set/tuning）
+│   ├── assessment.py / auth.py / config.py / knowledge_qa.py
+│   ├── llm.py / prompt.py / metadata.py / ml.py / monitoring.py
+│   └── query.py / rag.py / task.py / events.py / common.py
 ├── service/                # 业务服务层
 │   ├── rag_eval/           # RAG 评估服务
+│   │   ├── case/           # 测试用例服务（facade + case_service + set_service）
+│   │   ├── draft/          # 草稿服务（facade + generator + deduplicator + book_analyzer + faithfulness_checker）
+│   │   ├── metrics/        # 指标服务
+│   │   │   ├── diagnosis/  # 6层诊断引擎（layer1_rules ~ layer6_regression + orchestrator）
+│   │   │   └── scoring/    # 评分引擎（retrieval/generation/system + calculators 5个）
+│   │   ├── report/         # 报告服务（builder + exporter + markdown_renderer + trend_analyzer）
+│   │   ├── run/            # 运行服务（batch_runner + executor + result_processor + snapshot_manager）
+│   │   ├── tuning/         # 调优服务（advisor + config_changer + conflict_detector）
+│   │   └── orchestrator.py # RAG 评估编排器
 │   ├── retrieval/          # 检索服务
 │   ├── document_ingestion/ # 文档导入服务
 │   ├── cache/              # 缓存服务
-│   └── index_manager/      # 索引管理服务
+│   ├── index_manager/      # 索引管理服务
+│   ├── knowledge_qa_service.py  # 知识问答服务
+│   └── [其他独立服务]      # alert/audit/config_health/content_audit/document_manager/monitoring/rag/trace 等
+├── templates/              # 模板文件
+│   └── reports/            # 报告模板（HTML for WeasyPrint）
 └── utils/                  # 工具函数
+    ├── exceptions.py       # 异常基类（AppException 等）
+    ├── error_codes.py      # 错误码定义
+    ├── response.py / db.py / di.py / logger.py
+    ├── auth_helpers.py / crypto.py / hash_utils.py
+    ├── file_ops.py / orm_mapper.py / serializers.py
+    ├── embedding_helper.py / similarity.py / text_cleaner.py
+    ├── http_client.py / id_generator.py / time_utils.py
 ```
 
 ## 前端目录结构
 ```
 frontend/src/
 ├── api/                    # API 客户端层
-│   ├── rag-eval/           # RAG 评估 API
-│   ├── tracing.ts          # 链路追踪 API
-│   └── ...
+│   ├── assessment/         # 评估 API
+│   ├── config/             # 配置 API
+│   ├── documents/          # 文档管理 API
+│   ├── health/             # 健康检查 API
+│   ├── knowledge/          # 知识搜索 API
+│   ├── monitoring/         # 监控 API
+│   ├── rag-eval/           # RAG 评估 API（10个文件：cases/drafts/metrics/prompts/reports/runs/snapshots/tuning/client/index）
+│   └── tracing.ts          # 链路追踪 API
 ├── components/             # 通用组件
-│   ├── monitoring/         # 监控组件
-│   ├── config/             # 配置组件
-│   └── ...
+│   ├── assessment/         # 评估组件（AssessmentForm, ReportViewer）
+│   ├── config/             # 配置组件（19个：AccordionPanel/ConfigCard/DiffView/DynamicForm/Sidebar/WizardMode等）
+│   ├── documents/          # 文档组件（DocumentList, DocumentUploader, TaskProgressList）
+│   ├── knowledge/          # 知识搜索组件（SearchInput, SearchResultList, ResultDetailModal）
+│   ├── monitoring/         # 监控组件（CostAnalysis, LatencyChart, SpanDetail, TraceFilter等 8个）
+│   ├── progress/           # 进度组件（ProgressList, configs, hooks）
+│   └── ui/                 # 通用 UI 原子组件（EmptyState, ErrorBoundary, LoadingSpinner）
 ├── entities/               # 业务实体类型
-│   ├── rag-eval/           # RAG 评估实体
+│   ├── assessment/         # 评估实体
+│   ├── rag-eval/           # RAG 评估实体（constants, enums, mappers, types + 测试）
 │   └── tracing/            # 链路追踪实体
 ├── features/               # 业务特性层
-│   ├── rag-eval/           # RAG 评估特性
-│   │   ├── pages/          # 页面组件
-│   │   ├── components/     # 业务组件
-│   │   ├── hooks/          # 业务 Hooks
-│   │   ├── stores/         # Zustand 状态管理
-│   │   └── utils/          # 工具函数
+│   ├── assessment/         # 评估特性（hooks/, pages/）
+│   ├── config/             # 系统配置特性（hooks/, services/, stores/）
+│   ├── documents/          # 知识库特性（hooks/, pages/）
+│   ├── knowledge/          # 搜索特性（hooks/, pages/）
+│   ├── knowledge-qa/       # 知识问答特性（components/, hooks/, pages/, stores/, types/）
 │   ├── monitoring/         # LLM 监控特性
-│   ├── assessment/         # 评估特性
-│   ├── documents/          # 知识库特性
-│   └── knowledge/          # 搜索特性
-├── pages/                  # 独立页面
+│   └── rag-eval/           # RAG 评估特性
+│       ├── pages/          # 12个页面（Draft/PromptList/PromptEdit/PromptSandbox/PromptComparison/Run/TestCase/TestSet/Report/ReportDetail/Tuning/Main）
+│       ├── components/     # 业务组件（common/diagnosis/draft/metrics/report/test-set/tuning）
+│       ├── hooks/          # 13个业务 Hooks
+│       ├── stores/         # 3个 Zustand Store
+│       └── utils/          # 工具函数
+├── lib/                    # 全局库（queryClient - TanStack Query 配置）
+├── pages/                  # 独立页面（BookChunksPage, SystemConfigPage）
 ├── router/                 # 路由配置
 ├── shared/                 # 共享层
-│   ├── api/                # 通用 API 工具
-│   ├── hooks/              # 通用 Hooks
-│   ├── lib/                # 通用库
-│   └── types/              # 通用类型
-└── app/                    # 应用根组件
+│   ├── api/                # 通用 API 工具（client）
+│   ├── hooks/              # 通用 Hooks（useDebounce, usePagination, useSSE）
+│   ├── lib/                # 通用库（constants, formatters, highlight, notification, validators）
+│   ├── types/              # 通用类型（sse）
+│   └── ui/                 # 共享 UI（DiffViewer）
+└── app/                    # 应用根组件（含 styles/）
 ```
 
 ## 常用开发命令
@@ -244,7 +316,7 @@ frontend/src/
 - **DI 注册**: 所有 Repository 通过 `RepositoryModule` 注册到 Injector 容器。
 
 ### 9. 前端测试与类型安全
-- **测试框架**: Vitest + React Testing Library，测试文件位于 `src/**/*.test.tsx`。
+- **测试框架**: Vitest 4.1 + React Testing Library 16.3，测试文件位于 `src/**/*.test.tsx`。
 - **类型检查**: `npm run typecheck` 使用 TypeScript 严格模式，禁止 `any` 类型。
 - **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载。
 - **状态管理**: 使用 Zustand 5 管理复杂业务状态

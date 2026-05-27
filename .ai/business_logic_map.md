@@ -52,15 +52,25 @@
 ## 4. 前端功能模块与交互逻辑
 **逻辑概述**：基于 React 19 + TypeScript 构建的单页应用，负责所有用户交互、数据可视化及配置管理。
 
+### 4.1 知识问答模块 (Knowledge QA)
+**逻辑概述**：独立 LangGraph 编排的知识问答系统，支持知识图谱构建、多步推理、书籍匹配和引用校验。
+
+| 步骤 | 节点名称 | 业务逻辑 | 代码入口 |
+|---|---|---|---|
+| **核心编排** | KnowledgeQA Graph | 知识问答 LangGraph 编排，15个节点组成完整推理链。 | `backend/src/core/knowledge_qa/` |
+| **子 Agent** | Sub Agents | 定义多个子 Agent，协同完成知识问答。 | `backend/src/core/knowledge_qa/sub_agents.py` |
+| **知识图谱** | Graph Pipeline | 知识图谱的构建、社区检测、全局重建和遍历。 | `backend/src/core/knowledge_qa/graph/`（builder/community/extractor/global_rebuild/pipeline/traversal） |
+| **前端页面** | 知识问答界面 | 问答交互、书籍选择、进度展示、报告查看、引用展示。 | `frontend/src/features/knowledge-qa/`（components/hooks/pages/stores/types） |
+
 | 模块 | 业务逻辑 | 核心页面 / 代码入口 |
 |---|---|---|
-| **儿童发展评估** | 表单输入与报告展示 | 收集儿童画像与运动计划，调用 Agent 接口，渲染 Markdown 报告及多维雷达图。 | `frontend/src/features/assessment/HomePage.tsx`<br>`frontend/src/components/assessment/AssessmentForm.tsx` |
-| **知识库与检索** | 文档导入与智能搜索 | 管理 PDF/EPUB/TXT 知识文档的上传与分块；提供支持混合检索界面。 | `frontend/src/features/documents/KnowledgeBasePage.tsx`<br>`frontend/src/features/knowledge/KnowledgeSearchPage.tsx` |
-| **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/pages/`（DraftPage / TestCasePage / RunPage / ReportPage / TuningPage 等 11 个子页面） |
+| **儿童发展评估** | 表单输入与报告展示 | 收集儿童画像与运动计划，调用 Agent 接口，渲染 Markdown 报告及多维雷达图。 | `frontend/src/features/assessment/pages/HomePage.tsx`<br>`frontend/src/components/assessment/AssessmentForm.tsx` |
+| **知识库与检索** | 文档导入与智能搜索 | 管理 PDF/EPUB/TXT 知识文档的上传与分块；提供支持混合检索界面。 | `frontend/src/features/documents/pages/KnowledgeBasePage.tsx`<br>`frontend/src/features/knowledge/pages/KnowledgeSearchPage.tsx` |
+| **RAG 评估与调优** | 测试集构建与6层诊断 | 从文档提取或批量导入测试用例，执行并发测试。展示6层校验诊断结果与调参建议，支持一键采纳和配置对比。 | `frontend/src/features/rag-eval/pages/`（DraftPage / TestCasePage / TestSetPage / RunPage / ReportPage / ReportDetailPage / TuningPage / PromptListPage / PromptEditPage / PromptTestSandboxPage / PromptVersionComparisonPage / RagEvalMainPage，共12个子页面） |
 | **系统配置页** | 多模式配置热更新 | 提供向导模式/专家模式，动态修改系统参数，提供冲突检测与原子保存。 | `frontend/src/pages/SystemConfigPage.tsx` |
 | **提示词与监控** | 沙箱测试与全链路追踪 | 在线编辑 Prompt 并进行沙箱预览；查看 LLM 调用的 Span 层级树、耗时与成本大盘。 | `frontend/src/features/rag-eval/pages/PromptListPage.tsx`<br>`frontend/src/features/rag-eval/pages/PromptEditPage.tsx`<br>`frontend/src/features/monitoring/LLMMonitoringDashboard.tsx` |
 | **RAG 评估状态管理** | Zustand 状态管理 | 管理草稿生成、测试运行、报告生成等复杂业务状态。 | `frontend/src/features/rag-eval/stores/draftGenerationStore.ts`<br>`frontend/src/features/rag-eval/stores/runProgressStore.ts`<br>`frontend/src/features/rag-eval/stores/reportProgressStore.ts` |
-| **RAG 评估 API 客户端** | API 封装 | 封装 RAG 评估相关 API 调用。 | `frontend/src/api/rag-eval/`（drafts.ts / cases.ts / runs.ts / reports.ts 等） |
+| **RAG 评估 API 客户端** | API 封装 | 封装 RAG 评估相关 API 调用。 | `frontend/src/api/rag-eval/`（drafts.ts / cases.ts / runs.ts / reports.ts / metrics.ts / prompts.ts / snapshots.ts / tuning.ts / client.ts / index.ts） |
 | **链路追踪 API** | 追踪数据查询 | 查询 Trace 和 Span 数据，支持全链路追踪。 | `frontend/src/api/tracing.ts` |
 
 ---
@@ -89,7 +99,7 @@
 |---|---|---|
 | **单元测试** | Vitest + RTL | 组件渲染、交互逻辑、Hook 测试。 | `frontend/src/**/*.test.tsx` |
 | **类型检查** | TypeScript 严格模式 | `npm run typecheck`，禁止 `any` 类型。 | `frontend/tsconfig.json` |
-| **代码规范** | ESLint + Prettier | `npm run lint` 自动修复格式问题。 | `frontend/.eslintrc` |
+| **代码规范** | ESLint 10 | `npm run lint` 自动修复格式问题。 | `frontend/package.json`（eslint 10 + typescript-eslint 插件） |
 | **RAG 评估测试** | 业务逻辑测试 | 测试 RAG 评估相关的 Hooks、工具函数、实体映射。 | `frontend/src/features/rag-eval/hooks/ragEvalHooks.test.ts`<br>`frontend/src/features/rag-eval/hooks/useSSEProgress.test.ts`<br>`frontend/src/features/rag-eval/utils/sse.test.ts` |
 | **实体层测试** | 类型安全测试 | 测试实体类型定义、枚举、映射器、常量。 | `frontend/src/entities/rag-eval/constants.test.ts`<br>`frontend/src/entities/rag-eval/enums.test.ts`<br>`frontend/src/entities/rag-eval/mappers.test.ts` |
 

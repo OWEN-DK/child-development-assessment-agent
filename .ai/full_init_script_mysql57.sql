@@ -137,7 +137,7 @@ CREATE TABLE `knowledge_snapshots` (
     `config_snapshot` JSON COMMENT '配置快照 JSON',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_config_version_id` (`config_version_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 7. 测试用例草稿表
@@ -168,7 +168,7 @@ CREATE TABLE `test_case_drafts` (
     INDEX `idx_source_document_id` (`source_document_id`),
     INDEX `idx_status` (`status`),
     INDEX `idx_batch_id` (`batch_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 8. 测试用例表
@@ -178,15 +178,10 @@ DROP TABLE IF EXISTS `test_cases`;
 CREATE TABLE `test_cases` (
     `id` VARCHAR(64) PRIMARY KEY,
     `query` TEXT NOT NULL COMMENT '测试问题',
-    `age` DECIMAL(4,1) DEFAULT NULL COMMENT '年龄（岁），从草稿提升时可留空',
-    `age_stage_label` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '年龄段标签',
-    `domain` VARCHAR(32) DEFAULT NULL COMMENT '测试领域，从草稿提升时可留空',
     `description` TEXT COMMENT '期望答案描述',
     `expected_knowledge_ids` JSON COMMENT '期望检索的知识片段 ID 列表',
     `expected_keywords` JSON COMMENT '期望关键词列表',
     `answer_points_summary` TEXT COMMENT '答案要点摘要',
-    `min_age_requirement` DECIMAL(4,1) COMMENT '最小年龄要求',
-    `max_age_requirement` DECIMAL(4,1) COMMENT '最大年龄要求',
     `difficulty_level` VARCHAR(16) COMMENT 'easy/medium/hard',
     `professional_terms` JSON COMMENT '专业术语列表',
     `relevance_scores` JSON COMMENT '相关度评分',
@@ -197,10 +192,8 @@ CREATE TABLE `test_cases` (
     `version` INT NOT NULL DEFAULT 1,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_domain` (`domain`),
-    INDEX `idx_age_stage_label` (`age_stage_label`),
     INDEX `idx_source` (`source`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 9. 测试集表
@@ -214,7 +207,7 @@ CREATE TABLE `test_sets` (
     `source_type` VARCHAR(16) NOT NULL DEFAULT 'manual' COMMENT 'manual/json_import/book_generated/mixed',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 10. 测试集关联用例表
@@ -228,7 +221,7 @@ CREATE TABLE `test_set_cases` (
     `added_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY `uk_set_case` (`test_set_id`, `test_case_id`),
     INDEX `idx_test_case_id` (`test_case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 11. 测试执行记录表
@@ -266,7 +259,7 @@ CREATE TABLE `test_runs` (
     INDEX `idx_snapshot_id` (`snapshot_id`),
     INDEX `idx_config_version_id` (`config_version_id`),
     INDEX `idx_task_id` (`task_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 12. 测试执行结果表
@@ -304,7 +297,7 @@ CREATE TABLE `test_run_results` (
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_run_id` (`run_id`),
     INDEX `idx_test_case_id` (`test_case_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
 -- 13. A/B测试指标表
@@ -446,12 +439,12 @@ CREATE TABLE `prompt_ab_tests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='提示词A/B测试表';
 
 -- ============================================================
--- RAG评估 v2 新表（13-16）
+-- RAG评估 v2 报告与配置（18-21）
 -- 统一命名，无 rag_eval_ 前缀，varchar(64) ID
 -- ============================================================
 
 -- ----------------------------
--- 13. 评估报告表
+-- 18. 评估报告表
 -- ----------------------------
 DROP TABLE IF EXISTS `eval_reports`;
 
@@ -478,10 +471,10 @@ CREATE TABLE `eval_reports` (
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_run_id` (`run_id`),
     INDEX `idx_test_set_id` (`test_set_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
--- 14. 调优建议表
+-- 19. 调优建议表
 -- ----------------------------
 DROP TABLE IF EXISTS `tuning_suggestions`;
 
@@ -507,10 +500,10 @@ CREATE TABLE `tuning_suggestions` (
     INDEX `idx_report_id` (`report_id`),
     INDEX `idx_status` (`status`),
     INDEX `idx_category` (`category`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
--- 15. RAG评估配置版本表
+-- 20. RAG评估配置版本表
 -- ----------------------------
 DROP TABLE IF EXISTS `eval_config_versions`;
 
@@ -522,10 +515,10 @@ CREATE TABLE `eval_config_versions` (
     `change_summary` TEXT COMMENT '变更摘要',
     `created_by` VARCHAR(64) COMMENT '创建者',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
--- 16. RAG评估配置变更集表
+-- 21. RAG评估配置变更集表
 -- ----------------------------
 DROP TABLE IF EXISTS `eval_config_change_sets`;
 
@@ -539,10 +532,10 @@ CREATE TABLE `eval_config_change_sets` (
     `rolled_back_at` DATETIME,
     INDEX `idx_config_version_id` (`config_version_id`),
     INDEX `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
--- 17. Trace 跟踪表（保留）
+-- 22. Trace 跟踪表（保留）
 -- ----------------------------
 DROP TABLE IF EXISTS `traces`;
 
@@ -565,13 +558,11 @@ CREATE TABLE `traces` (
     KEY `idx_trace_status` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trace 跟踪表';
 
-SET FOREIGN_KEY_CHECKS = 1;
-
 -- ----------------------------
--- 22-25. 知识图谱表（LazyGraphRAG）
+-- 23-25. 知识图谱表（LazyGraphRAG）
 -- ----------------------------
 
--- 22. 知识图谱实体表
+-- 23. 知识图谱实体表
 DROP TABLE IF EXISTS `graph_entities`;
 
 CREATE TABLE graph_entities (
@@ -589,7 +580,7 @@ CREATE TABLE graph_entities (
     INDEX idx_graph_entity_type (entity_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识图谱实体表';
 
--- 23. 知识图谱关系表
+-- 24. 知识图谱关系表
 DROP TABLE IF EXISTS `graph_relations`;
 
 CREATE TABLE graph_relations (
@@ -606,7 +597,7 @@ CREATE TABLE graph_relations (
     INDEX idx_graph_rel_type (relation_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识图谱关系表';
 
--- 24. 层级社区树表
+-- 25. 层级社区树表
 DROP TABLE IF EXISTS `graph_community_tree`;
 
 CREATE TABLE graph_community_tree (
@@ -624,19 +615,9 @@ CREATE TABLE graph_community_tree (
     INDEX idx_comm_scope_level (scope, level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='层级社区树表';
 
--- 25. 块↔社区关联表
-DROP TABLE IF EXISTS `graph_community_chunks`;
-
-CREATE TABLE graph_community_chunks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    community_id VARCHAR(64) NOT NULL COMMENT '社区节点ID',
-    chunk_id INT NOT NULL COMMENT '块ID',
-    UNIQUE KEY uk_community_chunk (community_id, chunk_id),
-    INDEX idx_community (community_id),
-    INDEX idx_chunk (chunk_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='块与社区关联表';
+SET FOREIGN_KEY_CHECKS = 1;
 
 -- ----------------------------
 -- 初始化完成
 -- ----------------------------
-SELECT '数据库初始化完成，共创建25张业务表（基础10张 + RAG评估v2 11张 + 知识图谱4张）' AS result;
+SELECT '数据库初始化完成，共创建24张业务表（基础4张 + RAG评估v2 11张 + 监控3张 + 提示词3张 + 知识图谱3张）' AS result;

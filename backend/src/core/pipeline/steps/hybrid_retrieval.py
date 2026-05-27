@@ -9,11 +9,19 @@ class HybridRetrievalStep(PipelineStep):
 
     def __init__(self, name: str, config: dict[str, Any]):
         super().__init__(name, config)
-        # 单例注入，避免每次调用创建新实例
-        from src.core.di_container import injector
-        from src.core.interfaces import IRetrievalService
+        # 懒加载：避免 __init__ 中触发 DI 递归
+        # (HybridRetrievalStep → IRetrievalService → RetrievalFacade
+        #  → PipelineOrchestrator → step 实例化 → 回到这里)
+        self.__retrieval_service = None
 
-        self._retrieval_service = injector.get(IRetrievalService)
+    @property
+    def _retrieval_service(self):
+        """懒加载 IRetrievalService，打破 __init__ 中的 DI 循环依赖"""
+        if self.__retrieval_service is None:
+            from src.core.di_container import injector
+            from src.core.interfaces import IRetrievalService
+            self.__retrieval_service = injector.get(IRetrievalService)
+        return self.__retrieval_service
 
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """执行混合检索"""
