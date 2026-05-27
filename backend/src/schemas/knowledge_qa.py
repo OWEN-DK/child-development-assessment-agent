@@ -536,8 +536,12 @@ async def push_progress(step: str, message: str, **meta):
     if cb:
         try:
             await cb(step, message, **meta)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"push_progress 失败: step={step}, error={e}", exc_info=True)
+    else:
+        import logging
+        logging.getLogger(__name__).warning(f"push_progress 回调为空: step={step}")
 
 
 def init_partial_collector():

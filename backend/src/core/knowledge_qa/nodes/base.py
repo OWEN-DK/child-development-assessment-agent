@@ -101,6 +101,9 @@ async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
 
     host = getattr(settings, "app_host", "127.0.0.1")
     port = getattr(settings, "app_port", 8000)
+    # 0.0.0.0 是监听地址，不能用于主动连接；Docker 环境下常见此配置
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
 
     queries = [question]
     short = " ".join(question.replace("，", " ").replace("、", " ").split()[:10])
