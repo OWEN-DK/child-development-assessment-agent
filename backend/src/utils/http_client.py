@@ -25,6 +25,10 @@ class RagHttpClient:
                 host = getattr(settings, "app_host", "127.0.0.1")
                 port = getattr(settings, "app_port", 8000)
                 base_url = f"http://{host}:{port}"
+                # 0.0.0.0 是监听地址，不能用于主动连接
+                if host == "0.0.0.0":
+                    host = "127.0.0.1"
+                    base_url = f"http://{host}:{port}"
             except Exception:
                 base_url = "http://127.0.0.1:8000"
         self._base_url = base_url

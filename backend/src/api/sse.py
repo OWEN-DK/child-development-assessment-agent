@@ -64,6 +64,19 @@ class SSEPublisher:
 
         cls._local_subscribers[channel].append(queue)
 
+        # 立即发送 connected 事件，解决两个问题：
+        # 1. 代理缓冲：反向代理（nginx/ALB/Cloudflare）看到首字节后即停止缓冲
+        # 2. 竞态确认：前端立即知道 SSE 已连接，不再显示"正在连接…"
+        run_id = _extract_run_id(channel)
+        connected_data = {
+            "type": "connected",
+            "channel": channel,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if run_id:
+            connected_data["run_id"] = run_id
+        queue.put_nowait(connected_data)
+
         # 心跳任务（始终运行）
         async def heartbeat():
             run_id = _extract_run_id(channel)

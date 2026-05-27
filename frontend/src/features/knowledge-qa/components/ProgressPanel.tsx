@@ -5,6 +5,7 @@ import { useKnowledgeQAStore } from '../stores/knowledgeQAStore';
 const { Paragraph } = Typography;
 
 const STEP_LABELS: Record<string, string> = {
+  _connected: '已连接',
   started: '分析问题意图',
   section_1_generating: '正在生成第 1 节',
   section_2_generating: '正在生成第 2 节',
@@ -48,11 +49,34 @@ const SECTION_TITLES: Record<number, string> = {
 export const ProgressPanel: React.FC = () => {
   const progress = useKnowledgeQAStore((s) => s.progress);
   const completedSections = useKnowledgeQAStore((s) => s.completedSections);
-  if (!progress) return null;
 
-  const currentStep = progress.step;
-  const stepIndex = MAIN_STEPS.indexOf(currentStep);
+  // 没有 progress 时也要显示等待状态，避免用户看到空白卡住
+  const currentStep = progress?.step;
+  const stepIndex = currentStep ? MAIN_STEPS.indexOf(currentStep) : 0;
   const current = stepIndex >= 0 ? stepIndex : 0;
+
+  const items = MAIN_STEPS.map((key, idx) => {
+    const isCurrent = key === currentStep;
+    const isGhostCurrent = !isCurrent && currentStep && !MAIN_STEPS.includes(currentStep) && idx === 0;
+    const activeKey = isCurrent || isGhostCurrent;
+
+    return {
+      title: STEP_LABELS[key] || key,
+      description:
+        !progress
+          ? idx === 0
+            ? '正在连接…'
+            : undefined
+          : activeKey
+            ? (progress.message)
+            : undefined,
+      status: !progress
+        ? undefined
+        : isCurrent
+          ? ('process' as const)
+          : undefined,
+    };
+  };
 
   return (
     <Card size="small" style={{ marginTop: 24 }}>
@@ -60,11 +84,7 @@ export const ProgressPanel: React.FC = () => {
         direction="vertical"
         size="small"
         current={current}
-        items={MAIN_STEPS.map((key) => ({
-          title: STEP_LABELS[key] || key,
-          description: key === currentStep ? progress.message : undefined,
-          status: key === currentStep ? 'process' : undefined,
-        }))}
+        items={items}
       />
 
       {/* 流式过程中增量渲染已完成节内容预览 */}
