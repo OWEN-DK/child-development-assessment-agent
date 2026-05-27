@@ -38,7 +38,7 @@ for i, w in enumerate(widths, 1):
 
 # Load exercise data from project JSON (single source of truth)
 import pathlib
-_json_path = pathlib.Path(__file__).parent.parent.parent / "运动改变大脑_运动清单.json"
+_json_path = pathlib.Path(__file__).parent.parent / "src" / "data" / "运动改变大脑_运动清单.json"
 with open(_json_path, "r", encoding="utf-8") as f:
     _data = json.load(f)
     exercises = _data["exercises"]
@@ -236,7 +236,7 @@ for i, br in enumerate(brain_regions):
 ws4.freeze_panes = "A2"
 
 # ============================================================
-output_path = "/Users/owen/project/ai/main-child-dev-ass-agent/运动改变大脑_运动清单.xlsx"
+output_path = str(pathlib.Path(__file__).parent.parent / "src" / "data" / "运动改变大脑_运动清单.xlsx")
 wb.save(output_path)
 print(f"OK: {output_path}")
 print(f"Sheet 1: {len(exercises)} granular exercises")
