@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # 运动清单缓存 (模块级，进程重启自动刷新)
 _exercise_name_set_cache: Optional[Set[str]] = None
 _exercise_json_path = str(
-    Path(__file__).resolve().parent.parent.parent.parent.parent
+    Path(__file__).resolve().parent.parent.parent.parent
     / "data" / "运动改变大脑_运动清单.json"
 )
 

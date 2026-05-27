@@ -39,7 +39,7 @@ from src.utils.logger import logger
 
 # 项目根目录下的运动清单 JSON（由 xlsx 转换生成）
 _EXERCISE_JSON_PATH = str(
-    Path(__file__).resolve().parent / "data" / "运动改变大脑_运动清单.json"
+    Path(__file__).resolve().parent.parent / "data" / "运动改变大脑_运动清单.json"
 )
 # 模块级缓存：首次加载后缓存为 Markdown 字符串，进程重启后自动刷新
 _exercise_context_cache: str | None = None
