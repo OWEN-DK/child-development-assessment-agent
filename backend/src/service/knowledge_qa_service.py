@@ -13,12 +13,12 @@ import asyncio
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi.encoders import jsonable_encoder
 
 from src.core.async_task import AsyncTaskManager
+from src.core.knowledge_qa.nodes.base import get_exercise_json_path
 from src.schemas.knowledge_qa import (
     ErrorCode,
     GenerationMetadata,
@@ -38,9 +38,7 @@ from src.service.task_state_service import TaskStateService
 from src.utils.logger import logger
 
 # 项目根目录下的运动清单 JSON（由 xlsx 转换生成）
-_EXERCISE_JSON_PATH = str(
-    Path(__file__).resolve().parent.parent / "data" / "运动改变大脑_运动清单.json"
-)
+_EXERCISE_JSON_PATH = get_exercise_json_path()
 # 模块级缓存：首次加载后缓存为 Markdown 字符串，进程重启后自动刷新
 _exercise_context_cache: str | None = None
 
@@ -134,7 +132,15 @@ class KnowledgeQAService:
             parts.append("\n")
 
         for sec in response.sections:
-            parts.append(f"{sec.content}\n\n")
+            if sec.index == 3:
+                # S3: 从 structured_data 渲染 Markdown
+                parts.append(_render_s3_markdown(sec.structured_data) + "\n")
+            elif sec.index == 4:
+                # S4: 从 structured_data 渲染 Markdown
+                from src.core.knowledge_qa.nodes.plan_assemble import _render_s4_markdown
+                parts.append(_render_s4_markdown(sec.structured_data) + "\n")
+            else:
+                parts.append(f"{sec.content}\n\n")
             if sec.citations:
                 parts.append("### 本节引用\n")
                 for c in sec.citations:
@@ -222,6 +228,42 @@ class KnowledgeQAService:
 
         return "\n".join(lines)
 
+    @staticmethod
+    async def _save_history_to_db(
+        task_id: str,
+        question: str,
+        result_dict: dict,
+        status: str = "completed",
+    ) -> None:
+        """保存问答结果到历史记录 DB
+        status: completed / partial / cancelled / timeout / error
+        """
+        from src.repository.knowledge_qa_history_repository import (
+            KnowledgeQAHistoryRepository,
+        )
+        from src.models.knowledge_qa_history import KnowledgeQAHistory
+        import uuid
+
+        try:
+            # 标记部分结果
+            if status != "completed":
+                result_dict.setdefault("generation_metadata", {})
+                result_dict["generation_metadata"]["partial"] = True
+
+            repo = KnowledgeQAHistoryRepository()
+            history = KnowledgeQAHistory(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                question=question,
+                status=status,
+                result_json=result_dict,
+                matched_books_json=result_dict.get("matched_books"),
+            )
+            await repo.save(history)
+            await repo.delete_oldest(keep_count=200)
+        except Exception as e:
+            logger.error(f"保存历史记录失败: {e}")
+
     async def _run_qa_pipeline(self, **ctx) -> Dict[str, Any]:
         """后台执行 LangGraph 流水线"""
         task_id = ctx["task_id"]
@@ -229,6 +271,18 @@ class KnowledgeQAService:
         question = ctx["question"]
         book_ids = ctx.get("book_ids", [])
         stream = ctx.get("stream", True)
+        cancellation_event = ctx.get("cancellation_event")
+
+        async def _check_cancelled() -> None:
+            """检查取消信号，如果已取消则抛出 CancelledError"""
+            if cancellation_event and cancellation_event.is_set():
+                raise asyncio.CancelledError("任务已被取消")
+
+        # 跟踪部分结果，用于中断/超时时保存到历史记录
+        partial_data: Dict[str, Any] = {
+            "sections": {},
+            "matched_books": [],
+        }
 
         async def push(step: str, message: str, **meta):
             if stream:
@@ -253,11 +307,16 @@ class KnowledgeQAService:
                         "last_section_index": sec.get("index"),
                         "last_section_title": sec.get("title"),
                     }
+                    # 收集部分结果
+                    partial_data["sections"][sec.get("index")] = sec
+                # 保存匹配书籍
+                if step == "qa_books_matched" and meta.get("books"):
+                    partial_data["matched_books"] = meta["books"]
                 await self._task_state.update(task_id, task_type, updates)
             except Exception:
                 pass  # 状态更新失败不阻塞主流程
 
-        set_progress_context(callback=push, task_id=task_id, task_type=task_type)
+        set_progress_context(callback=push, task_id=task_id, task_type=task_type, cancellation_event=cancellation_event)
         set_prompt_manager(self._prompt_manager)
 
         from src.core.knowledge_qa.tools import clear_http_client, set_http_client
@@ -276,8 +335,14 @@ class KnowledgeQAService:
         start_time = time.monotonic()
 
         try:
-            # 无全局硬超时，由各节点自身 timeout 控制
-            final_state = await self._graph.ainvoke(initial_state)
+            # 执行前检查取消信号
+            await _check_cancelled()
+
+            # 全局硬超时 600s（10分钟），防止 LLM 卡死
+            final_state = await asyncio.wait_for(
+                self._graph.ainvoke(initial_state),
+                timeout=600.0,
+            )
 
             # LangGraph ainvoke 返回 dict，需要包装回 KnowledgeQAState
             if isinstance(final_state, dict):
@@ -291,9 +356,55 @@ class KnowledgeQAService:
                 result=jsonable_encoder(response.model_dump()),
                 message="完成",
             )
+            # 保存到历史记录 DB
+            result_dict = jsonable_encoder(response.model_dump())
+            await self._save_history_to_db(task_id, question, result_dict)
             return jsonable_encoder(response.model_dump())
 
+        except asyncio.CancelledError:
+            logger.info(f"知识问答被取消: task_id={task_id}")
+            await TaskSsePublisher.publish_cancelled(
+                task_type=task_type,
+                task_id=task_id,
+            )
+            # 保存部分结果到历史记录
+            try:
+                partial_response = self._build_partial_response(
+                    question, partial_data, task_id, task_type
+                )
+                if partial_response:
+                    result_dict = jsonable_encoder(partial_response.model_dump())
+                    await self._save_history_to_db(
+                        task_id, question, result_dict, status="cancelled"
+                    )
+                    logger.info(f"已保存中断时的部分结果: task_id={task_id}")
+            except Exception as e:
+                logger.error(f"保存部分结果失败: {e}")
+            raise
+
         except (NoMatchingBooksError, RAGUnavailableError):
+            raise
+
+        except asyncio.TimeoutError:
+            logger.error(f"知识问答全局超时 (600s): task_id={task_id}")
+            await TaskSsePublisher.publish_error(
+                task_type=task_type,
+                task_id=task_id,
+                error="timeout",
+                message="处理超时，请简化问题后重试",
+            )
+            # 保存部分结果到历史记录
+            try:
+                partial_response = self._build_partial_response(
+                    question, partial_data, task_id, task_type
+                )
+                if partial_response:
+                    result_dict = jsonable_encoder(partial_response.model_dump())
+                    await self._save_history_to_db(
+                        task_id, question, result_dict, status="cancelled"
+                    )
+            except Exception as e:
+                logger.error(f"保存超时部分结果失败: {e}")
             raise
 
         except Exception as e:
@@ -304,6 +415,18 @@ class KnowledgeQAService:
                 error="generation_failed",
                 message="内容生成失败，请稍后重试",
             )
+            # 保存部分结果到历史记录
+            try:
+                partial_response = self._build_partial_response(
+                    question, partial_data, task_id, task_type
+                )
+                if partial_response:
+                    result_dict = jsonable_encoder(partial_response.model_dump())
+                    await self._save_history_to_db(
+                        task_id, question, result_dict, status="cancelled"
+                    )
+            except Exception as save_err:
+                logger.error(f"保存异常部分结果失败: {save_err}")
             raise
 
         finally:
@@ -314,6 +437,53 @@ class KnowledgeQAService:
                 await http_client.close()
             async with self._task_lock:
                 self._concurrent_tasks -= 1
+
+    @staticmethod
+    def _build_partial_response(
+        question: str,
+        partial_data: Dict[str, Any],
+        task_id: str,
+        task_type: str,
+    ) -> KnowledgeQAResponse | None:
+        """从部分数据构建中断/超时时的部分响应"""
+        sections_dict = partial_data.get("sections", {})
+        matched_books = partial_data.get("matched_books", [])
+
+        if not sections_dict and not matched_books:
+            return None  # 没有任何数据，不保存
+
+        # 按 index 排序 sections
+        sorted_sections = sorted(
+            sections_dict.values(),
+            key=lambda s: s.get("index", 0),
+        )
+
+        # 转为 SectionOutput 列表
+        section_outputs = [
+            SectionOutput(
+                index=s.get("index", i + 1),
+                title=s.get("title", f"第{i + 1}节"),
+                content=s.get("content", ""),
+                citations=s.get("citations", []),
+                structured_data=s.get("structured_data", {}),
+            )
+            for i, s in enumerate(sorted_sections)
+        ]
+
+        return KnowledgeQAResponse(
+            question=question,
+            matched_books=matched_books if matched_books else [],
+            sections=section_outputs,
+            generation_metadata=GenerationMetadata(
+                total_sections=len(section_outputs),
+                total_citations=sum(len(s.citations) for s in section_outputs),
+                total_time_ms=0,
+                model_used="unknown",
+                review_model_used="unknown",
+                retries={},
+                partial=True,
+            ),
+        )
 
     def _build_response(
         self, state: KnowledgeQAState, elapsed_ms: float
@@ -362,3 +532,38 @@ th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
         from weasyprint import HTML
 
         return await asyncio.to_thread(lambda: HTML(string=html).write_pdf())
+
+
+def _render_s3_markdown(structured_data: dict) -> str:
+    """从 S3 structured_data 渲染运动类型推荐 Markdown。"""
+    sd = structured_data
+    if not isinstance(sd, dict):
+        return ""
+
+    lines = ["## 运动类型推荐", ""]
+
+    ets = sd.get("exercise_types", [])
+    if not ets:
+        return ""
+
+    child_age = sd.get("child_age_group", "")
+    if child_age:
+        lines.append(f"> 适用年龄段：{child_age}")
+        lines.append("")
+
+    tier_labels = {"primary": "核心推荐", "secondary": "辅助推荐", "supplementary": "补充推荐"}
+    lines.append("| 推荐等级 | 运动类型 | 类型ID | 分类 | 训练目标 | 推荐理由 |")
+    lines.append("|---------|---------|--------|------|---------|--------|")
+
+    for et in ets:
+        name = et.get("name", "")
+        type_id = et.get("type_id", "")
+        tier = tier_labels.get(et.get("tier", ""), et.get("tier", ""))
+        category = (et.get("category", "") or "")[:10]
+        skills = "、".join(et.get("target_skills", [])[:2])
+        rationale = (et.get("recommendation_rationale", "") or "")[:60]
+
+        lines.append(f"| {tier} | **{name}** | {type_id} | {category} | {skills} | {rationale} |")
+
+    lines.append("")
+    return "\n".join(lines)

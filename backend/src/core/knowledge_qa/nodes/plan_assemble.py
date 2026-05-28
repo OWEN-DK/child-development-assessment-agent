@@ -8,12 +8,14 @@
   4. Pydantic 校验 → 渲染 Markdown
 """
 
-import asyncio
-import difflib
 import json
 import logging
 from typing import Any, Dict, List
 
+from src.core.knowledge_qa.nodes.base import (
+    _invoke_llm_plain,
+    fuzzy_match_exercise,
+)
 from src.schemas.knowledge_qa import (
     KnowledgeQAState,
     PlanSummary,
@@ -33,7 +35,7 @@ def _merge_group_results(
     outline: dict,
     slots: List[dict],
     group_results: Dict[str, List[dict]],
-) -> dict:
+) -> List[dict]:
     """将各组的运动参数回填到 outline 的 phases 结构中。
 
     策略：遍历 slots（保持原始顺序），用 slot 中的定位信息找到
@@ -51,6 +53,7 @@ def _merge_group_results(
 
     # Deep copy outline phases（避免修改原始数据）
     phases = json.loads(json.dumps(outline.get("phases", [])))
+    failed_slots: List[int] = []
 
     # 验证运动名称（与 S3 合法名称集合做模糊匹配）
     # 同时回填参数
@@ -84,18 +87,19 @@ def _merge_group_results(
             orig["citation_ids"] = params.get("citation_ids", orig.get("citation_ids", []))
         except (IndexError, KeyError) as e:
             logger.warning(f"plan_assemble: slot[{si}] 回填失败: {e}")
+            failed_slots.append(si)
 
+    if failed_slots:
+        logger.warning(f"plan_assemble: {len(failed_slots)}/{len(slots)} 个 slot 回填失败")
     return phases
 
 
 def _validate_exercise_names(phases: List[dict], valid_names: List[str]) -> int:
-    """后处理：用 S3 运动名称做模糊匹配修正。返回修正数量。"""
+    """后处理：用 S3 运动名称做模糊匹配修正。委托给 base.fuzzy_match_exercise。"""
     if not valid_names:
         return 0
 
     fixed_count = 0
-    valid_lower = {n.lower().strip(): n for n in valid_names if n.strip()}
-
     for ph in phases:
         for wk in ph.get("weeks", []):
             for day in wk.get("days", []):
@@ -103,25 +107,11 @@ def _validate_exercise_names(phases: List[dict], valid_names: List[str]) -> int:
                     ex_name = (ex.get("name", "") or "").strip()
                     if not ex_name:
                         continue
-                    if ex_name.lower() in valid_lower:
-                        continue  # 精确匹配
-
-                    # 模糊匹配
-                    best = None
-                    for vl, vo in valid_lower.items():
-                        if vl in ex_name.lower() or ex_name.lower() in vl:
-                            best = vo
-                            break
-                    if not best:
-                        matches = difflib.get_close_matches(
-                            ex_name.lower(), list(valid_lower.keys()), n=1, cutoff=0.5
-                        )
-                        if matches:
-                            best = valid_lower[matches[0]]
-                    if best and best != ex_name:
-                        ex["name"] = best
+                    matched = fuzzy_match_exercise(ex_name, valid_names)
+                    if matched and matched != ex_name:
+                        ex["name"] = matched
                         fixed_count += 1
-                        logger.info(f"运动名称修正: '{ex_name}' → '{best}'")
+                        logger.info(f"运动名称修正: '{ex_name}' → '{matched}'")
 
     return fixed_count
 
@@ -150,8 +140,6 @@ def _derive_plan_summary(
 
 async def _generate_caution(state: KnowledgeQAState, phases: List[dict]) -> str:
     """用小 LLM 调用生成注意事项。失败返回通用提示。"""
-    from src.core.llm.factory import LLMServiceFactoryCompat
-
     # 提取运动名称摘要
     exercise_names = []
     for ph in phases[:2]:
@@ -168,11 +156,6 @@ async def _generate_caution(state: KnowledgeQAState, phases: List[dict]) -> str:
         return "请在专业教练指导下进行训练，根据孩子的实际体能状况调整运动强度和时间。"
 
     try:
-        model = LLMServiceFactoryCompat.create_raw(
-            model_name="qwen3.5-27b",
-            temperature=0.3,
-        )
-
         prompt = f"""你是一个儿童运动安全专家。根据以下运动方案，写一段注意事项和禁忌情况。
 
 运动项目：{', '.join(exercise_names[:10])}
@@ -180,15 +163,92 @@ async def _generate_caution(state: KnowledgeQAState, phases: List[dict]) -> str:
 
 请用 2-4 句话写出安全注意事项和禁忌情况。简明扼要，只输出注意事项文本（不要 markdown 格式）。"""
 
-        response = await asyncio.wait_for(
-            model.ainvoke(prompt),
-            timeout=15,
+        result = await _invoke_llm_plain(
+            prompt=prompt,
+            step_label="plan_assemble_caution",
+            timeout_seconds=15,
         )
-        content = response.content if hasattr(response, "content") else str(response)
-        return content.strip()[:500]
+        return result.strip()[:500]
     except Exception as e:
         logger.warning(f"caution 生成失败: {e}")
         return "请在专业教练指导下进行训练，根据孩子的实际体能状况调整运动强度和时间。"
+
+
+def _extract_exercise_types_from_phases(phases: list, s3_ets: list) -> list:
+    """从 S4 phases 中提取扁平运动类型列表，复用 S3 的类型元数据。
+
+    将方案中所有运动按 name 去重后，匹配 S3 exercise_types 中的
+    type_id/category/target_skills 等信息，输出与 S3 exercise_types 同构的数组。
+    """
+    if not phases:
+        return []
+
+    # 构建 S3 name → 类型元数据 的查找表
+    s3_lookup: dict[str, dict] = {}
+    for et in (s3_ets or []):
+        name = (et.get("name", "") or "").strip()
+        if name:
+            s3_lookup[name] = {
+                "type_id": et.get("type_id", ""),
+                "category": et.get("category", ""),
+                "target_skills": et.get("target_skills", []),
+                "citation_ids": et.get("citation_ids", []),
+            }
+
+    seen: set[str] = set()
+    result: list[dict] = []
+
+    for ph in phases:
+        for wk in ph.get("weeks", []):
+            for day in wk.get("days", []):
+                for ex in day.get("main_exercises", []):
+                    name = (ex.get("name", "") or "").strip()
+                    if not name or name in seen:
+                        continue
+                    seen.add(name)
+
+                    meta = s3_lookup.get(name, {})
+                    item = {
+                        "type_id": meta.get("type_id", ex.get("type_id", "")),
+                        "name": name,
+                        "tier": ex.get("tier", "secondary"),
+                        "category": meta.get("category", ex.get("category", "")),
+                        "target_problem_ids": ex.get("target_problem_ids", []),
+                        "target_skills": meta.get("target_skills", ex.get("target_skills", [])),
+                        "recommendation_rationale": ex.get("notes", ""),
+                        "citation_ids": meta.get("citation_ids", ex.get("citation_ids", [])),
+                    }
+                    result.append(item)
+
+    return result
+
+
+def _build_s4_summary(structured_data: dict) -> str:
+    """从 S4 structured_data 生成简短摘要（100 字以内）。"""
+    phases = structured_data.get("phases", [])
+    if not phases:
+        return "已根据孩子情况生成个性化运动方案。"
+
+    ps = structured_data.get("plan_summary", {})
+    total_days = ps.get("total_duration_days", "?")
+    total_phases = len(phases)
+    daily_min = ps.get("daily_duration_min", 30)
+
+    # 收集所有运动名称
+    all_names = []
+    for ph in phases:
+        for wk in ph.get("weeks", []):
+            for day in wk.get("days", []):
+                for ex in day.get("main_exercises", []):
+                    name = ex.get("name", "")
+                    if name and name not in all_names:
+                        all_names.append(name)
+
+    name_str = "、".join(all_names[:5])
+    if len(all_names) > 5:
+        name_str += "等"
+
+    return f"共{total_phases}阶段{total_days}天方案，含{name_str}，每日约{daily_min}分钟。"
 
 
 def _render_s4_markdown(structured_data: dict) -> str:
@@ -302,15 +362,37 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
     # ---- 降级路径 1: 无分组结果，用 outline content 直接作为 S4 ----
     if not slots or not group_results:
         if outline:
-            content = outline.get("content", "")
-            if content:
+            content_text = outline.get("content", "")
+            if content_text:
                 logger.info("plan_assemble: 降级使用 outline content 作为 S4")
+                # 尝试从 outline 构造最小 structured_data
+                degraded_sd = dict(outline.get("structured_data", {}))
+                phases_raw = outline.get("phases", [])
+                if phases_raw:
+                    degraded_sd["phases"] = phases_raw
+                else:
+                    degraded_sd["phases"] = [{
+                        "phase_name": "方案大纲（降级模式）",
+                        "weeks": [],
+                    }]
+                degraded_sd.setdefault("caution", "本节为降级生成，缺乏完整结构化数据。建议重试以获得完整方案。")
+                from src.schemas.knowledge_qa import PlanSummary
+                degraded_sd.setdefault("plan_summary", PlanSummary(
+                    total_duration_days=7,
+                    total_phases=1,
+                    daily_duration_min=30,
+                    weekly_frequency=5,
+                ).model_dump())
+                # 降级模式下也提取 exercise_types
+                s3_dg = state.sections.get(3)
+                s3_dg_meta = (s3_dg.structured_data or {}).get("exercise_types", []) if s3_dg else []
+                degraded_sd.setdefault("exercise_types", _extract_exercise_types_from_phases(phases_raw, s3_dg_meta))
                 section = SectionOutput(
                     index=4,
                     title=outline.get("title", "运动方案大纲"),
-                    content=content,
+                    content=content_text[:200] + "..." if len(content_text) > 200 else content_text,
                     citations=outline.get("citations", []),
-                    structured_data=outline.get("structured_data", {}),
+                    structured_data=degraded_sd,
                 )
                 await push_progress("section_4_done", "运动方案大纲（降级）", section=section.model_dump())
                 sections = dict(state.sections)
@@ -359,9 +441,14 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
         # Step 4: LLM 生成 caution
         caution = await _generate_caution(state, phases)
 
+        # Step 4b: 从 phases 提取扁平 exercise_types（复用 S3 元数据）
+        s3_ets_meta = (s3.structured_data or {}).get("exercise_types", []) if s3 else []
+        s4_exercise_types = _extract_exercise_types_from_phases(phases, s3_ets_meta)
+
         # Step 5: Pydantic 校验
         try:
             s4_data = Section4StructuredData(
+                exercise_types=s4_exercise_types,
                 phases=phases,
                 plan_summary=plan_summary,
                 caution=caution,
@@ -369,6 +456,8 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
         except Exception as ve:
             logger.warning(f"plan_assemble: Pydantic 校验失败: {ve}，尝试修复")
             # 降级：跳过校验失败的字段，用默认值
+            skipped_days = 0
+            skipped_weeks = 0
             safe_phases = []
             for ph in phases:
                 try:
@@ -396,12 +485,14 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                                         main_exercises=safe_exs,
                                     ))
                                 except Exception:
+                                    skipped_days += 1
                                     continue
                             safe_weeks.append(Week(
                                 week_index=wk.get("week_index", 1),
                                 days=safe_days,
                             ))
                         except Exception:
+                            skipped_weeks += 1
                             continue
                     safe_phases.append(Phase(
                         phase_name=ph.get("phase_name", "阶段"),
@@ -410,8 +501,14 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 except Exception:
                     continue
 
+            if skipped_days or skipped_weeks:
+                logger.warning(
+                    f"plan_assemble: Pydantic 降级 — 丢弃 {skipped_days} 天, {skipped_weeks} 周"
+                )
+
             try:
                 s4_data = Section4StructuredData(
+                    exercise_types=s4_exercise_types,
                     phases=safe_phases,
                     plan_summary=plan_summary,
                     caution=caution,
@@ -424,22 +521,24 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                     "current_step": ["section_4_assemble_failed"],
                 }
 
-        # Step 6: 渲染 Markdown
+        # Step 6: 构建简短摘要（100 字以内）+ 完整 structured_data
+        # 详细 Markdown 由前端从 structured_data 渲染，PDF 由 knowledge_qa_service 渲染
         data_dict = s4_data.model_dump()
-        markdown = _render_s4_markdown(data_dict)
+
+        summary = _build_s4_summary(data_dict)
 
         # Step 7: 存储
         section = SectionOutput(
             index=4,
             title="运动方案",
-            content=markdown,
+            content=summary,
             citations=[],  # 由 generate_s4_citations_node 填充
             structured_data=data_dict,
         )
 
 
         phase_count = len(data_dict.get("phases", []))
-        logger.info(f"plan_assemble 完成: {phase_count} 阶段, {len(markdown)} 字符")
+        logger.info(f"plan_assemble 完成: {phase_count} 阶段, content={len(summary)} 字符")
 
         await push_progress(
             "section_4_done",

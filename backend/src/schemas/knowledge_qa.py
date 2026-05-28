@@ -12,8 +12,8 @@
 
 import contextvars
 import operator
-from enum import IntEnum
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional
+from enum import Enum, IntEnum
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -207,6 +207,19 @@ class Section1Response(BaseModel):
         return _parse_list_field(v)
 
 
+class ProblemItem(BaseModel):
+    """识别出的问题项"""
+    name: str = Field(default="", description="问题名称/简述")
+    description: str = Field(default="", description="问题描述")
+    severity: Literal["高", "中", "低", "待评估"] = Field(default="待评估", description="严重程度")
+    category: str = Field(default="", description="问题分类（如：注意力、情绪、社交）")
+
+
+class Section2StructuredData(BaseModel):
+    """第 2 节结构化数据 — 问题识别"""
+    problems: List[ProblemItem] = Field(default_factory=list, description="问题列表")
+
+
 class Section2Response(BaseModel):
     """identify_problems Agent 的 response_format"""
 
@@ -215,14 +228,77 @@ class Section2Response(BaseModel):
     citations: List[Dict[str, Any]] = Field(
         default_factory=list, description="引用列表"
     )
-    structured_data: Dict[str, Any] = Field(
-        default_factory=dict, description="第 2 节结构化数据"
+    structured_data: Section2StructuredData = Field(
+        default_factory=Section2StructuredData, description="第 2 节结构化数据"
     )
 
     @field_validator("citations", mode="before")
     @classmethod
     def _parse_citations(cls, v):
         return _parse_list_field(v)
+
+
+class ExerciseTypeItem(BaseModel):
+    """运动类型推荐项 — 每项代表一种从权威运动清单中选出的运动类型。
+
+    字段与 section_3 prompt 中的输出格式保持一致。
+    """
+    type_id: str = Field(
+        ...,
+        pattern=r"^ET\d{3}$",
+        description="运动类型唯一ID，格式 ET001-ET999",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        description="运动名称，必须精确匹配权威运动清单中的名称",
+    )
+    tier: Literal["primary", "secondary", "supplementary"] = Field(
+        default="secondary",
+        description="推荐层级：primary=核心推荐, secondary=辅助推荐, supplementary=补充推荐",
+    )
+    category: str = Field(
+        default="",
+        description="运动分类，必须与权威运动清单'运动类型'列一致（如：行走/跑步/力量训练/舞蹈）",
+    )
+    target_problem_ids: List[str] = Field(
+        default_factory=list,
+        description="针对的问题ID列表，引用第2节中的 problem_id",
+    )
+    target_skills: List[str] = Field(
+        default_factory=list,
+        description="主要训练的能力（如：专注力、身体协调、情绪调节）",
+    )
+    recommendation_rationale: str = Field(
+        default="",
+        description="推荐理由，包含脑区/神经机制说明",
+    )
+    citation_ids: List[str] = Field(
+        default_factory=list,
+        description="支持的引用ID列表，如 [\"C001\", \"C002\"]",
+    )
+
+
+class Section3StructuredData(BaseModel):
+    """第 3 节结构化数据 — 运动类型推荐"""
+    exercise_types: List[ExerciseTypeItem] = Field(
+        default_factory=list,
+        min_length=1,
+        description="推荐的运动类型列表（至少 1 个）",
+    )
+    child_age_group: str = Field(default="", description="适用年龄段，如 '8-12岁男孩'")
+
+    @field_validator("exercise_types")
+    @classmethod
+    def _check_non_empty(cls, v: list) -> list:
+        if not v:
+            raise ValueError("exercise_types 不能为空，至少需要 1 个运动类型推荐")
+        seen = set()
+        for item in v:
+            if item.name in seen:
+                raise ValueError(f"运动名称重复: {item.name}")
+            seen.add(item.name)
+        return v
 
 
 class Section3Response(BaseModel):
@@ -233,8 +309,8 @@ class Section3Response(BaseModel):
     citations: List[Dict[str, Any]] = Field(
         default_factory=list, description="引用列表"
     )
-    structured_data: Dict[str, Any] = Field(
-        default_factory=dict, description="第 3 节结构化数据"
+    structured_data: Section3StructuredData = Field(
+        default_factory=Section3StructuredData, description="第 3 节结构化数据"
     )
 
     @field_validator("citations", mode="before")
@@ -251,11 +327,19 @@ class Section4OutlineResponse(BaseModel):
     citations: List[Dict[str, Any]] = Field(default_factory=list)
     phases: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="阶段列表（顶层字段）。每项含 phase_id(PH01)/name/goal/duration_weeks/weeks[]",
+        min_length=1,
+        description="阶段列表（顶层字段），至少 1 个阶段。每项含 phase_id(PH01)/name/goal/duration_weeks/weeks[]",
     )
     structured_data: Dict[str, Any] = Field(
         default_factory=dict, description="plan_summary/caution 等补充数据"
     )
+
+    @field_validator("phases")
+    @classmethod
+    def _check_phases_non_empty(cls, v: list) -> list:
+        if not v:
+            raise ValueError("phases 不能为空，至少需要 1 个阶段")
+        return v
 
     @field_validator("citations", mode="before")
     @classmethod
@@ -265,22 +349,6 @@ class Section4OutlineResponse(BaseModel):
     @field_validator("phases", mode="before")
     @classmethod
     def _parse_phases(cls, v):
-        return _parse_list_field(v)
-
-
-class Section4Response(BaseModel):
-    """plan_expand Agent 的 response_format"""
-
-    title: str = Field(default="运动方案")
-    content: str = Field(..., description="完整方案 Markdown 正文")
-    citations: List[Dict[str, Any]] = Field(default_factory=list)
-    structured_data: Dict[str, Any] = Field(
-        default_factory=dict, description="第 4 节完整结构化数据"
-    )
-
-    @field_validator("citations", mode="before")
-    @classmethod
-    def _parse_citations(cls, v):
         return _parse_list_field(v)
 
 
@@ -298,6 +366,51 @@ class Section5Response(BaseModel):
     @classmethod
     def _parse_citations(cls, v):
         return _parse_list_field(v)
+
+
+# ==================== IntensityLevel 枚举 ====================
+
+
+class IntensityLevel(str, Enum):
+    """运动强度级别（标准化 5 级）"""
+    LOW = "low"
+    LOW_MODERATE = "low-moderate"
+    MODERATE = "moderate"
+    MODERATE_HIGH = "moderate-high"
+    HIGH = "high"
+
+
+INTENSITY_MAP: dict[str, IntensityLevel] = {
+    "低强度": IntensityLevel.LOW,
+    "零强度": IntensityLevel.LOW,
+    "被动/低强度": IntensityLevel.LOW,
+    "中低强度": IntensityLevel.LOW_MODERATE,
+    "低-中强度": IntensityLevel.LOW_MODERATE,
+    "中强度": IntensityLevel.MODERATE,
+    "中-高强度": IntensityLevel.MODERATE_HIGH,
+    "中高强度": IntensityLevel.MODERATE_HIGH,
+    "高强度": IntensityLevel.HIGH,
+    "高强度耐力": IntensityLevel.HIGH,
+    "极高强度耐力": IntensityLevel.HIGH,
+}
+
+
+def map_intensity(raw: str | None) -> IntensityLevel | None:
+    """中文强度描述 → IntensityLevel 枚举。
+
+    策略：精确匹配 → 前缀匹配兜底。
+    """
+    if not raw:
+        return None
+    raw = raw.strip()
+    result = INTENSITY_MAP.get(raw)
+    if result:
+        return result
+    # 前缀匹配：处理 "中强度（最大心率65%-75%）" 等带括号描述
+    for cn, enum_val in INTENSITY_MAP.items():
+        if raw.startswith(cn[:2]) or cn.startswith(raw[:2]):
+            return enum_val
+    return None
 
 
 # ==================== 第 4 节结构化数据 ====================
@@ -379,6 +492,10 @@ class Section4StructuredData(BaseModel):
     所有字段均为必填，Pydantic 强制校验。Markdown 正文由 _render_s4_markdown 渲染。
     """
 
+    exercise_types: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="方案中所有运动的扁平列表，每项与 S3 ExerciseTypeItem 同构（type_id/name/tier/category/target_skills/recommendation_rationale/citation_ids）",
+    )
     phases: List[Phase] = Field(..., min_length=1, description="阶段计划，至少1个阶段")
     plan_summary: PlanSummary = Field(..., description="方案摘要")
     caution: str = Field(..., description="注意事项")
@@ -518,10 +635,15 @@ _partial_collector: contextvars.ContextVar[Optional[Dict[str, Any]]] = (
 )
 
 
-def set_progress_context(callback, task_id: str, task_type: str):
+def set_progress_context(callback, task_id: str, task_type: str, cancellation_event=None):
     """由 Service 在 graph.ainvoke 前调用"""
     _progress_callback.set(callback)
-    _progress_ctx.set({"task_id": task_id, "task_type": task_type})
+    _progress_ctx.set({"task_id": task_id, "task_type": task_type, "cancellation_event": cancellation_event})
+
+
+def get_progress_context() -> Optional[Dict[str, Any]]:
+    """Agent 节点内调用，获取当前进度上下文"""
+    return _progress_ctx.get()
 
 
 def clear_progress_context():
@@ -577,6 +699,3 @@ def get_prompt_manager():
     if pm is None:
         raise RuntimeError("prompt_manager 未设置，请确保 Service 已调用 set_prompt_manager()")
     return pm
-
-
-

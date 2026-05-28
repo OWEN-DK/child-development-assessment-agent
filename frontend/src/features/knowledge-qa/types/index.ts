@@ -20,6 +20,32 @@ export interface Citation {
   relevance: string;
 }
 
+// ===== 运动类型推荐项（与后端 ExerciseTypeItem 一致） =====
+export interface ExerciseTypeItem {
+  type_id: string;          // ET001-ET999
+  name: string;             // 运动名称，精确匹配权威运动清单
+  tier: 'primary' | 'secondary' | 'supplementary';
+  category: string;         // 运动分类（行走/跑步/力量训练/舞蹈…）
+  target_problem_ids: string[];
+  target_skills: string[];
+  recommendation_rationale: string;
+  citation_ids: string[];
+}
+
+// ===== S3 结构化数据 =====
+export interface Section3StructuredData {
+  exercise_types: ExerciseTypeItem[];
+  child_age_group: string;
+}
+
+// ===== S4 结构化数据 =====
+export interface Section4StructuredData {
+  exercise_types: ExerciseTypeItem[];  // 方案中所有运动的扁平列表
+  phases: Record<string, any>[];       // 阶段列表
+  plan_summary: Record<string, any>;   // 方案摘要
+  caution: string;                     // 注意事项
+}
+
 export interface SectionOutput {
   index: number;
   title: string;
