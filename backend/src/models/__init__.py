@@ -14,6 +14,7 @@ from .rag_eval import (DifficultyLevel, DocumentStatus as RagDocumentStatus,
                        TestRunStatus, TestSet, TestSetCase, TestSourceType,
                        TuningSuggestion)
 from .trace import Trace, TraceStatus
+from .knowledge_qa_history import KnowledgeQAHistory
 
 __all__ = [
     "Base",
@@ -47,4 +48,5 @@ __all__ = [
     "PromptVersion",
     "Trace",
     "TraceStatus",
+    "KnowledgeQAHistory",
 ]

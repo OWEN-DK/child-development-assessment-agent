@@ -179,6 +179,12 @@ export function ProgressListItem<T extends BaseProgressTask>({
         />
       )}
 
+      {task.message && (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {task.message}
+        </Text>
+      )}
+
       {config.showStage && config.getStageText && (
         <Text type="secondary" style={{ fontSize: 12 }}>
           {config.getStageText(task)}

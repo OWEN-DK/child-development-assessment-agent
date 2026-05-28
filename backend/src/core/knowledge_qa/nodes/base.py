@@ -6,7 +6,10 @@
 
 import asyncio
 import json
+import string
 import logging
+import difflib
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Type
 
 from pydantic import BaseModel
@@ -94,6 +97,113 @@ async def _get_temperature(step_label: str) -> float:
     return NODE_TEMPERATURES_DEFAULT.get(step_label, 0.5)
 
 
+async def _get_model_name(step_label: str) -> str:
+    """获取模型名称。与 _get_temperature 对称，优先从 prompt manager 获取。"""
+    try:
+        pm = get_prompt_manager()
+        name = await pm.get_prompt(prompt_key=f"knowledge_qa_{step_label}_model_name")
+        if name and name.strip() and name != "You are a helpful assistant.":
+            return name.strip()
+    except Exception:
+        pass
+    return "qwen3.5-27b"
+
+
+async def _invoke_llm_structured(
+    system_prompt: str,
+    user_message: str,
+    response_format: Type[BaseModel],
+    step_label: str,
+    *,
+    max_retries: int = 1,
+    timeout_seconds: int | None = None,
+) -> BaseModel:
+    """统一 structured_output LLM 调用，含重试（仅限瞬时错误）。
+
+    - 对 TimeoutError 和网络错误 (ConnectionError, OSError) 重试 max_retries 次
+    - 其他异常（如 Pydantic 校验失败）不重试，直接抛出
+    """
+    from src.core.llm.factory import LLMServiceFactoryCompat
+
+    if timeout_seconds is None:
+        timeout_seconds = get_timeout(step_label)
+
+    model_name = await _get_model_name(step_label)
+    temperature = await _get_temperature(step_label)
+
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            model = LLMServiceFactoryCompat.create_raw(
+                model_name=model_name, temperature=temperature,
+            )
+            structured_model = model.with_structured_output(response_format)
+            return await asyncio.wait_for(
+                structured_model.ainvoke([
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ]),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            last_error = asyncio.TimeoutError(f"LLM 超时 {timeout_seconds}s, step={step_label}")
+            if attempt < max_retries:
+                logger.warning(f"LLM 超时 (attempt {attempt+1}/{max_retries+1}), step={step_label}")
+                continue
+            raise last_error
+        except (ConnectionError, OSError) as e:
+            last_error = e
+            if attempt < max_retries:
+                logger.warning(f"LLM 网络错误 (attempt {attempt+1}/{max_retries+1}): {e}")
+                await asyncio.sleep(1)
+                continue
+            raise
+        # 其他异常不重试
+        raise
+    raise last_error  # type: ignore[misc]  # unreachable safety
+
+
+async def _invoke_llm_plain(
+    prompt: str,
+    step_label: str,
+    *,
+    max_retries: int = 1,
+    timeout_seconds: int = 15,
+) -> str:
+    """统一纯文本 LLM 调用，含重试（仅限瞬时错误）。返回 response.content。"""
+    from src.core.llm.factory import LLMServiceFactoryCompat
+
+    model_name = await _get_model_name(step_label)
+    temperature = await _get_temperature(step_label)
+
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            model = LLMServiceFactoryCompat.create_raw(
+                model_name=model_name, temperature=temperature,
+            )
+            response = await asyncio.wait_for(
+                model.ainvoke(prompt),
+                timeout=timeout_seconds,
+            )
+            return response.content if hasattr(response, "content") else str(response)
+        except asyncio.TimeoutError:
+            last_error = asyncio.TimeoutError(f"LLM 超时 {timeout_seconds}s, step={step_label}")
+            if attempt < max_retries:
+                logger.warning(f"LLM 超时 (attempt {attempt+1}/{max_retries+1}), step={step_label}")
+                continue
+            raise last_error
+        except (ConnectionError, OSError) as e:
+            last_error = e
+            if attempt < max_retries:
+                logger.warning(f"LLM 网络错误 (attempt {attempt+1}/{max_retries+1}): {e}")
+                await asyncio.sleep(1)
+                continue
+            raise
+        raise
+    raise last_error  # type: ignore[misc]  # unreachable safety
+
+
 async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
     """直接搜索知识库（通过 HTTP 调用 RAG 端点）。"""
     import httpx
@@ -113,9 +223,6 @@ async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
     all_results: List[Dict] = []
     seen_ids: set[str] = set()
 
-    # book_ids 参数需要 file_hash 格式，当前 state 中存的就是 file_hash
-    bh_param = ",".join(book_ids) if book_ids else ""
-
     async with httpx.AsyncClient(
         base_url=f"http://{host}:{port}",
         timeout=httpx.Timeout(10.0),
@@ -127,8 +234,8 @@ async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
             )
             try:
                 params: Dict[str, Any] = {"query": query, "limit": 15}
-                if bh_param:
-                    params["book_ids"] = bh_param
+                if book_ids:
+                    params["book_ids"] = ",".join(book_ids)
                 resp = await client.get("/rag/search", params=params)
                 resp.raise_for_status()
                 data = resp.json()
@@ -314,6 +421,56 @@ def _sanitize_error(error: str) -> str:
     return "内部处理异常"
 
 
+
+
+def _safe_format(template: str, **kwargs) -> str:
+    """安全 format：忽略模板中存在但 kwargs 中不存在的占位符。"""
+    formatter = string.Formatter()
+    result = []
+    for literal_text, field_name, _, _ in formatter.parse(template):
+        result.append(literal_text)
+        if field_name is not None:
+            result.append(str(kwargs.get(field_name, f"{{{field_name}}}")))
+    return "".join(result)
+
+
+def get_exercise_json_path() -> str:
+    """运动清单 JSON 标准路径（单点定义）。"""
+    return str(
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "data" / "运动改变大脑_运动清单.json"
+    )
+
+
+
+def fuzzy_match_exercise(
+    name: str | None, valid_names: list[str], cutoff: float = 0.6
+) -> str | None:
+    """统一运动名称模糊匹配（精确 → 子串 → difflib）。
+
+    替代 plan_assemble._validate_exercise_names 和
+    verify_citations._fuzzy_match_exercise 的重复逻辑。
+    """
+    if not name or not valid_names:
+        return None
+    name_lower = name.strip().lower()
+    valid_lower = {n.lower().strip(): n for n in valid_names if n.strip()}
+
+    # 1. 精确匹配
+    if name_lower in valid_lower:
+        return valid_lower[name_lower]
+
+    # 2. 子串匹配
+    for vl, vo in valid_lower.items():
+        if vl in name_lower or name_lower in vl:
+            return vo
+
+    # 3. difflib 序列匹配
+    matches = difflib.get_close_matches(
+        name, list(valid_lower.keys()), n=1, cutoff=cutoff
+    )
+    return valid_lower[matches[0]] if matches else None
+
 async def _run_section_node(
     state: KnowledgeQAState,
     section_index: int,
@@ -332,6 +489,12 @@ async def _run_section_node(
     )
 
     try:
+        # 检查取消信号（通过 progress_context 获取）
+        from src.schemas.knowledge_qa import get_progress_context
+        ctx = get_progress_context()
+        if ctx and ctx.get("cancellation_event") and ctx["cancellation_event"].is_set():
+            raise asyncio.CancelledError("任务已被取消")
+
         # Step 1: 直接搜索知识库
         search_results = await _direct_search(state.question, state.matched_book_ids)
         search_context = _format_search_context(search_results)
@@ -359,7 +522,7 @@ async def _run_section_node(
         # Step 3: 27B 单次 structured_output 调用
         temperature = await _get_temperature(step_label)
         model = LLMServiceFactoryCompat.create_raw(
-            model_name="qwen3.5-27b",
+            model_name=await _get_model_name(step_label),
             temperature=temperature,
         )
         structured_model = model.with_structured_output(response_format)
@@ -377,7 +540,8 @@ async def _run_section_node(
         data = response.model_dump() if hasattr(response, "model_dump") else response
         if isinstance(data, str):
             try:
-                data = json.loads(data)
+                from json_repair import repair_json
+                data = json.loads(repair_json(data))
             except Exception:
                 data = {"title": section_label, "content": data, "citations": [], "structured_data": {}}
 

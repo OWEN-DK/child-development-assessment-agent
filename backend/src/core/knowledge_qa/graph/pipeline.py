@@ -140,12 +140,17 @@ async def build_graph_for_book(
         # Step 5: 关联块到叶子社区
         tree_nodes = assign_chunks_to_communities(tree_nodes, entities)
 
-        # Step 6: 通过 HTTP 存储社区树到 RAG 服务
+        # Step 6: 存储社区树到 MySQL
+        from src.repository.graph_repository import GraphCommunityRepository
+        from src.core.database import async_session_factory
+
+        community_repo = GraphCommunityRepository(async_session_factory)
         node_count = await store_community_tree(
             book_id=book_id,
             tree_nodes=tree_nodes,
             tree_edges=tree_edges,
-            http_client=http_client,
+            community_repo=community_repo,
+            scope="book",
         )
 
         leaf_count = sum(1 for n in tree_nodes if n.get("is_leaf"))

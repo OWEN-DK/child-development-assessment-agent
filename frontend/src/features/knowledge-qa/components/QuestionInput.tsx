@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Button, Input, Space } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
+import { SendOutlined, StopOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
 
 interface Props {
   onSubmit: (question: string, bookIds?: string[]) => void;
+  onCancel?: () => void;
   loading: boolean;
 }
 
-export const QuestionInput: React.FC<Props> = ({ onSubmit, loading }) => {
+export const QuestionInput: React.FC<Props> = ({ onSubmit, onCancel, loading }) => {
   const [value, setValue] = useState('');
 
   const handleSubmit = () => {
@@ -34,15 +35,25 @@ export const QuestionInput: React.FC<Props> = ({ onSubmit, loading }) => {
         disabled={loading}
         style={{ flex: 1, fontSize: 16, padding: '12px 16px' }}
       />
-      <Button
-        type="primary"
-        icon={<SendOutlined />}
-        onClick={handleSubmit}
-        loading={loading}
-        style={{ height: 'auto' }}
-      >
-        提交
-      </Button>
+      {loading ? (
+        <Button
+          danger
+          icon={<StopOutlined />}
+          onClick={onCancel}
+          style={{ height: 'auto' }}
+        >
+          中断
+        </Button>
+      ) : (
+        <Button
+          type="primary"
+          icon={<SendOutlined />}
+          onClick={handleSubmit}
+          style={{ height: 'auto' }}
+        >
+          提交
+        </Button>
+      )}
     </Space.Compact>
   );
 };

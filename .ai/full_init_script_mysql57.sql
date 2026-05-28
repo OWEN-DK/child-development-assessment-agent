@@ -615,9 +615,30 @@ CREATE TABLE graph_community_tree (
     INDEX idx_comm_scope_level (scope, level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='层级社区树表';
 
+
+
+-- ----------------------------
+-- Table structure for knowledge_qa_history
+-- 知识问答历史记录
+-- ----------------------------
+DROP TABLE IF EXISTS `knowledge_qa_history`;
+CREATE TABLE `knowledge_qa_history` (
+    id VARCHAR(64) NOT NULL COMMENT '记录ID (UUID)',
+    task_id VARCHAR(64) NOT NULL COMMENT '任务ID',
+    question TEXT NOT NULL COMMENT '用户问题',
+    status VARCHAR(20) NOT NULL DEFAULT 'completed' COMMENT '状态: completed/partial/cancelled/timeout/error',
+    result_json JSON NOT NULL COMMENT '完整的问答结果',
+    matched_books_json JSON COMMENT '匹配到的书籍列表',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_task_id (task_id),
+    INDEX idx_created_at (created_at),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识问答历史记录';
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ----------------------------
 -- 初始化完成
 -- ----------------------------
-SELECT '数据库初始化完成，共创建24张业务表（基础4张 + RAG评估v2 11张 + 监控3张 + 提示词3张 + 知识图谱3张）' AS result;
+SELECT '数据库初始化完成，共创建25张业务表（基础4张 + RAG评估v2 11张 + 监控3张 + 提示词3张 + 知识图谱3张 + 知识问答历史1张）' AS result;

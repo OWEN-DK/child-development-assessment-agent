@@ -11,7 +11,8 @@ from src.core.knowledge_qa.nodes.base import (
     _direct_search,
     _format_search_context,
     _get_prompt_pair,
-    _get_temperature,
+    _invoke_llm_structured,
+    _safe_format,
     _sanitize_error,
 )
 from src.schemas.knowledge_qa import (
@@ -28,8 +29,6 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
     """第 4 节大纲：设计阶段划分 + 每周主题 + 运动类型名称。
     始终生成运动方案大纲，无论问题是否显式提及运动。
     """
-    from src.core.llm.factory import LLMServiceFactoryCompat
-
     await push_progress("section_4_outline", "正在生成运动方案大纲…")
 
     try:
@@ -44,7 +43,8 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
         # Step 3: 获取 prompt 并生成
         prompt = await _get_prompt_pair("section_4_outline")
-        user_message = prompt["user_template"].format(
+        user_message = _safe_format(
+            prompt["user_template"],
             question=state.question,
             section_1_content=s1.content if s1 else "",
             section_2_content=s2.content if s2 else "",
@@ -61,19 +61,12 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
         if state.exercise_context:
             full_message += f"\n\n{state.exercise_context}"
 
-        temperature = await _get_temperature("plan_outline")
-        model = LLMServiceFactoryCompat.create_raw(
-            model_name="qwen3.5-27b",
-            temperature=temperature,
-        )
-        structured_model = model.with_structured_output(Section4OutlineResponse)
-
-        response = await asyncio.wait_for(
-            structured_model.ainvoke([
-                {"role": "system", "content": prompt["system"]},
-                {"role": "user", "content": full_message},
-            ]),
-            timeout=90,
+        response = await _invoke_llm_structured(
+            system_prompt=prompt["system"],
+            user_message=full_message,
+            response_format=Section4OutlineResponse,
+            step_label="plan_outline",
+            timeout_seconds=90,
         )
 
         data = response.model_dump() if hasattr(response, "model_dump") else response

@@ -98,7 +98,7 @@ async def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
     return list(seen.values())
 
 
-async def _direct_search(question: str) -> List[Dict]:
+async def _search_for_books(question: str) -> List[Dict]:
     """直接搜索知识库通过 ContextVar HTTP 客户端。"""
     import httpx
     from src.config import settings
@@ -168,18 +168,19 @@ async def _llm_match_books(question: str, candidates: List[Dict]) -> List[Matche
             f"涉及章节: {chapters_str}\n"
         )
 
-    prompt = f"""你是一个文献检索专家。根据用户问题，从候选书籍中选择最相关的书籍。
+    prompt = f"""你是一个文献检索专家。根据用户问题，从候选书籍中评估每本书的相关性。
 
 用户问题：{question}
 
 候选书籍（从知识库搜索结果中提取）：
 {candidate_text}
 
-请选出与用户问题最相关的书籍（通常 1-2 本），按匹配度排序。
+请评估每本候选书籍与用户问题的相关性，返回所有有一定关联的书籍，按匹配度排序。
+- 只要书籍主题与问题的任一方面相关（如儿童发展、教育、运动、心理、营养等），就应纳入匹配结果
 - book_id 必须使用候选书籍中显示的 book_id 值
 - title 根据 book_id 推断一个有意义的书名（去掉文件扩展名）
 - 为每本书写一句话匹配理由
-- 如果候选书籍都不相关，返回空数组"""
+- 如果候选书籍确实都不相关，才返回空数组"""
 
     model = LLMServiceFactoryCompat.create_raw(
         model_name="qwen3.5-27b",
@@ -207,7 +208,7 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     try:
         # Step 1: 直接调用 search_knowledge_base 工具搜索知识库
-        search_results = await _direct_search(state.question)
+        search_results = await _search_for_books(state.question)
         logger.info(f"match_books 直接搜索: {len(search_results)} 条结果")
 
         if not search_results:
@@ -234,23 +235,30 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
                     match_reason="从搜索结果中自动匹配",
                 ))
 
-        # Step 5: 解析 book_id → UUID（用于 matched_books_detail）
-        # 同时构建 source_book → file_hash 映射（用于 RAG 搜索过滤）
+        # Step 5: 构建 search_book_ids — 包含所有候选书籍的 file_hash
+        # 后续 RAG 检索不再做 LLM 级别的书籍过滤，而是让向量相似度自然排序
+        # 这样所有已索引的书籍内容都能被搜索到，只是更匹配的内容排在前列
+        search_book_ids: list[str] = []
         source_to_hash: Dict[str, str] = {}
         for c in candidates:
-            raw = c.get("_raw_source_book", c["source_book"])
-            clean = c["source_book"]
             fh = c.get("file_hash", "")
             if fh:
-                source_to_hash[clean] = fh
-                if raw != clean:
-                    source_to_hash[raw] = fh
+                raw_name = c.get("_raw_source_book", c["source_book"])
+                clean_name = c["source_book"]
+                source_to_hash[clean_name] = fh
+                if raw_name != clean_name:
+                    source_to_hash[raw_name] = fh
+                if fh not in search_book_ids:
+                    search_book_ids.append(fh)
+        logger.info(
+            f"search_book_ids 覆盖所有候选书籍 ({len(search_book_ids)} 本): "
+            f"{[c['source_book'] for c in candidates]}"
+        )
 
+        # Step 6: 解析 LLM 匹配结果 → books_detail（仅用于报告展示，不影响检索范围）
         raw_ids = [m.book_id for m in matched_items]
         id_mapping = await _batch_resolve_book_ids(raw_ids)
 
-        search_book_ids = []  # file_hash — 供后续节点 RAG 搜索过滤
-        resolved_books = []
         books_detail = []
         for i, item in enumerate(matched_items):
             # 多路径解析: 先精确匹配，再 trim，再用 file_hash 降级
@@ -275,12 +283,7 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
             if not resolved_id:
                 # 最终降级: 用 file_hash 作为 book_id
                 resolved_id = fh
-                search_book_ids.append(fh)
-            else:
-                if fh:
-                    search_book_ids.append(fh)
 
-            resolved_books.append({"book_id": resolved_id, "title": item.title, "file_hash": fh})
             books_detail.append(MatchedBook(
                 book_id=resolved_id,
                 title=item.title,
@@ -294,7 +297,8 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
         await push_progress("books_matched", f"已匹配书籍: {books_detail[0].title}")
 
-        # search_book_ids 存 file_hash（供 RAG 过滤），resolved_books 中的 book_id 存 UUID（供详情输出）
+        # search_book_ids: 所有候选书籍的 file_hash（供 RAG 检索，不做书籍级过滤）
+        # books_detail: LLM 匹配结果（供报告展示）
         return {
             "matched_book_ids": search_book_ids,
             "matched_books_detail": books_detail,

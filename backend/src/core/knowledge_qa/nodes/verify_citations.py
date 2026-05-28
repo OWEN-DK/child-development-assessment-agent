@@ -14,23 +14,19 @@
 7. S4 phases→weeks→days→main_exercises[].name 必须在权威运动清单中
 """
 
-import difflib
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
+from src.core.knowledge_qa.nodes.base import fuzzy_match_exercise, get_exercise_json_path
 from src.schemas.knowledge_qa import KnowledgeQAState, SectionOutput, push_progress
 
 logger = logging.getLogger(__name__)
 
 # 运动清单缓存 (模块级，进程重启自动刷新)
 _exercise_name_set_cache: Optional[Set[str]] = None
-_exercise_json_path = str(
-    Path(__file__).resolve().parent.parent.parent.parent
-    / "data" / "运动改变大脑_运动清单.json"
-)
+_exercise_json_path = get_exercise_json_path()
 
 
 def _get_exercise_name_set() -> set[str]:
@@ -50,29 +46,8 @@ def _get_exercise_name_set() -> set[str]:
 
 
 def _fuzzy_match_exercise(name: str, valid_set: set[str]) -> Optional[str]:
-    """模糊匹配运动名称。策略：
-    1. 精确匹配 → 直接返回
-    2. LLM 输出是清单名称的子串 → 返回清单完整名称 (如 "蹦床跳跃" ⊂ "蹦床跳跃休息（课间/工作间切换）")
-    3. 清单名称是 LLM 输出的子串 → 返回清单完整名称
-    4. difflib 序列匹配 (cutoff 0.6) → 返回最接近
-    5. 全部失败 → None
-    """
-    if not name or not valid_set:
-        return None
-    name_clean = name.strip()
-
-    # 1. 精确匹配
-    if name_clean in valid_set:
-        return name_clean
-
-    # 2-3. 子串匹配 (处理 "蹦床跳跃" ⊂ "蹦床跳跃休息（课间/工作间切换）" 等情况)
-    for valid_name in valid_set:
-        if name_clean in valid_name or valid_name in name_clean:
-            return valid_name
-
-    # 4. difflib 兜底 (降低 cutoff 以适应简短名称)
-    matches = difflib.get_close_matches(name_clean, valid_set, n=1, cutoff=0.6)
-    return matches[0] if matches else None
+    """模糊匹配运动名称 — 委托给 base.fuzzy_match_exercise 公共实现。"""
+    return fuzzy_match_exercise(name, list(valid_set))
 
 
 async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:

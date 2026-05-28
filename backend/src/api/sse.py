@@ -15,6 +15,9 @@ HEARTBEAT_INTERVAL = 15
 # 队列最大大小，防止内存泄漏
 MAX_QUEUE_SIZE = 100
 
+# 后台任务等待订阅者的超时（秒）
+SUBSCRIBER_WAIT_TIMEOUT = 10.0
+
 # 从频道名中提取run_id的正则（匹配 test_run:{uuid} 格式）
 _RUN_ID_PATTERN = re.compile(r"^test_run:(.+)$")
 
@@ -29,6 +32,7 @@ class SSEPublisher:
     """SSE 发布器（基于Redis Pub/Sub，支持多实例，Redis不可用时降级到内存队列）"""
 
     _local_subscribers: dict[str, list[asyncio.Queue]] = {}
+    _subscriber_events: dict[str, asyncio.Event] = {}
     _redis_available: Optional[bool] = None
     _redis_last_check: float = 0.0
     _REDIS_CHECK_INTERVAL: float = 30.0  # 30 秒检查一次，避免每次 publish 都 PING
@@ -63,6 +67,13 @@ class SSEPublisher:
             cls._local_subscribers[channel] = []
 
         cls._local_subscribers[channel].append(queue)
+
+        # 通知等待中的后台任务：订阅者已就绪
+        if channel in cls._subscriber_events:
+            cls._subscriber_events[channel].set()
+        else:
+            cls._subscriber_events[channel] = asyncio.Event()
+            cls._subscriber_events[channel].set()
 
         # 立即发送 connected 事件，解决两个问题：
         # 1. 代理缓冲：反向代理（nginx/ALB/Cloudflare）看到首字节后即停止缓冲
@@ -131,6 +142,9 @@ class SSEPublisher:
                     pass  # 队列已被移除
                 if not cls._local_subscribers[channel]:
                     del cls._local_subscribers[channel]
+                    # 所有订阅者断开，重置就绪信号
+                    if channel in cls._subscriber_events:
+                        cls._subscriber_events[channel].clear()
 
             # 最后取消后台任务
             heartbeat_task.cancel()
@@ -236,6 +250,43 @@ class SSEPublisher:
                 "queue_sizes": [q.qsize() for q in queues],
             }
         return stats
+
+
+    @classmethod
+    async def wait_for_subscriber(cls, channel: str, timeout: float = None) -> bool:
+        """等待至少一个 SSE 订阅者连接到指定频道。
+
+        用于解决竞态条件：后台任务在发送第一条进度事件之前，
+        等待前端 SSE 连接建立，避免早期事件丢失。
+
+        Args:
+            channel: SSE 频道名
+            timeout: 超时秒数，默认 SUBSCRIBER_WAIT_TIMEOUT (10s)
+
+        Returns:
+            True 如果订阅者在超时前就绪，False 如果超时
+        """
+        if timeout is None:
+            timeout = SUBSCRIBER_WAIT_TIMEOUT
+
+        if channel not in cls._subscriber_events:
+            cls._subscriber_events[channel] = asyncio.Event()
+
+        event = cls._subscriber_events[channel]
+
+        # 如果已有订阅者，立即返回
+        if event.is_set():
+            return True
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+            logger.info(f"SSE 订阅者已就绪: channel={channel}")
+            return True
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"等待 SSE 订阅者超时 ({timeout}s): channel={channel}，继续发送事件"
+            )
+            return False
 
 
 def sse_response(channel: str) -> StreamingResponse:

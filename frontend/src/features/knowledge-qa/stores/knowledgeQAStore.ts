@@ -92,8 +92,18 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
     }
   },
 
-  cancel: () => {
+  cancel: async () => {
+    const taskId = get().taskId;
+    // 先断开 SSE，避免继续接收进度事件
     get()._disconnectSSE();
+    // 调用后端取消 API，中断后台 asyncio 任务
+    if (taskId) {
+      try {
+        await apiClient.post(`/api/v1/knowledge-qa/cancel/${taskId}`);
+      } catch {
+        // 取消 API 失败不影响前端状态重置
+      }
+    }
     clearActiveTask();
     get().reset();
   },

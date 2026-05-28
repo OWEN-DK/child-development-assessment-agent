@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field, field_validator
 from src.core.knowledge_qa.nodes.base import (
     _direct_search,
     _format_search_context,
+    _get_prompt_pair,
+    _invoke_llm_structured,
     _sanitize_error,
 )
 from src.schemas.knowledge_qa import (
@@ -91,41 +93,31 @@ async def generate_s4_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
         pass
 
     # 搜索知识库获取原文
+    search_parts = []
+    if state.knowledge_context:
+        search_parts.append(state.knowledge_context[:5000])
     try:
         search_results = await _direct_search(search_terms, state.matched_book_ids)
-        search_context = _format_search_context(search_results)
-        logger.info(f"S4 引用生成搜索: {len(search_results)} 条结果")
+        if search_results:
+            search_parts.append(_format_search_context(search_results))
+        logger.info(
+            f"S4 引用: 预取 context={bool(state.knowledge_context)}, 补充搜索={len(search_results)} 条"
+        )
     except Exception as e:
-        logger.warning(f"S4 引用生成搜索失败: {e}")
-        search_context = "（搜索不可用）"
+        logger.warning(f"S4 引用搜索失败: {e}")
+    search_context = "\n\n".join(search_parts) if search_parts else "（无可用上下文）"
 
     # 构建轻量级引用生成 prompt
-    system_prompt = """你是一个学术引用专家。你的**唯一任务**是为运动方案正文生成完整的引用列表。
-
-## 硬性规则（违反将导致整条引用被丢弃）
-
-1. **excerpt 必须从下方知识库检索结果中逐字复制原文**（≥10字符）。绝不允许改写、概括或自行总结。
-2. **chapter 必须非空**。使用检索结果中 --- 分隔线后的 chapter= 字段值（如 "第3章"）。
-3. **book_title 使用检索结果中已规范化的书名**（book_title= 字段值），不含文件扩展名。
-4. citation_id 与正文中的 [C001]、[C002] 等标记一一对应。
-5. relevance 用一句话说明该引用与正文内容的关联。
-
-## 工作步骤
-
-1. 阅读正文，找出每个引用标记附近的观点
-2. 在知识库检索结果中寻找支持该观点的原文段落
-3. 为每个标记生成一条 citation，excerpt 从检索结果中逐字复制
-
-## 输出格式
-
-仅输出 citations 数组，每条 citation 必须包含全部 5 个字段:
-- citation_id: "C001"
-- book_title: "运动改变大脑"
-- chapter: "第3章"
-- excerpt: "原文逐字引用..."
-- relevance: "一句话关联说明"
-
-如果正文中没有引用标记，或检索结果中找不到对应原文，返回空数组。不要编造引用。"""
+    prompt = await _get_prompt_pair("section_4_citations")
+    system_prompt = prompt.get("system", "")
+    if not system_prompt:
+        # 降级：模板不存在时使用硬编码默认值
+        system_prompt = (
+            "你是一个学术引用专家。你的唯一任务是为运动方案正文生成完整的引用列表。\n"
+            "硬性规则：excerpt 必须从检索结果中逐字复制（≥10字符）；"
+            "chapter 必须非空；citation_id 与正文标记一一对应。\n"
+            "输出 citations 数组，每条包含 citation_id, book_title, chapter, excerpt, relevance。"
+        )
 
     # 提取正文中包含引用的上下文段落（减少 token 消耗）
     content_lines = s4.content.split("\n")
@@ -161,21 +153,12 @@ async def generate_s4_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
 {marker_hint}"""
 
     try:
-        from src.core.llm.factory import LLMServiceFactoryCompat
-
-        temperature = 0.1
-        model = LLMServiceFactoryCompat.create_raw(
-            model_name="qwen3.5-27b",
-            temperature=temperature,
-        )
-        structured_model = model.with_structured_output(S4CitationsResponse)
-
-        response = await asyncio.wait_for(
-            structured_model.ainvoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ]),
-            timeout=45,
+        response = await _invoke_llm_structured(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            response_format=S4CitationsResponse,
+            step_label="generate_s4_citations",
+            timeout_seconds=45,
         )
 
         data = response.model_dump() if hasattr(response, "model_dump") else response

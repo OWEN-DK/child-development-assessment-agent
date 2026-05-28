@@ -1,3 +1,4 @@
+import os
 import json
 from typing import Callable, Dict, List, Optional
 
@@ -105,6 +106,16 @@ class IndexOperations:
             )
         except Exception as e:
             logger.warning(f"级联删除图谱数据失败 (不影响文档删除): {e}")
+
+        # 清理上传的原始文件
+        try:
+            metadata = doc.get("metadata", {}) or {}
+            file_path = metadata.get("file_path", "")
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"已清理上传文件: {file_path}")
+        except Exception as e:
+            logger.warning(f"清理上传文件失败 (不影响文档删除): {e}")
 
         if not self.storage_manager.index:
             logger.warning("Index not initialized, document record deleted successfully.")

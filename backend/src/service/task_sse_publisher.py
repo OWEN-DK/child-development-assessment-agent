@@ -126,6 +126,17 @@ class TaskSsePublisher:
         await cls.publish(task_type, task_id, "complete", data)
 
     @classmethod
+    async def wait_for_subscriber(
+        cls,
+        task_type: str,
+        task_id: str,
+        timeout: float = None,
+    ) -> bool:
+        """等待 SSE 订阅者就绪，解决竞态条件"""
+        channel = f"{task_type}:{task_id}"
+        return await SSEPublisher.wait_for_subscriber(channel, timeout)
+
+    @classmethod
     async def publish_heartbeat(
         cls,
         task_type: str,

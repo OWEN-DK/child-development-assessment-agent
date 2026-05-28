@@ -125,3 +125,4 @@ chroma/
 .playwright-mcp
 .claude
 .codegraph
+.alembic

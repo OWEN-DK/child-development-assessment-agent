@@ -185,16 +185,16 @@ class ChunkingAndIndexing:
             logger.info(f"[PERF] chunking (page-based): {time.monotonic() - t_chunk_start:.2f}s, {len(all_nodes)} nodes from {len(documents)} pages")
 
         if progress_callback:
-            await _safe_call_callback(progress_callback, "metadata_extraction", 30.0, f"正在提取元数据：0/{len(all_nodes)} 个块")
+            await _safe_call_callback(progress_callback, "metadata_extraction", 50.0, f"正在提取元数据：0/{len(all_nodes)} 个块")
         await task_state_service.update(
             task_id=task_id, task_type=TASK_TYPE,
-            updates={"progress": 30.0, "stage": "metadata_extraction", "message": f"正在提取元数据：0/{len(all_nodes)} 个块"}
+            updates={"progress": 50.0, "stage": "metadata_extraction", "message": f"正在提取元数据：0/{len(all_nodes)} 个块"}
         )
 
         def wrapped_progress(stage: str, progress: float, message: str):
             nonlocal pending_doc
             if progress_callback:
-                overall_progress = 30.0 + (progress * 0.6)
+                overall_progress = 50.0 + (progress * 0.4)
                 pending_doc["progress"] = overall_progress
                 asyncio.run_coroutine_threadsafe(
                     document_manager.add_document(pending_doc), loop

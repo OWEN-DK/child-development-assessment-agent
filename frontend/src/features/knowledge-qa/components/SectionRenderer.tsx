@@ -1,14 +1,20 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { SectionOutput } from '../types';
+import { getDisplayContent } from '../utils/renderMarkdown';
 
 interface Props {
   section: SectionOutput;
 }
 
 export const SectionRenderer: React.FC<Props> = ({ section }) => {
+  const displayContent = useMemo(
+    () => getDisplayContent(section),
+    [section],
+  );
+
   return (
     <div style={{ marginBottom: 32 }}>
       <ReactMarkdown
@@ -36,7 +42,7 @@ export const SectionRenderer: React.FC<Props> = ({ section }) => {
           ),
         }}
       >
-        {section.content}
+        {displayContent}
       </ReactMarkdown>
     </div>
   );

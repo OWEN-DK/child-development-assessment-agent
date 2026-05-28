@@ -56,6 +56,10 @@ async def process_book_background(task_id: str, file_path: str, original_filenam
     
     async with _get_semaphore():
         try:
+            # 等待 SSE 订阅者就绪，避免竞态条件导致早期进度事件丢失
+            # 前端上传完成后需要时间建立 EventSource 连接
+            await TaskSsePublisher.wait_for_subscriber(TASK_TYPE, task_id)
+
             # 更新状态为 running
             await service.update(task_id, TASK_TYPE, {
                 "status": TaskStatus.RUNNING.value,

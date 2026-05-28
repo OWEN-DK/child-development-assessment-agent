@@ -184,6 +184,7 @@ class BookIngestor:
                     "title": file_name,
                     "total_pages": actual_total_pages if actual_total_pages is not None else doc_count,
                     "chapter_count": chapter_count,
+                    "file_path": file_path,
                 },
                 "status": "indexed",
                 "progress": 100.0,

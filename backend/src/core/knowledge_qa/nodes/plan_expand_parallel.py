@@ -13,8 +13,8 @@ from src.core.knowledge_qa.nodes.base import (
     _direct_search,
     _format_search_context,
     _get_prompt_pair,
-    _get_temperature,
-    _sanitize_error,
+    _invoke_llm_structured,
+    _safe_format,
 )
 from src.schemas.knowledge_qa import (
     ExerciseGroupResponse,
@@ -122,6 +122,11 @@ def _build_group_prompt(
         search_context,
     ]
 
+    if state.knowledge_context:
+        parts.append("")
+        parts.append("## 预取知识上下文（高优先级）")
+        parts.append(state.knowledge_context[:3000])
+
     if valid_names:
         parts.append("")
         parts.append("## 运动名称约束")
@@ -144,24 +149,52 @@ async def _expand_single_group(
     """展开单个分组：调用 LLM 生成运动参数。失败返回降级数据。"""
     try:
         prompt = await _get_prompt_pair("section_4_expand_group")
-        temperature = await _get_temperature("plan_expand")
 
-        from src.core.llm.factory import LLMServiceFactoryCompat
+        # 模板化 user message：如果 prompt manager 提供了 user_template 则优先使用
+        user_template = prompt.get("user_template", "")
+        if user_template:
+            exercises_json = []
+            for s in group_slots:
+                ex = s["exercise"]
+                exercises_json.append({
+                    "exercise_id": ex["exercise_id"],
+                    "name": ex["name"],
+                    "type_id": ex["type_id"],
+                    "category": ex["category"],
+                    "target_skill": ex["target_skill"],
+                    "citation_ids": ex["citation_ids"],
+                    "_context": f"phase={s['phase_idx']}, week={s['week_idx']}, day={s['day_idx']}",
+                })
+            prev_parts = []
+            for i in (1, 2, 3):
+                sec = state.sections.get(i)
+                if sec and sec.content:
+                    prev_parts.append(f"### 第{i}节\n{sec.content[:400]}")
+            valid_names = []
+            s3 = state.sections.get(3)
+            if s3 and s3.structured_data:
+                for et in s3.structured_data.get("exercise_types", []):
+                    if et.get("name"):
+                        valid_names.append(et["name"])
+            user_message = _safe_format(
+                user_template,
+                exercises_json=json.dumps(exercises_json, ensure_ascii=False, indent=2),
+                previous_sections="\n\n".join(prev_parts) if prev_parts else "（无）",
+                search_context=search_context,
+                knowledge_context=state.knowledge_context or "",
+                exercise_context=state.exercise_context or "",
+                valid_names="、".join(valid_names) if valid_names else "",
+                group_size=str(len(group_slots)),
+            )
+        else:
+            user_message = _build_group_prompt(group_slots, search_context, state)
 
-        model = LLMServiceFactoryCompat.create_raw(
-            model_name="qwen3.5-27b",
-            temperature=temperature,
-        )
-        structured_model = model.with_structured_output(ExerciseGroupResponse)
-
-        user_message = _build_group_prompt(group_slots, search_context, state)
-
-        response = await asyncio.wait_for(
-            structured_model.ainvoke([
-                {"role": "system", "content": prompt["system"]},
-                {"role": "user", "content": user_message},
-            ]),
-            timeout=60,
+        response = await _invoke_llm_structured(
+            system_prompt=prompt["system"],
+            user_message=user_message,
+            response_format=ExerciseGroupResponse,
+            step_label="plan_expand",
+            timeout_seconds=60,
         )
 
         exercises = response.model_dump().get("exercises", [])

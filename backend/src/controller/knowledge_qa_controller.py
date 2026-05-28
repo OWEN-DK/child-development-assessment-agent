@@ -6,6 +6,8 @@
 - GET    /api/v1/knowledge-qa/stream/{task_id}    SSE 进度流
 - GET    /api/v1/knowledge-qa/download/{task_id}/markdown  下载 Markdown
 - GET    /api/v1/knowledge-qa/download/{task_id}/pdf        下载 PDF
+- GET    /api/v1/knowledge-qa/history             历史记录列表
+- GET    /api/v1/knowledge-qa/history/{task_id}   历史记录详情
 """
 
 import io
@@ -49,6 +51,13 @@ class KnowledgeQAController:
             summary="查询任务状态",
         )
         router.add_api_route(
+            "/knowledge-qa/cancel/{task_id}",
+            self.cancel,
+            methods=["POST"],
+            summary="取消知识问答任务",
+            description="中断正在运行的知识问答任务。设置取消信号并取消底层 asyncio 任务。",
+        )
+        router.add_api_route(
             "/knowledge-qa/stream/{task_id}",
             self.stream_progress,
             methods=["GET"],
@@ -72,6 +81,24 @@ class KnowledgeQAController:
             methods=["POST"],
             summary="手动触发全局知识图谱重建",
             description="跨书实体去重 + 全局社区检测 + 层级树存储。",
+        )
+        router.add_api_route(
+            "/knowledge-qa/history",
+            self.history_list,
+            methods=["GET"],
+            summary="获取历史记录列表",
+        )
+        router.add_api_route(
+            "/knowledge-qa/history/{task_id}",
+            self.history_detail,
+            methods=["GET"],
+            summary="获取历史记录详情",
+        )
+        router.add_api_route(
+            "/knowledge-qa/history/{task_id}",
+            self.history_delete,
+            methods=["DELETE"],
+            summary="删除历史记录",
         )
 
     # ===== 端点实现 =====
@@ -97,6 +124,23 @@ class KnowledgeQAController:
                 error_code="rag_unavailable",
                 message="知识库检索服务暂不可用，请稍后重试",
             )
+
+    async def cancel(
+        self,
+        task_id: str = Path(..., description="任务 ID"),
+    ) -> APIResponse:
+        """取消知识问答任务"""
+        from src.core.async_task import AsyncTaskManager
+
+        TASK_TYPE = "knowledge_qa"
+        success = await AsyncTaskManager.cancel_task(task_id, TASK_TYPE)
+        if not success:
+            return APIResponse.error(
+                code=ErrorCode.TASK_NOT_FOUND,
+                error_code="task_not_found",
+                message="任务不存在或已过期",
+            )
+        return APIResponse.success({"status": "cancelled"})
 
     async def get_status(
         self,
@@ -194,3 +238,80 @@ class KnowledgeQAController:
                     error_code="global_rebuild_failed",
                     message=f"全局图谱重建失败: {e}",
                 )
+
+    # ─── 历史记录端点 ───
+
+    async def history_list(
+        self,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=100),
+    ) -> APIResponse:
+        """获取历史记录列表"""
+        from src.repository.knowledge_qa_history_repository import (
+            KnowledgeQAHistoryRepository,
+        )
+
+        repo = KnowledgeQAHistoryRepository()
+        skip = (page - 1) * page_size
+        items = await repo.list_by_time(skip=skip, limit=page_size)
+        total = await repo.count()
+
+        return APIResponse.success({
+            "items": [
+                {
+                    "task_id": item.task_id,
+                    "question": item.question,
+                    "status": item.status,
+                    "created_at": item.created_at.isoformat() if item.created_at else None,
+                    "matched_books": item.matched_books_json,
+                    "is_partial": item.status != "completed",
+                }
+                for item in items
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        })
+
+    async def history_detail(
+        self,
+        task_id: str = Path(..., description="任务 ID"),
+    ) -> APIResponse:
+        """获取历史记录详情"""
+        from src.repository.knowledge_qa_history_repository import (
+            KnowledgeQAHistoryRepository,
+        )
+
+        repo = KnowledgeQAHistoryRepository()
+        item = await repo.get_by_task_id(task_id)
+        if item is None:
+            return APIResponse.error(
+                code=ErrorCode.TASK_NOT_FOUND,
+                error_code="task_not_found",
+                message="历史记录不存在",
+            )
+
+        result = item.result_json
+        result["task_id"] = item.task_id
+        result["question"] = item.question
+        result["created_at"] = item.created_at.isoformat() if item.created_at else None
+        return APIResponse.success(result)
+
+    async def history_delete(
+        self,
+        task_id: str = Path(..., description="任务 ID"),
+    ) -> APIResponse:
+        """删除历史记录"""
+        from src.repository.knowledge_qa_history_repository import (
+            KnowledgeQAHistoryRepository,
+        )
+
+        repo = KnowledgeQAHistoryRepository()
+        deleted = await repo.delete_by_task_id(task_id)
+        if not deleted:
+            return APIResponse.error(
+                code=ErrorCode.TASK_NOT_FOUND,
+                error_code="task_not_found",
+                message="历史记录不存在",
+            )
+        return APIResponse.success({"status": "deleted"})

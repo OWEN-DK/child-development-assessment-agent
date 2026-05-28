@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card, Tabs, Typography } from 'antd';
+import { Button, Card, Space, Tabs, Typography } from 'antd';
 import {
   CodeOutlined,
   DownloadOutlined,
@@ -20,7 +20,7 @@ interface Props {
 
 export const ReportViewer: React.FC<Props> = ({ result }) => {
   const { viewMode, setViewMode } = useKnowledgeQAStore();
-  const { downloadMarkdown } = useReportDownload(result);
+  const { downloadMarkdown, downloadJSON } = useReportDownload(result);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -31,12 +31,20 @@ export const ReportViewer: React.FC<Props> = ({ result }) => {
           activeKey={viewMode}
           onChange={(key) => setViewMode(key as 'markdown' | 'json')}
           tabBarExtraContent={
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={downloadMarkdown}
-            >
-              Markdown
-            </Button>
+            <Space>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={downloadMarkdown}
+              >
+                Markdown
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={downloadJSON}
+              >
+                JSON
+              </Button>
+            </Space>
           }
           items={[
             {

@@ -30,6 +30,7 @@ export const documentUploadConfig: ProgressListConfig<AdaptedUploadTask> = {
       pending: '等待处理',
       parsing: '正在解析',
       chunking: '正在分块',
+      metadata_extraction: '正在提取元数据',
       embedding: '正在嵌入',
       indexing: '正在索引',
       completed: '处理完成',
