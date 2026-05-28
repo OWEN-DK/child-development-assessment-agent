@@ -243,6 +243,19 @@ class KnowledgeQAService:
                         "metadata": meta,
                     },
                 )
+            # 同步更新 Redis 任务状态，支持页面刷新后通过 /status/{task_id} 恢复进度
+            try:
+                updates: Dict[str, Any] = {"stage": step, "message": message}
+                # 逐节完成时，将 section 元信息写入 metadata（不存完整内容，避免 Redis 过大）
+                if step.endswith("_done") and meta.get("section"):
+                    sec = meta["section"]
+                    updates["metadata"] = {
+                        "last_section_index": sec.get("index"),
+                        "last_section_title": sec.get("title"),
+                    }
+                await self._task_state.update(task_id, task_type, updates)
+            except Exception:
+                pass  # 状态更新失败不阻塞主流程
 
         set_progress_context(callback=push, task_id=task_id, task_type=task_type)
         set_prompt_manager(self._prompt_manager)
@@ -297,7 +310,7 @@ class KnowledgeQAService:
             clear_progress_context()
             clear_prompt_manager()
             clear_http_client()
-            if http_client:
+            if http_client and hasattr(http_client, "close"):
                 await http_client.close()
             async with self._task_lock:
                 self._concurrent_tasks -= 1

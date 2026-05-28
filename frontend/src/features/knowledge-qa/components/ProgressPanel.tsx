@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Card, Steps, Typography } from 'antd';
 import { useKnowledgeQAStore } from '../stores/knowledgeQAStore';
 
@@ -7,6 +7,7 @@ const { Paragraph } = Typography;
 const STEP_LABELS: Record<string, string> = {
   _connected: '已连接',
   started: '分析问题意图',
+  prefetch_context: '预取知识上下文',
   section_1_generating: '正在生成第 1 节',
   section_2_generating: '正在生成第 2 节',
   section_3_generating: '正在生成第 3 节',
@@ -27,6 +28,7 @@ const STEP_LABELS: Record<string, string> = {
 
 const MAIN_STEPS = [
   'started',
+  'prefetch_context',
   'books_matched',
   'section_1_done',
   'section_2_done',
@@ -50,15 +52,32 @@ export const ProgressPanel: React.FC = () => {
   const progress = useKnowledgeQAStore((s) => s.progress);
   const completedSections = useKnowledgeQAStore((s) => s.completedSections);
 
-  // 没有 progress 时也要显示等待状态，避免用户看到空白卡住
   const currentStep = progress?.step;
-  const stepIndex = currentStep ? MAIN_STEPS.indexOf(currentStep) : 0;
-  const current = stepIndex >= 0 ? stepIndex : 0;
+  const currentStepIndex = currentStep ? MAIN_STEPS.indexOf(currentStep) : -1;
+
+  // 使用 ref 跟踪最后一个有效步骤索引。
+  // 后端会发出大量中间进度事件（searching/search_done/section_N_generating 等），
+  // 这些事件不在 MAIN_STEPS 中，如果直接回退到 0，进度条会反复跳回"分析问题意图"，
+  // 给用户造成卡死的错觉。
+  // 这里只在 currentStep 命中 MAIN_STEPS 时更新 ref；未命中时保持上一个有效值，
+  // 确保进度条单调前进。
+  const lastValidIndexRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (currentStepIndex >= 0) {
+      lastValidIndexRef.current = currentStepIndex;
+    }
+  }, [currentStepIndex]);
+
+  const current = lastValidIndexRef.current;
 
   const items = MAIN_STEPS.map((key, idx) => {
     const isCurrent = key === currentStep;
-    const isGhostCurrent = !isCurrent && currentStep && !MAIN_STEPS.includes(currentStep) && idx === 0;
-    const activeKey = isCurrent || isGhostCurrent;
+    // 当 progress.step 不在 MAIN_STEPS 中时，高亮当前有效步骤而不是一直指向 idx=0
+    const isGhostCurrent = !isCurrent
+      && currentStep
+      && !MAIN_STEPS.includes(currentStep)
+      && idx === current;
 
     return {
       title: STEP_LABELS[key] || key,
@@ -67,7 +86,7 @@ export const ProgressPanel: React.FC = () => {
           ? idx === 0
             ? '正在连接…'
             : undefined
-          : activeKey
+          : isCurrent || isGhostCurrent
             ? (progress.message)
             : undefined,
       status: !progress
