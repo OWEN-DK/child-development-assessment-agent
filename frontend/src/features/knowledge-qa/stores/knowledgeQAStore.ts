@@ -21,17 +21,25 @@ import type {
 
 /** localStorage key：页面刷新后恢复活跃任务 */
 const LS_ACTIVE_TASK_KEY = 'knowledge_qa_active_task';
+const LS_ACTIVE_QUESTION_KEY = 'knowledge_qa_active_question';
 
-function saveActiveTask(taskId: string) {
-  try { localStorage.setItem(LS_ACTIVE_TASK_KEY, taskId); } catch { /* noop */ }
+function saveActiveTask(taskId: string, question: string) {
+  try {
+    localStorage.setItem(LS_ACTIVE_TASK_KEY, taskId);
+    localStorage.setItem(LS_ACTIVE_QUESTION_KEY, question);
+  } catch { /* noop */ }
 }
 function clearActiveTask() {
-  try { localStorage.removeItem(LS_ACTIVE_TASK_KEY); } catch { /* noop */ }
+  try {
+    localStorage.removeItem(LS_ACTIVE_TASK_KEY);
+    localStorage.removeItem(LS_ACTIVE_QUESTION_KEY);
+  } catch { /* noop */ }
 }
 
 interface KnowledgeQAState {
   status: QAStatus;
   taskId: string | null;
+  currentQuestion: string | null;
   progress: ProgressState | null;
   result: KnowledgeQAResponse | null;
   /** 流式过程中增量收集已完成节（按 index 排序） */
@@ -62,6 +70,7 @@ interface KnowledgeQAState {
 export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
   status: 'idle',
   taskId: null,
+  currentQuestion: null,
   progress: null,
   result: null,
   completedSections: [],
@@ -73,7 +82,7 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
 
   ask: async (question, bookIds) => {
     get().reset();
-    set({ status: 'submitting' });
+    set({ status: 'submitting', currentQuestion: question });
 
     try {
       const { data } = await apiClient.post('/api/v1/knowledge-qa', {
@@ -84,7 +93,7 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
 
       const taskId = data.task_id;
       set({ taskId, status: 'streaming' });
-      saveActiveTask(taskId);
+      saveActiveTask(taskId, question);
       get()._subscribeSSE(taskId);
     } catch (err: any) {
       const errorData = err?.response?.data;
@@ -96,16 +105,15 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
     const taskId = get().taskId;
     // 先断开 SSE，避免继续接收进度事件
     get()._disconnectSSE();
-    // 调用后端取消 API，中断后台 asyncio 任务
-    if (taskId) {
-      try {
-        await apiClient.post(`/api/v1/knowledge-qa/cancel/${taskId}`);
-      } catch {
-        // 取消 API 失败不影响前端状态重置
-      }
-    }
+    // 立即清除 localStorage 并重置 UI，不等后端响应
     clearActiveTask();
     get().reset();
+    // 后端取消 API 异步调用（fire-and-forget），不阻塞 UI 恢复
+    if (taskId) {
+      apiClient.post(`/api/v1/knowledge-qa/cancel/${taskId}`).catch(() => {
+        // 取消 API 失败不影响前端状态
+      });
+    }
   },
 
   setViewMode: (viewMode) => set({ viewMode }),
@@ -114,6 +122,7 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
     set({
       status: 'idle',
       taskId: null,
+      currentQuestion: null,
       progress: null,
       result: null,
       completedSections: [],
@@ -132,6 +141,11 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
 
     if (!savedTaskId || get().status !== 'idle') return;
 
+    // 恢复当前问题文本（用于侧边栏显示）
+    const savedQuestion = (() => {
+      try { return localStorage.getItem(LS_ACTIVE_QUESTION_KEY); } catch { return null; }
+    })();
+
     // 查询任务状态，如果在运行则重连 SSE
     (async () => {
       try {
@@ -147,12 +161,17 @@ export const useKnowledgeQAStore = create<KnowledgeQAState>((set, get) => ({
             result: data.result,
             completedSections: data.result.sections,
             status: 'done',
+            currentQuestion: data.result.question || savedQuestion,
           });
           clearActiveTask();
           return;
         }
         // 任务正在运行
-        set({ taskId: savedTaskId, status: 'streaming' });
+        set({
+          taskId: savedTaskId,
+          status: 'streaming',
+          currentQuestion: savedQuestion,
+        });
         if (data?.stage && data?.message) {
           set({
             progress: {

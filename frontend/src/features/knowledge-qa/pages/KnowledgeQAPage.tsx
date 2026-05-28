@@ -46,7 +46,19 @@ export const KnowledgeQAPage: React.FC = () => {
     prevStatusRef.current = status;
   }, [status, result, refreshHistory]);
 
+  // 当前任务完成时，如果正在查看历史记录，自动切回当前结果
+  useEffect(() => {
+    if (status === 'done' && result && historyResult) {
+      setHistoryResult(null);
+    }
+  }, [status, result, historyResult]);
+
   const handleHistorySelect = useCallback(async (taskId: string) => {
+    // 点击的是当前正在运行的任务 → 返回实时进度视图
+    if (taskId === store.taskId && isRunning) {
+      setHistoryResult(null);
+      return;
+    }
     // 不清空当前结果，避免界面闪烁
     setLoadingDetail(true);
     try {
@@ -59,7 +71,7 @@ export const KnowledgeQAPage: React.FC = () => {
     } finally {
       setLoadingDetail(false);
     }
-  }, [loadDetail]);
+  }, [loadDetail, store.taskId, isRunning]);
 
   const handleNewChat = useCallback(() => {
     // 如果正在生成中，取消当前任务
@@ -98,6 +110,7 @@ export const KnowledgeQAPage: React.FC = () => {
           onSelect={handleHistorySelect}
           onNewChat={handleNewChat}
           activeTaskId={store.taskId}
+          activeQuestion={store.currentQuestion}
           loading={historyLoading}
           items={items}
           listError={historyError}
@@ -144,7 +157,16 @@ export const KnowledgeQAPage: React.FC = () => {
         <QuestionInput
           onSubmit={handleSubmit}
           onCancel={cancel}
+          onReturn={() => setHistoryResult(null)}
           loading={isLoading || isViewingHistory}
+          isViewingHistory={isViewingHistory}
+          displayQuestion={
+            isViewingHistory
+              ? historyResult?.question
+              : isRunning
+                ? store.currentQuestion || undefined
+                : undefined
+          }
         />
 
         {(displayStatus === 'streaming' || displayStatus === 'submitting') && (

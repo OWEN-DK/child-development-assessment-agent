@@ -323,7 +323,7 @@ class Section4OutlineResponse(BaseModel):
     """plan_outline Agent 的 response_format"""
 
     title: str = Field(default="运动方案大纲")
-    content: str = Field(..., description="大纲 Markdown 正文，≤ 1200 字")
+    content: str = Field(..., description="大纲 Markdown 正文")
     citations: List[Dict[str, Any]] = Field(default_factory=list)
     phases: List[Dict[str, Any]] = Field(
         default_factory=list,

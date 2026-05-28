@@ -31,6 +31,7 @@ interface HistorySidebarProps {
   onSelect: (taskId: string) => void;
   onNewChat: () => void;
   activeTaskId?: string | null;
+  activeQuestion?: string | null;
   /** 列表加载中（仅首次加载/刷新，不含详情加载） */
   loading: boolean;
   /** 由父组件传入的历史记录数据（父组件统一管理 useHistory） */
@@ -46,6 +47,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onSelect,
   onNewChat,
   activeTaskId,
+  activeQuestion,
   loading,
   items,
   listError,
@@ -112,6 +114,45 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           />
         </Tooltip>
       </div>
+
+      {/* 当前任务（正在生成中，不在历史列表中） */}
+      {isRunning && activeTaskId && activeQuestion && (
+        <div
+          onClick={() => onSelect(activeTaskId)}
+          style={{
+            padding: '10px 16px',
+            cursor: 'pointer',
+            background: token.colorFillTertiary,
+            borderRadius: 0,
+            borderLeft: `3px solid ${token.colorPrimary}`,
+            position: 'relative',
+          }}
+        >
+          <Paragraph
+            ellipsis={{ rows: 2 }}
+            style={{
+              margin: 0,
+              fontSize: 13,
+              lineHeight: '20px',
+              color: token.colorText,
+              fontWeight: 500,
+            }}
+          >
+            <MessageOutlined
+              style={{ marginRight: 6, fontSize: 12, opacity: 0.5 }}
+            />
+            {activeQuestion}
+          </Paragraph>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <Tag
+              color="processing"
+              style={{ fontSize: 11, lineHeight: '18px', margin: 0, padding: '0 6px' }}
+            >
+              生成中…
+            </Tag>
+          </div>
+        </div>
+      )}
 
       {/* 列表 */}
       <div style={{ flex: 1, overflowY: 'auto' }}>

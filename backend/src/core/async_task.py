@@ -222,6 +222,9 @@ class AsyncTaskManager:
     async def cancel_task(cls, task_id: str, task_type: str) -> bool:
         """取消指定任务
         
+        注意：不 await 被取消的任务，避免 LLM 调用期间接口长时间阻塞。
+        asyncio 任务取消是异步传播的，wrapped_task 会自行处理清理逻辑。
+        
         Returns:
             bool: Redis 状态更新成功即返回 True（任务可能已完成，但状态已成功标记为取消）
         """
@@ -231,13 +234,12 @@ class AsyncTaskManager:
         redis_success = await task_state_service.cancel(task_id, task_type)
         
         # 尝试取消 asyncio 任务（如果仍在运行）
+        # 仅调用 cancel() 触发取消传播，不等待任务完成
+        # wrapped_task 的 except asyncio.CancelledError / finally 块会自行清理
         task = cls._active_tasks.get(task_id)
         if task and not task.done():
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                logger.info(f"任务 {task_id} 已取消")
+            logger.info(f"已发送取消信号: task_id={task_id}")
         
         # 以 Redis 状态更新结果为准
         return redis_success
