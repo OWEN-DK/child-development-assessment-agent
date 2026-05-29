@@ -288,3 +288,88 @@ S3 LLM 生成 → content 仅 90 字符 + citations 的 excerpt 过短（<10 字
 | 18 | 验收标准 "phase 数 ≥2" | 代码修复已生效（alias），但 LLM 仍只生成 1 phase | LLM 服从率问题，需代码层 phases 数量校验 |
 | 19 | F5 来源配额修复 citations 多书 | 来源配额仅作用于 match_books 阶段，section 级搜索仍被单书垄断 | 需将配额扩展到 `_direct_search` 或强制多 book_ids |
 | 20 | "无降级但 partial=True 原因待查" | 根因确认：S3 citations 全部被 verify_citations 剔除（excerpt <10 字符），触发 `partial=True` | `verify_citations.py:189` 的 `if not valid_citations: partial = True` |
+
+---
+
+## 第二轮审查（2026-05-29 续）
+
+### 新数据运行结果
+
+使用修改后的问题（去掉"有什么运动可以帮助改善"后缀）重新运行：
+
+| 指标 | 旧数据（有"运动"后缀） | 新数据（无"运动"后缀） |
+|------|----------------------|----------------------|
+| 问题 | ...有什么运动可以帮助改善？ | ...经常被老师投诉 |
+| search_coverage | {'运动改变大脑': 8, '孩子如何思考': 5} | {'学习之道': 6, '孩子如何思考': 6, '运动改变大脑': 6} |
+| 多书引用 | ❌ 仅 1-2 本 | ✅ 3 本 |
+| 阶段数 | 1 | 1（仍需修复） |
+| 总天数 | 13 | 12（仍需修复） |
+
+**关键发现**：多书引用改善的原因不是 F5 来源配额修复生效，而是**测试问题去掉了"运动"关键词**。
+
+### Bug #1 根因最终确认
+
+旧根因分析（F5 来源配额）只是表面修复。真正的根因：
+
+```
+用户问题: "...有什么运动可以帮助改善？"
+  ↓
+RAG 向量搜索: "运动" 语义权重压倒 "注意力不集中""坐不住"
+  ↓
+top-15 全部来自《运动改变大脑》
+  ↓
+其他 4 本书零命中 → citations 单书垄断
+```
+
+**验证**：去掉"运动"后缀后，同样的 RAG 搜索返回 3 本书各 6 条结果，完全均衡。
+
+**结论**：关键词剥离只是打补丁，换个问法（如"推荐什么锻炼"）就失效。需要**先分析孩子现状，再用现状搜索**。
+
+### 修复方案：查询分析管线
+
+核心思路：**一次 LLM 调用同时完成意图分类 + 问题分解 + 查询改写**。
+
+```
+用户问题
+  ├─→ [并行] 规则提取 _extract_child_profile()     ← 零延迟
+  └─→ [并行] LLM 分析 _analyze_query()             ← 15s 超时
+        ├─ 意图分类: solution_seeking / problem_diagnosis / knowledge_query
+        ├─ 实体提取: age, behavior[], cognitive[], emotional[]
+        ├─ 问题分解 → 3 个子问题
+        └─ 查询改写 → 2-3 个中性 query
+  ↓
+合并 → 11 组多维度搜索 query（无"运动"等方案导向词）
+  ↓
+RAG 搜索（最多 6 组 query）
+```
+
+**实现文件**: `match_books.py`
+- `QueryAnalysisResult`: Pydantic 结构化输出 schema
+- `_extract_child_profile()`: 规则实体提取（fallback）
+- `_analyze_query()`: LLM 单次调用完成全部分析
+- `_analyze_and_search_books()`: 重构后的综合搜索函数
+
+**测试验证**:
+```
+原问题: "...有什么运动可以帮助改善？"
+  → 搜索 query: "8岁儿童 注意力不集中 坐不住"（无"运动"）
+  → 与去掉后缀的问题生成完全相同的 query
+  → 任何问法都不会被方案导向词主导
+```
+
+### Bug #2 级联修复确认
+
+| 修复 | 状态 | 验证 |
+|------|------|------|
+| F1 Phase alias | ✅ 生效 | phase_name 不再是"阶段" |
+| F9 阶段数强制 | ✅ 新增 | `_ensure_min_phases` 自动补全至 2 阶段 |
+| F14 每周 7 天 | ✅ 新增 | `_ensure_full_weeks` 补全缺失天为休息日 |
+| F10 休息日强制 | ✅ 新增 | `_enforce_rest_days` 最多 5 天训练 |
+| F13 summary 计算 | ✅ 修复 | `total_duration_days` 使用计算值 |
+| F15-F18 查询分析管线 | ✅ 新增 | 意图分类+实体提取+问题分解+查询改写 |
+
+### 遗留问题
+
+1. **partial=True**：S3 citations 被 verify_citations 剔除（excerpt <10 字符），非数据缺失
+2. **section 级搜索**：各 section 的 `_direct_search` 仍用 section content 搜索，可能被单书垄断
+3. **LLM 分析延迟**：`_analyze_query` 增加 ~15s，有超时保护但影响总耗时
