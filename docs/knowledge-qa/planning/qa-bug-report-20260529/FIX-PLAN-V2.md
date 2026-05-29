@@ -185,3 +185,112 @@ total_duration_days: 28 ✅
 total_training_days: 20 ✅
 total_phases: 2 ✅
 ```
+
+---
+
+## 补充修复（V2.2）— 查询分析管线
+
+### 问题根因
+
+多书引用失败的真正原因：用户问题中"有什么运动可以帮助改善"的"运动"关键词主导了 RAG 向量搜索语义，导致《运动改变大脑》垄断 top-15，其他书被排除。
+
+### 核心思路
+
+**一次 LLM 调用同时完成意图分类 + 问题分解 + 查询改写**，与规则提取并行执行。
+
+```
+用户问题
+  │
+  ├─→ [并行] 规则提取 _extract_child_profile()     ← 零延迟
+  │
+  └─→ [并行] LLM 分析 _analyze_query()             ← 15s 超时
+        ├─ 意图分类 (approach 2)
+        ├─ 实体提取 (approach 2)
+        ├─ 问题分解 → 3 个子问题 (approach 3)
+        └─ 查询改写 → 2-3 个中性 query (approach 1)
+  │
+  ▼
+合并结果（LLM 为主，规则为 fallback）
+  │
+  ▼
+11 组多维度搜索 query（无"运动"等方案导向关键词）
+  │
+  ▼
+RAG 搜索（最多 6 组 query，来源配额防垄断）
+```
+
+### F15: `QueryAnalysisResult` — 结构化输出 Schema (approach 1+2+3)
+
+**位置**: `match_books.py` 新增 Pydantic 模型
+
+**字段**:
+- `intent`: 意图分类（solution_seeking / problem_diagnosis / knowledge_query / general）
+- `child_age`, `child_gender`: 孩子基本信息
+- `behavior_traits`, `cognitive_traits`, `emotional_traits`: 三维度特征提取
+- `sub_questions`: 问题分解后的 2-3 个子问题（approach 3）
+- `rewritten_queries`: 去除方案导向词汇的中性搜索 query（approach 1）
+
+### F16: `_analyze_query()` — LLM 查询分析 (approach 1+2+3)
+
+**位置**: `match_books.py` 新增函数
+
+**设计**:
+- 单次 `_invoke_llm_structured` 调用，`response_format=QueryAnalysisResult`
+- 15s 超时，`no_cache=True`（并行调用场景）
+- 失败时自动降级到 `_extract_child_profile` 规则提取
+
+### F17: `_extract_child_profile()` — 规则实体提取 (approach 2)
+
+**位置**: `match_books.py` 新增函数
+
+**设计**:
+- 纯规则，零延迟，零成本
+- 提取年龄、行为特征、认知特征、情绪特征
+- 作为 LLM 分析的 fallback 和并行补充
+
+### F18: `_analyze_and_search_books()` — 综合搜索管线 (重构)
+
+**位置**: `match_books.py` 重构原 `_search_for_books`
+
+**搜索 query 来源（6 层）**:
+1. LLM 子问题（approach 3）
+2. LLM 查询改写（approach 1）
+3. 规则实体维度（approach 2）
+4. 意图路由领域词（approach 2）
+5. 书名提及
+6. 通用领域词
+
+**关键设计**:
+- 不主动添加"运动"领域关键词，避免偏向单一书籍
+- `solution_seeking` 意图：添加多维度领域词，不加方案导向词
+- 去重逻辑：`seen` 集合保证无重复 query
+
+### 测试结果
+
+```
+问题: "我儿子8岁，上课注意力不集中，写作业坐不住，经常被老师投诉，有什么运动可以帮助改善？"
+意图: solution_seeking
+年龄: 8岁, 行为: [注意力不集中, 坐不住], 认知: [写作业困难, 上课不听讲], 情绪: [被投诉]
+
+生成 11 组搜索 query:
+  1. [子问题] 8岁儿童注意力不集中是什么原因
+  2. [子问题] 儿童坐不住写作业困难怎么改善
+  3. [子问题] 儿童被老师投诉情绪调节方法
+  4. [改写]   8岁男孩 注意力不集中 坐不住 执行功能
+  5. [改写]   儿童 上课走神 写作业困难 认知发展
+  6. [实体]   8岁儿童 注意力不集中 坐不住
+  7. [实体]   儿童 写作业困难 上课不听讲 学习能力
+  8. [实体]   儿童 被投诉 情绪调节
+  9. [领域]   儿童注意力发展
+  10. [领域]  儿童情绪调节
+  11. [领域]  儿童发展
+
+✅ 搜索 query 中无"运动"关键词
+✅ 无论用户怎么问，搜索都从孩子现状出发
+```
+
+### 已知局限
+
+1. **LLM 分析延迟**: 增加 ~15s（与搜索串行），有超时保护
+2. **规则覆盖有限**: `_extract_child_profile` 只覆盖常见模式，新领域需扩展 patterns
+3. **query 数量限制**: 最多搜索 6 组 query，11 组中优先级靠后的可能被截断
