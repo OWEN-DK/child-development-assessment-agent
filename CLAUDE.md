@@ -25,7 +25,7 @@
 |-------------|----------------|----------------|
 | **快速逻辑定位** | `.ai/business_logic_map.md` | 各大业务模块（Agent/RAG/基建/测试）的核心逻辑概述与具体代码文件入口。 |
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
-| **知识问答模块** | `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含知识图谱（graph/）、15个业务节点、子 Agent、工具集 |
+| **知识问答模块** | `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含知识图谱（graph/）、13个业务节点、子 Agent、工具集 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
 | **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |
@@ -33,14 +33,13 @@
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
 | **RAG 完整技术文档**| `.ai/rag_pipeline.md` | RAG 系统完整的技术细节、双流水线架构与 API 规范 |
-| **平台化架构与需求**| `.ai/platform-architecture/` | 四模块联动需求文档（当前阶段Bug/优先级）+ RAG 平台化架构愿景（配置驱动、管道编排、多客户交付） |
 | **统一响应与异常规范**| `.ai/unified-api-response-and-error-handling.md` | 实体类管理、类拆分、冗余消除、统一响应格式、异常处理、错误码规范 |
 
 ---
 
 # 📌 项目宏观概览与技术栈
 
-**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（15节点 + 知识图谱）、RAG 知识检索（双流水线混合检索）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
+**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（13节点 + 知识图谱）、RAG 知识检索（双流水线混合检索）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
 
 ## 技术栈
 - **语言**: Python 3.13, TypeScript 5.3
@@ -52,7 +51,7 @@
 - **文档解析**: PyMuPDF, EbookLib, BeautifulSoup, WeasyPrint (PDF 报告生成)
 - **DI/调度**: injector (依赖注入), APScheduler (定时任务)
 - **缓存/过滤**: cachetools (LRU), pybloom-live (布隆过滤器)
-- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components, @ant-design/charts 2.6, Zustand 5, React Router 7 (react-router-dom 7.13), TanStack Query 5
+- **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components 3.1.11, @ant-design/charts 2.6, Zustand 5, React Router 7 (react-router-dom 7.13), TanStack Query 5
 - **前端测试**: Vitest 4.1, React Testing Library 16.3
 - **包管理**: uv (后端), npm (前端)
 - **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
@@ -84,7 +83,7 @@ backend/src/
 ├── core/                   # 核心业务逻辑
 │   ├── knowledge_qa/       # 知识问答模块（独立 LangGraph 编排）
 │   │   ├── graph/          # 知识图谱（构建/社区/抽取/遍历/重建/管道）
-│   │   ├── nodes/          # 15个业务节点（分析/识别/匹配/推荐/生成/校验等）
+│   │   ├── nodes/          # 13个业务节点（分析/识别/匹配/推荐/生成/校验等）
 │   │   ├── prompts/        # 提示词模板
 │   │   ├── _assembly.py    # 组装逻辑
 │   │   ├── sub_agents.py   # 子 Agent 定义

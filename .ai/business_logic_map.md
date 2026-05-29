@@ -57,7 +57,7 @@
 
 | 步骤 | 节点名称 | 业务逻辑 | 代码入口 |
 |---|---|---|---|
-| **核心编排** | KnowledgeQA Graph | 知识问答 LangGraph 编排，15个节点组成完整推理链。 | `backend/src/core/knowledge_qa/` |
+| **核心编排** | KnowledgeQA Graph | 知识问答 LangGraph 编排，13个节点组成完整推理链。 | `backend/src/core/knowledge_qa/` |
 | **子 Agent** | Sub Agents | 定义多个子 Agent，协同完成知识问答。 | `backend/src/core/knowledge_qa/sub_agents.py` |
 | **知识图谱** | Graph Pipeline | 知识图谱的构建、社区检测、全局重建和遍历。 | `backend/src/core/knowledge_qa/graph/`（builder/community/extractor/global_rebuild/pipeline/traversal） |
 | **前端页面** | 知识问答界面 | 问答交互、书籍选择、进度展示、报告查看、引用展示。 | `frontend/src/features/knowledge-qa/`（components/hooks/pages/stores/types） |

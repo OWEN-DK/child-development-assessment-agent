@@ -13,16 +13,17 @@ graph TB
     subgraph 前端展示层 Frontend (FSD 架构)
         UI[React 19 + TypeScript + TanStack Query 5 + Zustand 5]
         subgraph Pages 路由页面层
-            AssessmentPage[评估首页 /]
+            KnowledgeQAPage[知识问答首页 /]
             KnowledgeBasePage[知识库页 /knowledge-base]
             KnowledgeSearchPage[知识搜索页 /knowledge-search]
+            BookChunksPage[文档分块页 /book-chunks/:fileHash/:fileName]
             RagEvalSuite[RAG评估套件 /rag-eval/*]
             SystemConfigPage[系统配置页 /system-config]
             PromptManagementSuite[提示词管理 /prompt-management/*]
             LLMMonitoringPage[LLM监控页 /monitoring]
         end
         subgraph Features 业务特性层
-            AssessmentFeature[评估特性]
+            KnowledgeQAFeature[知识问答特性]
             DocumentsFeature[知识库特性]
             KnowledgeFeature[搜索特性]
             RagEvalFeature[RAG评估特性<br>pages/components/hooks/stores/utils]
