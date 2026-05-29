@@ -568,11 +568,30 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                     caution=caution,
                 )
             except Exception:
-                # 完全失败：使用最小有效数据
-                logger.error("plan_assemble: 无法构建有效 S4 数据")
+                # 完全失败：构建降级占位，确保 5 节完整
+                logger.error("plan_assemble: 无法构建有效 S4 数据，使用降级占位")
+                fallback = SectionOutput(
+                    index=4,
+                    title="运动方案",
+                    content="本节因数据结构异常未完整生成，请参考 S3 中的运动类型推荐。",
+                    citations=[],
+                    structured_data={},
+                )
+                sections = dict(state.sections)
+                sections[4] = fallback
+                try:
+                    await push_progress(
+                        "section_4_done",
+                        "运动方案（降级占位）",
+                        section=fallback.model_dump(),
+                    )
+                except Exception:
+                    pass
                 return {
+                    "sections": sections,
                     "errors": state.errors + ["section_4_assemble: 数据校验完全失败"],
-                    "current_step": ["section_4_assemble_failed"],
+                    "current_step": ["section_4_done_fallback"],
+                    "partial": True,
                 }
 
         # Step 6: 构建简短摘要（100 字以内）+ 完整 structured_data

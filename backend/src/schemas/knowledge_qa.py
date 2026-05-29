@@ -620,6 +620,12 @@ class KnowledgeQAState(BaseModel):
         description="各节生成结果，key 为节号 1-5",
     )
 
+    # ===== 逐节搜索 query（section-specific） =====
+    section_queries: Dict[int, str] = Field(
+        default_factory=dict,
+        description="每节的搜索查询词。match_books 根据查询分析结果构造，替代原始问题以避免关键词偏置。key 为节号 1-5",
+    )
+
     # ===== 第 4 节大纲中间产物 =====
     section_4_outline: Optional[Dict[str, Any]] = Field(
         default=None,

@@ -67,8 +67,9 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
         candidates_markdown = _build_candidates_markdown(candidates)
 
         # Step 1: 搜索知识库
+        s3_query = state.section_queries.get(3, state.question)
         search_results = await _direct_search(
-            state.question, state.matched_book_ids, state=state
+            s3_query, state.matched_book_ids, state=state
         )
         search_context = _format_search_context(search_results)
         logger.info(f"S3 _direct_search: {len(search_results)} 条")

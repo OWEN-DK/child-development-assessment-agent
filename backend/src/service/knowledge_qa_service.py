@@ -209,26 +209,44 @@ class KnowledgeQAService:
                     lines.append("> *本节内容为空*")
                     lines.append("")
 
-            # 引用
-            if sec.citations:
-                lines.append(f"#### 📖 本节参考来源")
+            lines.append("---")
+            lines.append("")
+
+        # ═══════════ 统一参考文献 ═══════════
+        all_citations = []
+        seen_ids = set()
+        for sec in response.sections:
+            for c in sec.citations:
+                cid = c.get('citation_id', '')
+                if cid and cid not in seen_ids:
+                    seen_ids.add(cid)
+                    all_citations.append(c)
+
+        if all_citations:
+            # 按书名分组
+            from collections import defaultdict
+            by_book = defaultdict(list)
+            for c in all_citations:
+                book = c.get('book_title', '未知书籍')
+                by_book[book].append(c)
+
+            lines.append("## 📚 参考文献")
+            lines.append("")
+            for book, cites in by_book.items():
+                lines.append(f"### {book}")
                 lines.append("")
-                for c in sec.citations:
-                    cid = c.get('citation_id', '')
-                    book = c.get('book_title', '未知书籍')
+                for c in cites:
                     chapter = c.get('chapter', '')
                     excerpt = c.get('excerpt', '')
-                    lines.append(f"- **[{cid}]** *{book}* — {chapter}")
+                    if chapter:
+                        lines.append(f"- {chapter}")
                     if excerpt:
                         lines.append(f"  > {excerpt}")
                 lines.append("")
-
             lines.append("---")
             lines.append("")
 
         # ═══════════ 页脚 ═══════════
-        lines.append("---")
-        lines.append("")
         lines.append("*本报告由 AI 儿童发展评估系统自动生成，仅供参考。*")
         lines.append("*如有疑虑，请咨询专业儿科医生或儿童发展专家。*")
         lines.append("")

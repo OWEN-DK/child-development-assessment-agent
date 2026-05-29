@@ -415,7 +415,7 @@ async def _analyze_and_search_books(question: str) -> List[Dict]:
             if len(all_results) >= 25:
                 break
 
-    return all_results
+    return all_results, analysis
 
 
 async def _llm_match_books(question: str, candidates: List[Dict]) -> List[MatchedBookItem]:
@@ -465,6 +465,61 @@ async def _llm_match_books(question: str, candidates: List[Dict]) -> List[Matche
         return []
 
 
+def _build_section_queries(question: str, analysis: QueryAnalysisResult) -> dict:
+    """从查询分析结果构造逐节搜索 query。
+
+    每节使用与自身主题相关的关键词，而非原始问题中的方案导向词（如"运动"）。
+    不同节天然命中不同书籍，从根本上解决单书垄断问题。
+    """
+    age = analysis.child_age or ""
+    behavior = " ".join(analysis.behavior_traits[:3]) if analysis.behavior_traits else ""
+    cognitive = " ".join(analysis.cognitive_traits[:2]) if analysis.cognitive_traits else ""
+    emotional = " ".join(analysis.emotional_traits[:2]) if analysis.emotional_traits else ""
+
+    queries = {}
+
+    # S1: 孩子状态分析 — 用行为+认知特征
+    s1_parts = []
+    if age:
+        s1_parts.append(f"{age}儿童")
+    if behavior:
+        s1_parts.append(behavior)
+    if cognitive:
+        s1_parts.append(cognitive)
+    if s1_parts:
+        queries[1] = " ".join(s1_parts)
+    else:
+        queries[1] = question
+
+    # S2: 问题识别 — 用行为+认知+领域词
+    s2_parts = []
+    if behavior:
+        s2_parts.append(behavior)
+    if cognitive:
+        s2_parts.append(cognitive)
+    s2_parts.append("原因分析")
+    queries[2] = "儿童 " + " ".join(s2_parts) if s2_parts else question
+
+    # S3: 运动类型推荐 — 用行为+认知+情绪，加上运动领域词（此节就是推荐运动，不应去偏）
+    s3_parts = []
+    if behavior:
+        s3_parts.append(behavior)
+    if cognitive:
+        s3_parts.append(cognitive)
+    if emotional:
+        s3_parts.append(emotional)
+    s3_parts.append("运动改善")
+    queries[3] = "儿童 " + " ".join(s3_parts) if s3_parts else question
+
+    # S4: 运动方案 — 先用原始问题（后续由 plan_outline 自行替换为运动名称）
+    queries[4] = question
+
+    # S5: 总结建议 — 用原始问题
+    queries[5] = question
+
+    return queries
+
+
 async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
     """书籍匹配节点：直接搜索知识库 + 27B LLM 单次匹配。"""
     await push_progress("started", "正在分析问题意图并匹配书籍…")
@@ -474,8 +529,12 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     try:
         # Step 1: 直接调用 search_knowledge_base 工具搜索知识库
-        search_results = await _analyze_and_search_books(state.question)
+        search_results, query_analysis = await _analyze_and_search_books(state.question)
         logger.info(f"match_books 直接搜索: {len(search_results)} 条结果")
+
+        # Step 1b: 从查询分析结果构建逐节搜索 query，消除"运动"等关键词偏置
+        section_queries = _build_section_queries(state.question, query_analysis)
+        logger.info(f"match_books section_queries: { {k: v[:40] for k, v in section_queries.items()} }")
 
         if not search_results:
             raise NoMatchingBooksError()
@@ -579,9 +638,11 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
         # search_book_ids: 所有候选书籍的 file_hash（供 RAG 检索，不做书籍级过滤）
         # books_detail: LLM 匹配结果（供报告展示）
+        # section_queries: 逐节搜索 query，去除方案导向词
         return {
             "matched_book_ids": search_book_ids,
             "matched_books_detail": books_detail,
+            "section_queries": section_queries,
             "current_step": ["books_matched"],
         }
 

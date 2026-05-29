@@ -743,6 +743,7 @@ async def batch_resolve_books(
     供 knowledge-qa 模块通过 HTTP 调用，避免直接访问知识库数据库。
     后续知识库独立部署时只需迁移此端点。
     """
+    from src.models.document import DocumentRecord
     from src.repository.document_repository import DocumentRecordRepository
     from src.core.database import async_session_factory
     from sqlalchemy import select, or_

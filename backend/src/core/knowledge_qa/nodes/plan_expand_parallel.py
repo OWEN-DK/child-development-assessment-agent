@@ -315,15 +315,38 @@ async def plan_expand_parallel_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     # 共享搜索上下文（所有组共用同一份检索结果）
     search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
-    search_context = _format_search_context(search_results)
+    base_search_context = _format_search_context(search_results)
+
+    # 为每组预取运动专项搜索上下文（含动作要领等关键词）
+    group_search_contexts = []
+    for group_idx, group_slots in enumerate(groups):
+        ex_names = " ".join(
+            s["exercise"]["name"] for s in group_slots if s["exercise"].get("name")
+        )
+        if ex_names and len(ex_names) > 5:
+            ex_query = f"{ex_names} 动作要领 执行要点 家长指导"
+            try:
+                ex_results = await _direct_search(
+                    ex_query, state.matched_book_ids, state=state
+                )
+                gc = _format_search_context(ex_results)
+                if gc:
+                    group_search_contexts.append(
+                        base_search_context + "\n\n## 本组运动专项检索结果\n" + gc
+                    )
+                    continue
+            except Exception:
+                pass
+        group_search_contexts.append(base_search_context)
 
     # 并行展开（信号量限流）
     sem = asyncio.Semaphore(MAX_PARALLEL)
 
     async def _limited(group_idx, group_slots):
         async with sem:
+            gc = group_search_contexts[group_idx] if group_idx < len(group_search_contexts) else base_search_context
             return await _expand_single_group(
-                group_idx, group_slots, search_context, state
+                group_idx, group_slots, gc, state
             )
 
     try:

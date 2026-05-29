@@ -35,7 +35,8 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
     data = None  # 初始化，确保异常处理中可安全引用
     try:
         # Step 1: 直接搜索
-        search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
+        s4_query = state.section_queries.get(4, state.question)
+        search_results = await _direct_search(s4_query, state.matched_book_ids, state=state)
         search_context = _format_search_context(search_results)
 
         # Step 2: 构建前序节内容
@@ -63,19 +64,50 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
         if state.exercise_context:
             full_message += f"\n\n{state.exercise_context}"
 
-        # 使用纯文本 JSON 输出（绕过 DashScope function_calling 对深层嵌套的缺陷）
-        data = await _invoke_llm_json(
-            system_prompt=prompt["system"],
-            user_message=full_message,
-            step_label="plan_outline",
-            timeout_seconds=90,
+        # ── 分阶段生成：两次 LLM 调用，避免单次生成两个 phase 导致 Phase 2 质量崩塌 ──
+        # Phase 1: 生成第 1 阶段（第 1-2 周）
+        phase1_message = (
+            full_message
+            + "\n\n## 任务：仅生成第 1 阶段（PH01，第 1-2 周）\n"
+            + "输出 phases 数组仅包含 1 个元素（PH01），包含 week 1 和 week 2。"
         )
+        phase1_data = await _invoke_llm_json(
+            system_prompt=prompt["system"],
+            user_message=phase1_message,
+            step_label="plan_outline",
+            timeout_seconds=120,
+        )
+        phase1_phases = phase1_data.get("phases", [])
+        logger.info(f"plan_outline Phase 1: {len(phase1_phases)} phases, "
+                    f"{_count_exercises_in_phases(phase1_phases)} exercises")
 
-        # 补全缺失字段
-        data.setdefault("title", "运动方案大纲")
-        data.setdefault("content", "")
-        data.setdefault("citations", [])
-        data.setdefault("structured_data", {})
+        # Phase 2: 生成第 2 阶段（第 3-4 周），携带 Phase 1 摘要作为递进上下文
+        ph1_summary = _build_phase1_summary(phase1_phases)
+        phase2_message = (
+            full_message
+            + f"\n\n## 第 1 阶段摘要（已完成）\n{ph1_summary}\n\n"
+            + "## 任务：仅生成第 2 阶段（PH02，第 3-4 周）\n"
+            + "输出 phases 数组仅包含 1 个元素（PH02），包含 week 3 和 week 4。"
+            + "运动强度和复杂度应在第 1 阶段基础上递进，但不能重复第 1 阶段的运动名称。"
+        )
+        phase2_data = await _invoke_llm_json(
+            system_prompt=prompt["system"],
+            user_message=phase2_message,
+            step_label="plan_outline_phase2",
+            timeout_seconds=120,
+        )
+        phase2_phases = phase2_data.get("phases", [])
+        logger.info(f"plan_outline Phase 2: {len(phase2_phases)} phases, "
+                    f"{_count_exercises_in_phases(phase2_phases)} exercises")
+
+        # 合并两个 phase → 统一 data
+        data = {
+            "title": phase1_data.get("title", "运动方案大纲"),
+            "content": (phase1_data.get("content", "") + "\n\n" + phase2_data.get("content", "")).strip(),
+            "citations": (phase1_data.get("citations", []) + phase2_data.get("citations", [])),
+            "structured_data": phase1_data.get("structured_data", {}),
+            "phases": phase1_phases + phase2_phases,
+        }
 
         # ── 显式校验 phases ──
         phases = data.get("phases", [])
@@ -125,6 +157,9 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
                     "current_step": ["section_4_outline_failed"],
                 }
 
+        # ── day_index 归一化：LLM 输出全局递增索引，转为每周末尾局部值 1..N ──
+        data["phases"] = _normalize_day_indices(data["phases"])
+
         # ── F9: 确保至少 2 个阶段 ──
         phases = data.get("phases", [])
         if len(phases) < 2:
@@ -137,7 +172,10 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
         data["phases"] = _ensure_full_weeks(data["phases"], days_per_week=7)
 
         # ── 强制每周最多 5 天训练，保证休息日 ──
-        data["phases"] = _enforce_rest_days(data["phases"], max_training_days=5)
+        data["phases"] = _enforce_rest_days(data["phases"], state=state)
+
+        # phases 变量重新读取（经过三次兜底函数后可能已变）
+        phases = data["phases"]
 
         try:
             outline_section = SectionOutput(
@@ -288,6 +326,48 @@ def _count_exercises_in_phases(phases: list) -> int:
 
 
 
+def _build_phase1_summary(phases: list) -> str:
+    """构建 Phase 1 摘要，供 Phase 2 生成时作为递进上下文。"""
+    if not phases:
+        return "（第 1 阶段未生成）"
+    lines = []
+    for ph in phases[:1]:
+        pn = ph.get("phase_name") or ph.get("name", "阶段")
+        pg = ph.get("goal", "")
+        lines.append(f"阶段名：{pn}")
+        if pg:
+            lines.append(f"目标：{pg}")
+        for wk in ph.get("weeks", []):
+            wi = wk.get("week_index", "?")
+            ex_names = []
+            for day in wk.get("days", []):
+                for ex in day.get("main_exercises", []):
+                    name = ex.get("name", "")
+                    if name:
+                        ex_names.append(name)
+            lines.append(f"第{wi}周运动：{' → '.join(ex_names[:8])}{'…' if len(ex_names) > 8 else ''}")
+    lines.append("\n请基于以上第 1 阶段安排，设计递进的第 2 阶段（提高强度/复杂度/社交性，不重复运动名称）。")
+    return "\n".join(lines)
+
+
+def _normalize_day_indices(phases: list) -> list:
+    """将 LLM 输出的全局递增 day_index 归一化为每周末尾局部值 1..N。
+
+    LLM 倾向于跨周全局编号（Week1: Day1-7, Week2: Day8-14, Week4: Day22-24），
+    但 _ensure_full_weeks 和 _enforce_rest_days 依赖局部 day_index。
+    不归一化会导致 Week 4 被错误补全为休息日并清空所有原始运动数据。
+    """
+    for phase in phases:
+        for week in phase.get("weeks", []):
+            days = week.get("days", [])
+            if not days:
+                continue
+            days.sort(key=lambda d: d.get("day_index", 0))
+            for i, day in enumerate(days):
+                day["day_index"] = i + 1
+    return phases
+
+
 def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
     """确保至少有 min_phases 个阶段。不足时从已有阶段复制并调整。
 
@@ -324,30 +404,89 @@ def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
     return result
 
 
-def _enforce_rest_days(phases: list, max_training_days: int = 5) -> list:
-    """确保每周不超过 max_training_days 天训练，多余的天数转为休息日。
+def _enforce_rest_days(phases: list, max_training_days: int | None = None, state=None) -> list:
+    """确保每周休息日数量合理。
 
-    遍历每个 phase 的每个 week，如果训练天数超过 max_training_days，
-    将多余的天数（从周末开始）设为休息日（清空 main_exercises）。
+    根据孩子年龄和运动强度动态计算每周最大训练天数：
+    - 年龄 ≤ 6 岁：最多 4 天训练（3 天休息）
+    - 年龄 7-10 岁：最多 5 天训练（2 天休息）
+    - 年龄 ≥ 11 岁：最多 6 天训练（1 天休息）
+    - 高强度运动：额外 -1 天训练
+
+    多余的训练天（从后面开始）转为休息日（清空 main_exercises）。
     """
+    # 动态计算 max_training_days
+    if max_training_days is None:
+        max_training_days = _compute_max_training_days(state)
+
     for phase in phases:
         for week in phase.get("weeks", []):
             days = week.get("days", [])
             if len(days) <= max_training_days:
                 continue
-            # 按 day_index 排序，确保从后面开始截断
+            # 均匀分布休息日：每隔 N 天插入一个休息日，而非全部堆在末尾
             days.sort(key=lambda d: d.get("day_index", 0))
-            # 保留前 max_training_days 天，后面的天数转为休息日
-            for i in range(max_training_days, len(days)):
-                day = days[i]
-                if day.get("main_exercises"):
-                    day["main_exercises"] = []
-                    logger.info(
-                        f"_enforce_rest_days: 第{phase.get('phase_id', '?')}阶段 "
-                        f"第{week.get('week_index', '?')}周 "
-                        f"Day{day.get('day_index', '?')} 转为休息日"
-                    )
+            training_days = [d for d in days if d.get("main_exercises")]
+            if len(training_days) > max_training_days:
+                # 计算休息日间隔：在训练日之间均匀插入休息
+                excess = len(training_days) - max_training_days
+                interval = max(len(training_days) // (excess + 1), 1)
+                rest_positions = set()
+                pos = interval
+                for _ in range(excess):
+                    if pos < len(training_days):
+                        rest_positions.add(training_days[pos].get("day_index"))
+                    pos += interval + 1
+                for day in training_days:
+                    if day.get("day_index") in rest_positions and day.get("main_exercises"):
+                        day["main_exercises"] = []
+                        logger.info(
+                            f"_enforce_rest_days: 第{phase.get('phase_id', '?')}阶段 "
+                            f"第{week.get('week_index', '?')}周 "
+                            f"Day{day.get('day_index', '?')} 转为休息日 (均匀分布)"
+                        )
     return phases
+
+
+def _compute_max_training_days(state) -> int:
+    """根据孩子年龄和运动强度动态计算每周最大训练天数。"""
+    # 从 S1 获取年龄
+    age = 8  # 默认
+    try:
+        s1 = state.sections.get(1) if state else None
+        if s1 and s1.structured_data:
+            age = s1.structured_data.get("child_profile", {}).get("age", 8)
+            if isinstance(age, str):
+                age = int("".join(c for c in age if c.isdigit()) or "8")
+    except Exception:
+        pass
+
+    # 年龄映射
+    if age <= 6:
+        base = 4  # 幼儿：每周 4 天训练，3 天休息
+    elif age <= 10:
+        base = 5  # 小学低年级：5 天训练，2 天休息
+    else:
+        base = 6  # 高年级以上：6 天训练，1 天休息
+
+    # 强度调整：检测是否有高强度运动
+    try:
+        if state:
+            for ph in (state.section_4_outline or {}).get("phases", []):
+                for wk in ph.get("weeks", []):
+                    for day in wk.get("days", []):
+                        for ex in day.get("main_exercises", []):
+                            if ex.get("intensity") == "高":
+                                base -= 1
+                                logger.info(
+                                    f"_compute_max_training_days: 检测到高强度运动 {ex.get('name')}, "
+                                    f"max_training 调整为 {base}"
+                                )
+                                return max(base, 3)  # 最少保证 3 天训练
+    except Exception:
+        pass
+
+    return base
 
 def _ensure_full_weeks(phases: list, days_per_week: int = 7) -> list:
     """确保每周恰好有 days_per_week 天。

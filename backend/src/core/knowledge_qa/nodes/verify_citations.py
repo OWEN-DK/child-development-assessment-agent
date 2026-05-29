@@ -186,7 +186,10 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
             if not valid_citations:
                 logger.warning(f"section {i}: 所有引用被剔除，正文保持不变")
                 errors.append(f"section_{i}_citations_all_rejected")
-                partial = True
+                # 仅当 content 也为空时才标记 partial（内容缺失）。
+                # citations 被剔除是引用质量问题，不等于数据不完整。
+                if not sec.content or len(sec.content.strip()) < 20:
+                    partial = True
 
             sections[i] = SectionOutput(
                 index=sec.index,
@@ -241,7 +244,6 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
                         errors.append(
                             f"运动名称不在清单中: '{original}' (S3, type_id={et.get('type_id', '?')})"
                         )
-                        partial = True
 
         s4 = sections.get(4)
         if s4 and s4.structured_data and s4.structured_data != {}:
@@ -273,7 +275,6 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 errors.append(
                     f"运动名称不在清单中 (S4): {s4_exercise_violations} 项"
                 )
-                partial = True
 
     await push_progress("verify_citations_done", "引用核验完成")
 

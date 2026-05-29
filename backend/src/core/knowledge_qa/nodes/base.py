@@ -41,6 +41,7 @@ NODE_TEMPERATURES_DEFAULT = {
     "identify_problems": 0.5,
     "recommend_types": 0.5,
     "plan_outline": 0.5,
+    "plan_outline_phase2": 0.5,
     "plan_expand_content": 0.3,
     "conclusion": 0.3,
 }
@@ -52,6 +53,7 @@ NODE_TIMEOUT_SECONDS = {
     "identify_problems": 120,
     "recommend_types": 120,
     "plan_outline": 120,
+    "plan_outline_phase2": 120,
     "plan_expand_content": 120,
     "conclusion": 120,
 }
@@ -708,7 +710,9 @@ async def _run_section_node(
             raise asyncio.CancelledError("任务已被取消")
 
         # Step 1: 直接搜索知识库
-        search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
+        # 使用逐节搜索 query 替代原始问题，消除关键词偏置
+        search_query = state.section_queries.get(section_index, state.question)
+        search_results = await _direct_search(search_query, state.matched_book_ids, state=state)
         search_context = _format_search_context(search_results)
         logger.info(
             f"第{section_index}节 _direct_search: {len(search_results)} 条"
