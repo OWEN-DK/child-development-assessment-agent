@@ -24,6 +24,17 @@ from src.schemas.knowledge_qa import (
 
 logger = logging.getLogger(__name__)
 
+# ==================== 共用常量 ====================
+
+SKILL_KEYWORDS: dict[str, list[str]] = {
+    "专注力": ["专注", "注意", "集中"],
+    "身体协调": ["协调", "平衡"],
+    "情绪调节": ["情绪", "压力", "焦虑"],
+    "社交能力": ["社交", "合作", "团队"],
+    "身体素质": ["力量", "耐力", "体能", "柔韧"],
+    "感官统合": ["感官", "统合", "前庭", "触觉"],
+}
+
 NODE_TEMPERATURES_DEFAULT = {
     "match_books": 0.3,
     "analyze_child": 0.5,
@@ -35,16 +46,16 @@ NODE_TEMPERATURES_DEFAULT = {
 }
 
 NODE_TIMEOUT_SECONDS = {
-    "match_books": 40,
+    "match_books": 60,
     "prefetch_context": 30,
-    "analyze_child": 90,
-    "identify_problems": 90,
-    "recommend_types": 90,
-    "plan_outline": 90,
-    "plan_expand_content": 90,
-    "conclusion": 90,
+    "analyze_child": 120,
+    "identify_problems": 120,
+    "recommend_types": 120,
+    "plan_outline": 120,
+    "plan_expand_content": 120,
+    "conclusion": 120,
 }
-SECTION_TIMEOUT_SECONDS = 90
+SECTION_TIMEOUT_SECONDS = 120
 
 
 def get_timeout(step_label: str) -> int:
@@ -117,11 +128,13 @@ async def _invoke_llm_structured(
     *,
     max_retries: int = 1,
     timeout_seconds: int | None = None,
+    no_cache: bool = False,
 ) -> BaseModel:
     """统一 structured_output LLM 调用，含重试（仅限瞬时错误）。
 
     - 对 TimeoutError 和网络错误 (ConnectionError, OSError) 重试 max_retries 次
     - 其他异常（如 Pydantic 校验失败）不重试，直接抛出
+    - no_cache: 为 True 时创建独立 LLM 实例，用于并行调用场景
     """
     from src.core.llm.factory import LLMServiceFactoryCompat
 
@@ -136,6 +149,7 @@ async def _invoke_llm_structured(
         try:
             model = LLMServiceFactoryCompat.create_raw(
                 model_name=model_name, temperature=temperature,
+                no_cache=no_cache,
             )
             structured_model = model.with_structured_output(response_format)
             return await asyncio.wait_for(
@@ -204,10 +218,126 @@ async def _invoke_llm_plain(
     raise last_error  # type: ignore[misc]  # unreachable safety
 
 
-async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
-    """直接搜索知识库（通过 HTTP 调用 RAG 端点）。"""
+async def _invoke_llm_json(
+    system_prompt: str,
+    user_message: str,
+    step_label: str,
+    *,
+    max_retries: int = 1,
+    timeout_seconds: int | None = None,
+    no_cache: bool = False,
+) -> dict:
+    """纯文本 LLM 调用 + 手动 JSON 解析。
+
+    绕过 with_structured_output（DashScope function_calling 对深层嵌套 JSON 支持差），
+    直接让 LLM 输出 JSON 文本，然后用 json_repair 修复并解析。
+
+    适用场景：phases 等多层嵌套结构，qwen 32b 及以下模型通过 function_calling
+    无法正确生成时使用此函数。
+
+    Returns:
+        解析后的 dict，包含 LLM 输出的所有字段。
+    Raises:
+        ValueError: JSON 解析完全失败时抛出
+        asyncio.TimeoutError: 超时
+    """
+    import re as _re
+    from json_repair import repair_json
+    from src.core.llm.factory import LLMServiceFactoryCompat
+
+    if timeout_seconds is None:
+        timeout_seconds = get_timeout(step_label)
+
+    model_name = await _get_model_name(step_label)
+    temperature = await _get_temperature(step_label)
+
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            model = LLMServiceFactoryCompat.create_raw(
+                model_name=model_name, temperature=temperature,
+                no_cache=no_cache,
+            )
+            response = await asyncio.wait_for(
+                model.ainvoke([
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ]),
+                timeout=timeout_seconds,
+            )
+            raw_text = response.content if hasattr(response, "content") else str(response)
+
+            # 提取 JSON：优先找 ```json 代码块，其次找第一个 { 到最后一个 }
+            json_str = raw_text
+            code_block = _re.search(r"```(?:json)?\s*\n(.*?)```", raw_text, _re.DOTALL)
+            if code_block:
+                json_str = code_block.group(1).strip()
+            else:
+                # 找第一个 { 到最后一个 }
+                first_brace = raw_text.find("{")
+                last_brace = raw_text.rfind("}")
+                if first_brace != -1 and last_brace > first_brace:
+                    json_str = raw_text[first_brace:last_brace + 1]
+
+            # 修复并解析
+            repaired = repair_json(json_str)
+            data = json.loads(repaired)
+
+            if not isinstance(data, dict):
+                raise ValueError(f"LLM 返回非 dict 类型: {type(data)}")
+
+            logger.info(
+                f"_invoke_llm_json [{step_label}]: 解析成功, "
+                f"keys={list(data.keys())}"
+            )
+            return data
+
+        except asyncio.TimeoutError:
+            last_error = asyncio.TimeoutError(f"LLM 超时 {timeout_seconds}s, step={step_label}")
+            if attempt < max_retries:
+                logger.warning(f"LLM 超时 (attempt {attempt+1}/{max_retries+1}), step={step_label}")
+                continue
+            raise last_error
+        except (ConnectionError, OSError) as e:
+            last_error = e
+            if attempt < max_retries:
+                logger.warning(f"LLM 网络错误 (attempt {attempt+1}/{max_retries+1}): {e}")
+                await asyncio.sleep(1)
+                continue
+            raise
+        except (json.JSONDecodeError, ValueError) as e:
+            last_error = e
+            if attempt < max_retries:
+                logger.warning(f"JSON 解析失败 (attempt {attempt+1}/{max_retries+1}): {e}")
+                continue
+            raise ValueError(
+                f"LLM 输出无法解析为 JSON [{step_label}]: {e}"
+            ) from e
+    raise last_error  # type: ignore[misc]
+
+
+async def _direct_search(
+    question: str,
+    book_ids: List[str],
+    *,
+    state: "KnowledgeQAState | None" = None,
+) -> List[Dict]:
+    """直接搜索知识库（通过 HTTP 调用 RAG 端点）。
+
+    Args:
+        state: 传入时启用搜索缓存（state.search_cache），
+               相同 question+book_ids 直接返回缓存结果，省去重复 HTTP 调用。
+               不传则不缓存（如 generate_s4_citations 的变体 query）。
+    """
     import httpx
     from src.config import settings
+
+    # 缓存命中检查
+    if state is not None:
+        cache_key = f"{question}|{','.join(sorted(book_ids or []))}"
+        if cache_key in state.search_cache:
+            logger.info(f"_direct_search 缓存命中: {question[:40]}...")
+            return state.search_cache[cache_key]
 
     host = getattr(settings, "app_host", "127.0.0.1")
     port = getattr(settings, "app_port", 8000)
@@ -255,6 +385,44 @@ async def _direct_search(question: str, book_ids: List[str]) -> List[Dict]:
                     seen_ids.add(rid)
                     all_results.append(r)
 
+        # 多书多样性保障：如果多本书匹配但结果集中于少数书，补充搜索缺失书籍
+        if book_ids and len(book_ids) > 1 and all_results:
+            books_in_results: set[str] = set()
+            for r in all_results:
+                source = (r.get("source_book", "") or "").strip()
+                if source:
+                    books_in_results.add(source)
+            if len(books_in_results) < 2:
+                main_query = queries[0] if queries else question
+                for bid in book_ids:
+                    book_found = any(
+                        r.get("file_hash", "") == bid
+                        for r in all_results
+                    )
+                    if book_found:
+                        continue
+                    try:
+                        params = {"query": main_query, "limit": 8, "book_ids": bid}
+                        resp = await client.get("/rag/search", params=params)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        extra = data.get("data", {}).get("results", [])
+                        added = 0
+                        for r in extra:
+                            rid = r.get("id", "")
+                            if rid and rid not in seen_ids:
+                                seen_ids.add(rid)
+                                all_results.append(r)
+                                added += 1
+                        if added:
+                            logger.info(f"_direct_search 多书补充 book={bid[:8]}… +{added} 条")
+                    except Exception as e:
+                        logger.warning(f"_direct_search 多书补充失败 book={bid[:8]}: {e}")
+
+    # 写入缓存
+    if state is not None:
+        state.search_cache[cache_key] = all_results
+
     return all_results
 
 
@@ -275,39 +443,67 @@ def _normalize_book_title(raw: str) -> str:
 
 
 def _format_search_context(results: List[Dict]) -> str:
-    """将搜索结果格式化为 LLM 可读的上下文。
+    """将搜索结果格式化为 LLM 可读的上下文，按书籍分组展示。
 
-    关键：字段名映射为输出 schema 对应的字段名，避免 LLM 混淆。
-    source_book → book_title (已规范化，去扩展名), chapter_title → chapter
+    - 配额制多样性：每本书最多 MAX_PER_BOOK 条，防止热门书垄断
+    - 显式源标注：📖 前缀 + 按书籍分组，LLM 可明确区分来源
     """
+    MAX_PER_BOOK = 5
+    MAX_CHARS = 10000
+
     if not results:
         return "（未搜索到相关内容）"
 
-    seen: set[str] = set()
-    parts: List[str] = []
-    total_chars = 0
-    max_chars = 10000
+    # 1. 去重 + 配额制多样性（按 score 降序，每书最多 MAX_PER_BOOK 条）
+    seen_ids: set[str] = set()
+    book_counts: dict[str, int] = {}
+    selected: list[dict] = []
 
     for r in sorted(results, key=lambda x: x.get("score", 0) or 0, reverse=True):
-        cid = r.get("id") or r.get("chunk_id") or ""
-        if cid in seen:
+        rid = r.get("id") or r.get("chunk_id") or ""
+        if rid in seen_ids:
             continue
-        seen.add(cid)
         source = _normalize_book_title(r.get("source_book", ""))
-        chapter = r.get("chapter_title", "未知")
-        entry = (
-            f"--- book_title=\"{source}\" | "
-            f"chapter=\"{chapter}\" ---\n"
-            f"{r.get('content', '') or ''}\n"
-        )
-        if total_chars + len(entry) > max_chars:
-            parts.append(f"\n... (共 {len(results)} 条，已截断至 {len(parts)} 条)")
-            break
-        parts.append(entry)
-        total_chars += len(entry)
+        if book_counts.get(source, 0) >= MAX_PER_BOOK:
+            continue
+        seen_ids.add(rid)
+        book_counts[source] = book_counts.get(source, 0) + 1
+        selected.append(r)
 
+    # 2. 按书籍分组展示
+    by_book: dict[str, list[dict]] = {}
+    for r in selected:
+        source = _normalize_book_title(r.get("source_book", ""))
+        by_book.setdefault(source, []).append(r)
+
+    parts: list[str] = []
+    total_chars = 0
+
+    for book_title, items in by_book.items():
+        header = f"\n### 📖 {book_title}（{len(items)} 条）\n"
+        if total_chars + len(header) > MAX_CHARS:
+            break
+        parts.append(header)
+        total_chars += len(header)
+
+        for r in items:
+            chapter = r.get("chapter_title", "未知")
+            entry = (
+                f"> **{chapter}**\n"
+                f"> {r.get('content', '')[:300]}\n\n"
+            )
+            if total_chars + len(entry) > MAX_CHARS:
+                break
+            parts.append(entry)
+            total_chars += len(entry)
+
+    # 列出搜索结果中涉及的书籍
+    book_names = list(by_book.keys())
+    book_list_str = "、".join(book_names) if book_names else "未知"
     parts.append(
-        "\n> 引用提示：citations 中每条必须包含 book_title, chapter, excerpt, relevance 字段。"
+        f"\n> ⚠️ 引用要求：本次检索结果来自以下书籍：{book_list_str}。"
+        "请尽量从不同书籍中选取引用，确保引用来源多样化。"
+        "citations 中每条必须包含 book_title, chapter, excerpt, relevance 字段。"
         "book_title 使用上方已规范化的书名（不含文件扩展名），chapter 使用上方的章节名。"
         "excerpt 必须从上方结果中的原文逐字复制，不允许改写或概括。"
     )
@@ -376,7 +572,7 @@ async def _build_empty_search_fallback(
     }
 
 
-def _section_fallback(
+async def _section_fallback(
     state: KnowledgeQAState,
     section_index: int,
     section_label: str,
@@ -390,14 +586,26 @@ def _section_fallback(
         f"> 请稍后重试或联系管理员。"
     )
 
-    sections = dict(state.sections)
-    sections[section_index] = SectionOutput(
+    section = SectionOutput(
         index=section_index,
         title=section_label,
         content=content,
         citations=[],
         structured_data={},
     )
+    sections = dict(state.sections)
+    sections[section_index] = section
+
+    # 向前端发送降级完成事件，确保进度条不跳过此节
+    try:
+        await push_progress(
+            f"section_{section_index}_done",
+            f"第 {section_index} 节：{section_label}（降级）",
+            section=section.model_dump(),
+        )
+    except Exception:
+        pass  # push_progress 失败不阻塞流程
+
     return {
         "sections": sections,
         "errors": state.errors + [f"section_{section_index}_failed: {error}"],
@@ -480,7 +688,11 @@ async def _run_section_node(
     build_user_message: Callable[[KnowledgeQAState, Dict[str, str]], str],
     step_label: str,
 ) -> Dict[str, Any]:
-    """通用节生成节点：直接搜索 + 27B 单次 structured_output 调用。"""
+    """通用节生成节点：直接搜索 + 27B 单次 structured_output 调用。
+
+    注意：S3（section_index=3）已自管理，不再通过此函数调用。
+    如需修改 S3 的生成逻辑，请直接编辑 recommend_types.py。
+    """
     from src.core.llm.factory import LLMServiceFactoryCompat
 
     await push_progress(
@@ -496,7 +708,7 @@ async def _run_section_node(
             raise asyncio.CancelledError("任务已被取消")
 
         # Step 1: 直接搜索知识库
-        search_results = await _direct_search(state.question, state.matched_book_ids)
+        search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
         search_context = _format_search_context(search_results)
         logger.info(
             f"第{section_index}节 _direct_search: {len(search_results)} 条"
@@ -566,7 +778,7 @@ async def _run_section_node(
 
     except asyncio.TimeoutError:
         logger.warning(f"第{section_index}节生成超时 ({timeout}s)")
-        return _section_fallback(state, section_index, section_label, "生成超时")
+        return await _section_fallback(state, section_index, section_label, "生成超时")
     except Exception as e:
         logger.exception(f"第{section_index}节生成失败")
-        return _section_fallback(state, section_index, section_label, str(e))
+        return await _section_fallback(state, section_index, section_label, str(e))

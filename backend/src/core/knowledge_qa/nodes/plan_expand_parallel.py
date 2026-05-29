@@ -13,6 +13,7 @@ from src.core.knowledge_qa.nodes.base import (
     _direct_search,
     _format_search_context,
     _get_prompt_pair,
+    _invoke_llm_json,
     _invoke_llm_structured,
     _safe_format,
 )
@@ -152,7 +153,16 @@ async def _expand_single_group(
 
         # 模板化 user message：如果 prompt manager 提供了 user_template 则优先使用
         user_template = prompt.get("user_template", "")
-        if user_template:
+        # 始终构建 group_context（无论模板是否存在），确保 {group_context} 占位符可被替换
+        group_context = _build_group_prompt(group_slots, search_context, state)
+        if user_template and "{group_context}" in user_template:
+            # 标准模板：{group_context} 占位符 → 直接替换
+            user_message = _safe_format(
+                user_template,
+                group_context=group_context,
+            )
+        elif user_template:
+            # 自定义模板：使用各个字段展开
             exercises_json = []
             for s in group_slots:
                 ex = s["exercise"]
@@ -178,6 +188,7 @@ async def _expand_single_group(
                         valid_names.append(et["name"])
             user_message = _safe_format(
                 user_template,
+                group_context=group_context,
                 exercises_json=json.dumps(exercises_json, ensure_ascii=False, indent=2),
                 previous_sections="\n\n".join(prev_parts) if prev_parts else "（无）",
                 search_context=search_context,
@@ -187,17 +198,70 @@ async def _expand_single_group(
                 group_size=str(len(group_slots)),
             )
         else:
-            user_message = _build_group_prompt(group_slots, search_context, state)
+            user_message = group_context
 
-        response = await _invoke_llm_structured(
-            system_prompt=prompt["system"],
-            user_message=user_message,
-            response_format=ExerciseGroupResponse,
-            step_label="plan_expand",
-            timeout_seconds=60,
-        )
+        # 优先用纯文本 JSON 解析（绕过 DashScope structured_output 对深层嵌套的缺陷）
+        exercises = []
+        try:
+            json_data = await _invoke_llm_json(
+                system_prompt=prompt["system"] + "\n\n输出格式：JSON 对象，含 exercises 数组。",
+                user_message=user_message,
+                step_label="plan_expand",
+                timeout_seconds=60,
+                no_cache=True,
+            )
+            exercises = json_data.get("exercises", [])
+        except Exception as json_err:
+            logger.warning(
+                f"plan_expand_parallel: 分组[{group_idx}] JSON 解析失败: {json_err}, "
+                f"降级到 structured_output"
+            )
 
-        exercises = response.model_dump().get("exercises", [])
+        # JSON 解析返回空时，用 structured_output 重试
+        if not exercises:
+            logger.info(
+                f"plan_expand_parallel: 分组[{group_idx}] JSON 解析返回空, "
+                f"尝试 structured_output 重试"
+            )
+            try:
+                response = await _invoke_llm_structured(
+                    system_prompt=prompt["system"],
+                    user_message=user_message,
+                    response_format=ExerciseGroupResponse,
+                    step_label="plan_expand_struct",
+                    timeout_seconds=60,
+                    no_cache=True,
+                )
+                exercises = response.model_dump().get("exercises", [])
+            except Exception as struct_err:
+                logger.warning(
+                    f"plan_expand_parallel: 分组[{group_idx}] structured_output 重试也失败: {struct_err}"
+                )
+        # 如果两次 LLM 调用都返回空，用 slot 原始数据构建降级条目
+        if not exercises:
+            logger.warning(
+                f"plan_expand_parallel: 分组[{group_idx}] LLM 返回空, 使用 slot 降级数据"
+            )
+            exercises = []
+            for s in group_slots:
+                ex = s["exercise"]
+                exercises.append({
+                    "exercise_id": ex["exercise_id"],
+                    "name": ex["name"],
+                    "type_id": ex.get("type_id", ""),
+                    "category": ex.get("category", ""),
+                    "duration_min": 25,
+                    "intensity": "中",
+                    "intensity_hint": "",
+                    "sets": None,
+                    "reps": None,
+                    "rest_seconds": None,
+                    "target_skill": ex.get("target_skill", ""),
+                    "notes": "（LLM 未返回参数，使用默认值）",
+                    "alternatives": [],
+                    "citation_ids": ex.get("citation_ids", []),
+                })
+
         logger.info(
             f"plan_expand_parallel: 分组[{group_idx}] 完成, {len(exercises)} 个运动"
         )
@@ -250,7 +314,7 @@ async def plan_expand_parallel_node(state: KnowledgeQAState) -> Dict[str, Any]:
     )
 
     # 共享搜索上下文（所有组共用同一份检索结果）
-    search_results = await _direct_search(state.question, state.matched_book_ids)
+    search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
     search_context = _format_search_context(search_results)
 
     # 并行展开（信号量限流）

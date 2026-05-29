@@ -483,29 +483,13 @@ class LLMServiceFactoryCompat:
 
         return instance
 
-    @classmethod
-    def create_raw(
-        cls,
-        model_name: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2048,
-    ) -> "BaseChatModel":
-        """
-        创建原始 LangChain BaseChatModel 实例（不包装为 LLMService）。
-
-        用途：create_react_agent、bind_tools、with_structured_output 等
-        需要直接操作 BaseChatModel 的场景。
-
-        统一使用 DashScope OpenAI 兼容端点（/compatible-mode/v1），
-        支持所有 Qwen 模型包括 qwen3.5/3.6 系列。
-        """
-        cache_key = f"raw:{model_name}:{temperature}"
-
-        if cache_key in cls._raw_instances:
-            return cls._raw_instances[cache_key]
-
-        model_name = model_name or "qwen-plus"
-
+    @staticmethod
+    def _create_dashscope_instance(
+        model_name: str,
+        temperature: float,
+        max_tokens: int,
+    ):
+        """创建 DashScope ChatOpenAI 实例（内部工厂方法，避免重复代码）。"""
         from src.config import settings
         from langchain_openai import ChatOpenAI
 
@@ -521,7 +505,7 @@ class LLMServiceFactoryCompat:
             def with_structured_output(self, schema, *, method="function_calling", **kwargs):
                 return super().with_structured_output(schema, method=method, **kwargs)
 
-        instance = DashScopeChatOpenAI(
+        return DashScopeChatOpenAI(
             model=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -531,8 +515,42 @@ class LLMServiceFactoryCompat:
             extra_body={"enable_thinking": False},
         )
 
-        cls._raw_instances[cache_key] = instance
-        logger.info(f"原始 BaseChatModel 实例已创建（DashScope 兼容端点）：{model_name}")
+    @classmethod
+    def create_raw(
+        cls,
+        model_name: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        *,
+        no_cache: bool = False,
+    ) -> "BaseChatModel":
+        """
+        创建原始 LangChain BaseChatModel 实例（不包装为 LLMService）。
+
+        用途：create_react_agent、bind_tools、with_structured_output 等
+        需要直接操作 BaseChatModel 的场景。
+
+        统一使用 DashScope OpenAI 兼容端点（/compatible-mode/v1），
+        支持所有 Qwen 模型包括 qwen3.5/3.6 系列。
+
+        Args:
+            no_cache: 为 True 时创建独立实例不走缓存。
+                      用于并行场景（如 plan_expand_parallel），
+                      避免共享同一 httpx 连接导致串行。
+        """
+        model_name = model_name or "qwen-plus"
+
+        if not no_cache:
+            cache_key = f"raw:{model_name}:{temperature}"
+            if cache_key in cls._raw_instances:
+                return cls._raw_instances[cache_key]
+
+        instance = cls._create_dashscope_instance(model_name, temperature, max_tokens)
+
+        if not no_cache:
+            cache_key = f"raw:{model_name}:{temperature}"
+            cls._raw_instances[cache_key] = instance
+            logger.info(f"原始 BaseChatModel 实例已创建（DashScope 兼容端点）：{model_name}")
         return instance
 
     @classmethod

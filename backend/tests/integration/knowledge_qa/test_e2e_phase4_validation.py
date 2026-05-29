@@ -98,7 +98,7 @@ MOCK_SEARCH_RESULTS = [
 
 
 def _create_mock_httpx(search_results=None):
-    """创建 mock httpx.AsyncClient — 覆盖 _search_for_books 和 _direct_search。"""
+    """创建 mock httpx.AsyncClient — 覆盖 _analyze_and_search_books 和 _direct_search。"""
     results = search_results or MOCK_SEARCH_RESULTS
 
     mock_response = MagicMock()

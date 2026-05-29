@@ -31,10 +31,29 @@ from src.schemas.knowledge_qa import (
 logger = logging.getLogger(__name__)
 
 
+def _default_duration_for_age(state) -> int:
+    """根据第 1 节分析的孩子年龄返回默认运动时长。"""
+    try:
+        s1 = state.sections.get(1)
+        if s1 and s1.structured_data:
+            age = s1.structured_data.get("child_profile", {}).get("age", 8)
+            if isinstance(age, (int, float)):
+                if age <= 6:
+                    return 20
+                elif age <= 10:
+                    return 30
+                else:
+                    return 40
+    except Exception:
+        pass
+    return 25  # 安全默认值
+
+
 def _merge_group_results(
     outline: dict,
     slots: List[dict],
     group_results: Dict[str, List[dict]],
+    state: "KnowledgeQAState" = None,
 ) -> List[dict]:
     """将各组的运动参数回填到 outline 的 phases 结构中。
 
@@ -75,14 +94,17 @@ def _merge_group_results(
             orig["name"] = params.get("name", orig.get("name", ""))
             orig["type_id"] = params.get("type_id", orig.get("type_id", ""))
             orig["category"] = params.get("category", orig.get("category", ""))
-            orig["duration_min"] = params.get("duration_min", 0)
+            # 时长：用 LLM 输出值，若为 0 则根据年龄取默认值
+            dur = params.get("duration_min", 0)
+            orig["duration_min"] = dur if dur > 0 else _default_duration_for_age(state)
             orig["intensity"] = params.get("intensity", "中")
             orig["intensity_hint"] = params.get("intensity_hint", "")
             orig["sets"] = params.get("sets")
             orig["reps"] = params.get("reps")
             orig["rest_seconds"] = params.get("rest_seconds")
             orig["target_skill"] = params.get("target_skill", orig.get("target_skill", ""))
-            orig["notes"] = params.get("notes", "")
+            # notes → description（LLM 输出用 notes，存储用 description）
+            orig["description"] = params.get("notes", "") or params.get("description", "")
             orig["alternatives"] = params.get("alternatives", [])
             orig["citation_ids"] = params.get("citation_ids", orig.get("citation_ids", []))
         except (IndexError, KeyError) as e:
@@ -130,11 +152,20 @@ def _derive_plan_summary(
         for wk in ph.get("weeks", []):
             total_days += len(wk.get("days", []))
 
+    # 计算训练天数（有运动安排的天数）
+    training_days = 0
+    for ph in phases:
+        for wk in ph.get("weeks", []):
+            for day in wk.get("days", []):
+                if day.get("main_exercises"):
+                    training_days += 1
+
     return PlanSummary(
-        total_duration_days=existing.get("total_duration_days", total_days),
-        total_phases=existing.get("total_phases", len(phases)),
+        # 总天数以实际 phases 结构为准（包含休息日），不使用 outline 旧值
+        total_duration_days=total_days,
+        total_phases=len(phases),
         daily_duration_min=existing.get("daily_duration_min", 30),
-        weekly_frequency=existing.get("weekly_frequency", 5),
+        weekly_frequency=existing.get("weekly_frequency", min(training_days, 5)),
     )
 
 
@@ -252,15 +283,16 @@ def _build_s4_summary(structured_data: dict) -> str:
 
 
 def _render_s4_markdown(structured_data: dict) -> str:
-    """从 Section4StructuredData 渲染 Markdown 正文。纯字符串操作。"""
-    lines = ["## 运动方案", ""]
+    """从 Section4StructuredData 渲染 Markdown 正文（美化版）。"""
+    lines = []
 
     plan_summary = structured_data.get("plan_summary", {})
     if plan_summary:
-        lines.append(f"> **方案总览**：共 {plan_summary.get('total_duration_days', '?')} 天，"
-                     f"{plan_summary.get('total_phases', '?')} 个阶段，"
-                     f"每天约 {plan_summary.get('daily_duration_min', '?')} 分钟，"
-                     f"每周 {plan_summary.get('weekly_frequency', '?')} 天")
+        lines.append(f"> 📅 **方案总览**")
+        lines.append(f"> - 总时长：**{plan_summary.get('total_duration_days', '?')} 天**")
+        lines.append(f"> - 阶段数：**{plan_summary.get('total_phases', '?')} 个**")
+        lines.append(f"> - 每日训练：约 **{plan_summary.get('daily_duration_min', '?')} 分钟**")
+        lines.append(f"> - 每周频率：**{plan_summary.get('weekly_frequency', '?')} 天**")
         lines.append("")
 
     phases = structured_data.get("phases", [])
@@ -308,7 +340,7 @@ def _render_s4_markdown(structured_data: dict) -> str:
                     intensity_hint = ex.get("intensity_hint", "")
                     sets = ex.get("sets")
                     reps = ex.get("reps")
-                    notes = ex.get("notes", "")
+                    notes = ex.get("description", "") or ex.get("notes", "")
 
                     params = []
                     if duration:
@@ -327,7 +359,11 @@ def _render_s4_markdown(structured_data: dict) -> str:
                     lines.append(line)
 
                     if notes:
-                        lines.append(f"  > {notes}")
+                        lines.append(f"  > 💡 {notes}")
+                    # target_skill
+                    target = ex.get("target_skill", "")
+                    if target:
+                        lines.append(f"  *训练目标：{target}*")
 
                 # Cooldown
                 cooldown = day.get("cooldown", {})
@@ -397,7 +433,12 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 await push_progress("section_4_done", "运动方案大纲（降级）", section=section.model_dump())
                 sections = dict(state.sections)
                 sections[4] = section
-                return {"sections": sections, "current_step": ["section_4_done_fallback"]}
+                return {
+                    "sections": sections,
+                    "current_step": ["section_4_done_fallback"],
+                    "s4_needs_retry": True,  # 有 outline 但无分组结果 → 可重试
+                    "s4_retry_count": state.s4_retry_count + 1,
+                }
 
         # ---- 降级路径 2: 完全无数据 ----
         logger.warning("plan_assemble: 无 outline 也无分组结果，生成占位 S4")
@@ -410,11 +451,20 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
         )
         sections = dict(state.sections)
         sections[4] = fallback_section
+        try:
+            await push_progress(
+                "section_4_done",
+                "运动方案（占位）",
+                section=fallback_section.model_dump(),
+            )
+        except Exception:
+            pass  # push_progress 失败不阻塞流程
         return {
             "sections": sections,
             "errors": state.errors + ["section_4_assemble: 无可用数据"],
             "current_step": ["section_4_done_fallback"],
             "partial": True,
+            "s4_retry_count": state.s4_retry_count + 1,
         }
 
     # ---- 正常路径 ----
@@ -422,7 +472,7 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     try:
         # Step 1: 合并
-        phases = _merge_group_results(outline, slots, group_results)
+        phases = _merge_group_results(outline, slots, group_results, state)
 
         # Step 2: 运动名称校验
         s3 = state.sections.get(3)
@@ -476,9 +526,13 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                                                 exercise_id=ex.get("exercise_id", "EX000"),
                                                 name=ex.get("name", "未知"),
                                                 type_id=ex.get("type_id", ""),
-                                                duration_min=ex.get("duration_min", 15),
+                                                duration_min=ex.get("duration_min", 15) or _default_duration_for_age(state),
                                                 intensity=ex.get("intensity", "中"),
-                                                description=ex.get("notes", ""),
+                                                intensity_hint=ex.get("intensity_hint", ""),
+                                                target_skill=ex.get("target_skill", ""),
+                                                sets=ex.get("sets"),
+                                                reps=ex.get("reps"),
+                                                description=ex.get("notes", "") or ex.get("description", ""),
                                             ))
                                     safe_days.append(Day(
                                         day_index=day.get("day_index", 1),
@@ -495,7 +549,7 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
                             skipped_weeks += 1
                             continue
                     safe_phases.append(Phase(
-                        phase_name=ph.get("phase_name", "阶段"),
+                        phase_name=ph.get("phase_name") or ph.get("name", "阶段"),
                         weeks=safe_weeks,
                     ))
                 except Exception:
@@ -552,7 +606,89 @@ async def plan_assemble_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception("plan_assemble 失败")
+        # 降级：尝试从 outline 构建最小可用 S4 section，避免 S4 完全缺失
+        try:
+            outline = state.section_4_outline or {}
+            phases_raw = outline.get("phases", [])
+            if phases_raw:
+                # 从 outline 构建简化 structured_data
+                fallback_phases = []
+                for ph in phases_raw:
+                    safe_weeks = []
+                    for wk in (ph.get("weeks") or []):
+                        safe_days = []
+                        for day in (wk.get("days") or []):
+                            safe_exs = []
+                            for ex in (day.get("main_exercises") or []):
+                                if ex.get("name"):
+                                    safe_exs.append(Exercise(
+                                        exercise_id=ex.get("exercise_id", "EX000"),
+                                        name=ex["name"],
+                                        type_id=ex.get("type_id", ""),
+                                        duration_min=ex.get("duration_min", 25) or _default_duration_for_age(state),
+                                        intensity=ex.get("intensity", "中"),
+                                        intensity_hint=ex.get("intensity_hint", ""),
+                                        target_skill=ex.get("target_skill", ""),
+                                        sets=ex.get("sets"),
+                                        reps=ex.get("reps"),
+                                        description=ex.get("notes", "") or ex.get("description", ""),
+                                    ))
+                            if safe_exs:
+                                safe_days.append(Day(
+                                    day_index=day.get("day_index", 1),
+                                    main_exercises=safe_exs,
+                                ))
+                        if safe_days:
+                            safe_weeks.append(Week(
+                                week_index=wk.get("week_index", 1),
+                                days=safe_days,
+                            ))
+                    if safe_weeks:
+                        fallback_phases.append(Phase(
+                            phase_name=ph.get("phase_name") or ph.get("name", "阶段"),
+                            weeks=safe_weeks,
+                        ))
+
+                if fallback_phases:
+                    s4_data = Section4StructuredData(
+                        phases=fallback_phases,
+                        plan_summary=PlanSummary(
+                            total_duration_days=outline.get("plan_summary", {}).get("total_duration_days", 42),
+                            total_phases=len(fallback_phases),
+                            daily_duration_min=outline.get("plan_summary", {}).get("daily_duration_min", 30),
+                            weekly_frequency=outline.get("plan_summary", {}).get("weekly_frequency", 5),
+                            intensity_overall="中",
+                        ),
+                        caution="本节由降级逻辑生成，运动参数可能不完整，请结合实际情况调整。",
+                    )
+                    data_dict = s4_data.model_dump()
+                    summary = _build_s4_summary(data_dict)
+                    section = SectionOutput(
+                        index=4,
+                        title="运动方案",
+                        content=summary,
+                        citations=[],
+                        structured_data=data_dict,
+                    )
+                    sections = dict(state.sections)
+                    sections[4] = section
+                    logger.info(f"plan_assemble 降级成功: {len(fallback_phases)} 阶段")
+                    await push_progress(
+                        "section_4_done",
+                        f"运动方案（降级）: {len(fallback_phases)} 个阶段",
+                        section=section.model_dump(),
+                    )
+                    return {
+                        "sections": sections,
+                        "errors": state.errors + [f"section_4_assemble_fallback: {str(e)}"],
+                        "current_step": ["section_4_done"],
+                        "partial": True,
+                    }
+        except Exception as fallback_err:
+            logger.error(f"plan_assemble 降级也失败: {fallback_err}")
+
         return {
             "errors": state.errors + [f"section_4_assemble: {str(e)}"],
             "current_step": ["section_4_assemble_failed"],
+            "partial": True,
         }

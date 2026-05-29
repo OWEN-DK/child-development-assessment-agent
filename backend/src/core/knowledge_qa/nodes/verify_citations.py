@@ -29,6 +29,64 @@ _exercise_name_set_cache: Optional[Set[str]] = None
 _exercise_json_path = get_exercise_json_path()
 
 
+def _backfill_exercise_from_json(et: dict) -> bool:
+    """如果运动名称被模糊纠正，从运动清单 JSON 回填缺失字段。
+    
+    Returns: True if any field was backfilled.
+    """
+    # 检查是否需要回填（category/citation_ids 为空且 name 已修正）
+    needs_backfill = (
+        not et.get("category")
+        or not et.get("target_skills")
+        or not et.get("recommendation_rationale")
+        or not et.get("citation_ids")
+    )
+    if not needs_backfill:
+        return False
+    
+    name = et.get("name", "")
+    if not name:
+        return False
+    
+    try:
+        import json
+        ex_data = _load_exercise_data()
+        if not ex_data:
+            return False
+        exercises = ex_data.get("exercises", [])
+        for ex in exercises:
+            if ex.get("name") == name:
+                backed = False
+                if not et.get("category") and ex.get("type"):
+                    et["category"] = ex["type"]
+                    backed = True
+                if not et.get("recommendation_rationale") and ex.get("benefits"):
+                    et["recommendation_rationale"] = ex["benefits"]
+                    backed = True
+                if not et.get("citation_ids"):
+                    et["citation_ids"] = []
+                    backed = True
+                return backed
+    except Exception:
+        pass
+    return False
+
+
+def _load_exercise_data() -> dict | None:
+    """加载运动清单 JSON（带缓存）"""
+    if hasattr(_load_exercise_data, "_cache"):
+        return _load_exercise_data._cache
+    try:
+        import json
+        path = get_exercise_json_path()
+        with open(path, "r", encoding="utf-8") as f:
+            _load_exercise_data._cache = json.load(f)
+        return _load_exercise_data._cache
+    except Exception:
+        return None
+
+
+
 def _get_exercise_name_set() -> set[str]:
     """加载权威运动清单的运动名称集合 (模块级缓存)。"""
     global _exercise_name_set_cache
@@ -77,7 +135,7 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 removed_ids.add(c.get("citation_id", "unknown"))
                 continue
             citation_counter += 1
-            cid = c.get("citation_id", "")
+            cid = str(c.get("citation_id", "")) if c.get("citation_id") is not None else ""
             if not re.match(r'^C\d+$', cid):
                 new_cid = f"C{citation_counter}"
                 section_auto_fixed[cid or "(empty)"] = new_cid
@@ -170,9 +228,15 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
                     if corrected:
                         et["name"] = corrected
                         et["_original_name"] = original
-                        errors.append(
-                            f"运动名称模糊纠正: '{original}' → '{corrected}' (S3)"
-                        )
+                        # 回填缺失字段（category、rationale 等）
+                        if _backfill_exercise_from_json(et):
+                            errors.append(
+                                f"运动名称模糊纠正+回填: '{original}' → '{corrected}' (S3)"
+                            )
+                        else:
+                            errors.append(
+                                f"运动名称模糊纠正: '{original}' → '{corrected}' (S3)"
+                            )
                     else:
                         errors.append(
                             f"运动名称不在清单中: '{original}' (S3, type_id={et.get('type_id', '?')})"

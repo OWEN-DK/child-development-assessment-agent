@@ -171,7 +171,7 @@ def _safe_truncate_json(data: dict, max_len: int = 500) -> str:
 
 ### P1-7: 函数重命名 (#26) ✅ 已实施
 
-`match_books.py:101` 的本地 `_direct_search` 重命名为 `_search_for_books`，消除与 `base.py:97` 同名函数的混淆。
+`match_books.py:101` 的本地 `_direct_search` 重命名为 `_analyze_and_search_books`，消除与 `base.py:97` 同名函数的混淆。
 
 **改动量**: match_books.py 4 处重命名
 

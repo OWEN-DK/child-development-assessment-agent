@@ -37,6 +37,36 @@ class MatchBooksResponse(BaseModel):
     """书籍匹配 LLM 输出"""
     matched_books: List[MatchedBookItem] = Field(description="匹配的书籍列表，按匹配度排序")
 
+class QueryAnalysisResult(BaseModel):
+    """查询分析结构化输出（单次 LLM 调用完成意图分类+实体提取+问题分解+查询改写）"""
+    intent: str = Field(
+        description="问题意图分类: solution_seeking(寻求方案) | knowledge_query(知识查询) | problem_diagnosis(问题诊断) | general(通用)"
+    )
+    child_age: str = Field(default="", description="孩子年龄，如 '8岁'")
+    child_gender: str = Field(default="", description="孩子性别: 男/女/未知")
+    behavior_traits: List[str] = Field(
+        default_factory=list,
+        description="行为特征列表，如 ['注意力不集中', '坐不住', '好动']"
+    )
+    cognitive_traits: List[str] = Field(
+        default_factory=list,
+        description="认知/学习特征，如 ['写作业困难', '上课不听讲']"
+    )
+    emotional_traits: List[str] = Field(
+        default_factory=list,
+        description="情绪/社交特征，如 ['被老师投诉', '社交困难']"
+    )
+    sub_questions: List[str] = Field(
+        default_factory=list,
+        description="问题分解后的子问题，每个聚焦一个维度，2-3个"
+    )
+    rewritten_queries: List[str] = Field(
+        default_factory=list,
+        description="从不同角度改写的搜索查询，2-3个，去除解决方案导向词汇"
+    )
+
+
+
 
 async def _batch_resolve_book_ids(raw_ids: list[str]) -> dict[str, str]:
     """通过 HTTP 调用 RAG 服务批量将 book_id 映射为 DocumentRecord UUID。
@@ -69,6 +99,39 @@ async def _batch_resolve_book_ids(raw_ids: list[str]) -> dict[str, str]:
         return {}
 
 
+
+def _apply_source_quota(
+    results: List[Dict],
+    max_per_source_ratio: float = 0.4,
+    min_sources: int = 2,
+) -> List[Dict]:
+    """对搜索结果施加来源配额，防止单一书籍垄断 top-K。
+
+    策略：每本书最多占结果总数的 max_per_source_ratio（默认 40%）。
+    超出配额的结果降级排列在配额内结果之后，保证候选池的来源多样性。
+    """
+    if not results:
+        return results
+
+    total = len(results)
+    max_per_source = max(int(total * max_per_source_ratio), min_sources)
+
+    in_quota: List[Dict] = []
+    over_quota: List[Dict] = []
+    seen_per_source: Dict[str, int] = {}
+
+    for r in results:
+        sb = r.get("source_book", "")
+        count = seen_per_source.get(sb, 0)
+        if count < max_per_source:
+            in_quota.append(r)
+            seen_per_source[sb] = count + 1
+        else:
+            over_quota.append(r)
+
+    return in_quota + over_quota
+
+
 async def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
     """从搜索结果中提取候选书籍信息（去重，书名规范化去扩展名）。"""
     import re as _re
@@ -98,26 +161,229 @@ async def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
     return list(seen.values())
 
 
-async def _search_for_books(question: str) -> List[Dict]:
-    """直接搜索知识库通过 ContextVar HTTP 客户端。"""
+
+
+def _extract_child_profile(question: str) -> dict:
+    """从用户问题中提取孩子的行为/认知/情绪特征。
+
+    不依赖 LLM，纯规则提取。用于生成多维度搜索 query，
+    避免直接用原始问题搜索导致的单书垄断。
+
+    Returns:
+        {"age": "8岁", "behavior": [...], "cognitive": [...], "emotional": [...]}
+    """
+    import re
+
+    profile = {"age": "", "behavior": [], "cognitive": [], "emotional": []}
+
+    # 年龄提取
+    age_match = re.search(r"(\d{1,2})\s*[岁歲]", question)
+    if age_match:
+        profile["age"] = f"{age_match.group(1)}岁"
+
+    # 行为特征（身体/动作层面）
+    behavior_patterns = [
+        ("注意力不集中", ["注意力不集中", "注意力差", "不集中", "走神", "分心"]),
+        ("坐不住", ["坐不住", "静不下来", "好动", "多动", "扭来扭去"]),
+        ("冲动", ["冲动", "控制不住", "忍不住"]),
+        ("动作慢", ["动作慢", "磨蹭", "拖延"]),
+    ]
+    for label, keywords in behavior_patterns:
+        if any(kw in question for kw in keywords):
+            profile["behavior"].append(label)
+
+    # 认知特征（学习/思维层面）
+    cognitive_patterns = [
+        ("写作业困难", ["写作业", "作业", "做作业"]),
+        ("上课不听讲", ["上课", "课堂", "听课"]),
+        ("学习困难", ["学习不好", "成绩", "跟不上", "学不会"]),
+        ("记忆力差", ["记不住", "记忆力", "容易忘"]),
+    ]
+    for label, keywords in cognitive_patterns:
+        if any(kw in question for kw in keywords):
+            profile["cognitive"].append(label)
+
+    # 情绪/社交特征
+    emotional_patterns = [
+        ("被投诉", ["投诉", "被老师", "老师说"]),
+        ("情绪问题", ["发脾气", "哭闹", "焦虑", "紧张", "害怕"]),
+        ("社交困难", ["不合群", "社交", "交朋友", "被欺负"]),
+    ]
+    for label, keywords in emotional_patterns:
+        if any(kw in question for kw in keywords):
+            profile["emotional"].append(label)
+
+    return profile
+
+
+async def _analyze_query(question: str) -> QueryAnalysisResult:
+    """综合查询分析：意图分类 + 实体提取 + 问题分解 + 查询改写。
+
+    一次 LLM 调用完成所有分析，与规则提取并行执行。
+    LLM 失败时返回空结果（不影响后续规则提取的降级路径）。
+    """
+    from src.core.knowledge_qa.nodes.base import _invoke_llm_structured
+
+    system_prompt = """你是一个儿童教育领域的查询分析专家。分析用户问题，输出结构化结果。
+
+## 任务
+1. **意图分类**：判断问题属于哪类
+   - solution_seeking: 寻求具体方案/方法/建议（如"有什么运动可以改善"）
+   - problem_diagnosis: 诊断孩子问题原因（如"为什么注意力不集中"）
+   - knowledge_query: 查询知识/概念（如"什么是前庭觉"）
+   - general: 其他
+
+2. **实体提取**：从问题中提取孩子的年龄、性别、行为特征、认知特征、情绪特征
+   - 行为特征：身体/动作层面（注意力不集中、坐不住、好动、冲动等）
+   - 认知特征：学习/思维层面（写作业困难、上课不听讲、记忆力差等）
+   - 情绪特征：情绪/社交层面（被投诉、发脾气、不合群等）
+
+3. **问题分解**：将原问题拆分为 2-3 个子问题，每个聚焦一个维度
+   - 子问题应覆盖：行为表现、认知发展、情绪社交
+   - 子问题用于独立搜索，确保不同书籍都能被命中
+
+4. **查询改写**：生成 2-3 个搜索友好的查询语句
+   - 去除解决方案导向词汇（"有什么运动"、"怎么改善"、"推荐"等）
+   - 保留孩子的核心特征描述
+   - 每个查询从不同角度切入"""
+
+    user_message = f"用户问题：{question}"
+
+    try:
+        result = await _invoke_llm_structured(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            response_format=QueryAnalysisResult,
+            step_label="query_analysis",
+            timeout_seconds=15,
+            no_cache=True,
+        )
+        logger.info(
+            f"query_analysis: intent={result.intent}, "
+            f"behavior={result.behavior_traits}, "
+            f"sub_q={len(result.sub_questions)}, "
+            f"rewrite={len(result.rewritten_queries)}"
+        )
+        return result
+    except Exception as e:
+        logger.warning(f"query_analysis LLM 失败，降级到规则提取: {e}")
+        # 降级：用规则提取结果构造 QueryAnalysisResult
+        profile = _extract_child_profile(question)
+        return QueryAnalysisResult(
+            intent="general",
+            child_age=profile["age"],
+            behavior_traits=profile["behavior"],
+            cognitive_traits=profile["cognitive"],
+            emotional_traits=profile["emotional"],
+            sub_questions=[],
+            rewritten_queries=[],
+        )
+
+
+async def _analyze_and_search_books(question: str) -> List[Dict]:
+    """搜索知识库：综合查询分析管线。
+
+    三阶段分析：
+    1. 意图分类 + 实体提取（LLM + 规则并行）
+    2. 问题分解 + 查询改写（LLM）
+    3. 多维度搜索 + 来源配额
+    """
     import httpx
+    import re
     from src.config import settings
 
     host = getattr(settings, "app_host", "127.0.0.1")
     port = getattr(settings, "app_port", 8000)
-    # 0.0.0.0 是监听地址，不能用于主动连接；Docker 环境下常见此配置
     if host == "0.0.0.0":
         host = "127.0.0.1"
 
-    # 生成搜索关键词
-    queries = [question]
-    import re
-    book_mentions = re.findall(r'《([^》]+)》', question)
-    for bm in book_mentions:
-        queries.append(bm)
-    short = " ".join(question.replace("，", " ").replace("、", " ").split()[:8])
-    if short and short != question:
-        queries.append(short)
+    # ═══════════════════════════════════════════════════════════
+    # Phase 1: 并行分析 — LLM 分析 + 规则提取同时进行
+    # ═══════════════════════════════════════════════════════════
+    analysis_task = _analyze_query(question)
+    profile = _extract_child_profile(question)  # 同步，零延迟
+
+    try:
+        analysis = await asyncio.wait_for(analysis_task, timeout=20)
+    except Exception:
+        # LLM 超时或失败，用规则提取结果构造空分析
+        analysis = QueryAnalysisResult(
+            intent="general",
+            child_age=profile["age"],
+            behavior_traits=profile["behavior"],
+            cognitive_traits=profile["cognitive"],
+            emotional_traits=profile["emotional"],
+        )
+
+    # 合并：LLM 结果为主，规则提取为补充
+    age_str = analysis.child_age or profile["age"]
+    behavior = analysis.behavior_traits or profile["behavior"]
+    cognitive = analysis.cognitive_traits or profile["cognitive"]
+    emotional = analysis.emotional_traits or profile["emotional"]
+    intent = analysis.intent
+
+    logger.info(
+        f"query_analysis 合并结果: intent={intent}, age={age_str}, "
+        f"behavior={behavior}, cognitive={cognitive}, emotional={emotional}"
+    )
+
+    # ═══════════════════════════════════════════════════════════
+    # Phase 2: 构建多维度搜索 query
+    # ═══════════════════════════════════════════════════════════
+    queries = []
+    seen = set()
+
+    def _add(q):
+        """去重添加查询"""
+        q = q.strip()
+        if q and q not in seen and len(q) >= 2:
+            seen.add(q)
+            queries.append(q)
+
+    # 来源 A: LLM 问题分解 — 子问题（approach 3）
+    for sq in analysis.sub_questions[:3]:
+        _add(sq)
+
+    # 来源 B: LLM 查询改写 — 去除方案导向词汇的中性查询（approach 1）
+    for rq in analysis.rewritten_queries[:3]:
+        _add(rq)
+
+    # 来源 C: 规则提取 — 实体维度查询（approach 2）
+    if behavior:
+        _add(f"{age_str}儿童 {' '.join(behavior[:3])}".strip())
+    if cognitive:
+        _add(f"儿童 {' '.join(cognitive[:2])} 学习能力".strip())
+    if emotional:
+        _add(f"儿童 {' '.join(emotional[:2])} 情绪调节".strip())
+
+    # 来源 D: 意图路由 — 根据意图添加领域关键词（approach 2）
+    if intent == "solution_seeking":
+        # 方案寻求类：添加多维度领域词，避免被单一方案词主导
+        if any(kw in question for kw in ['注意', '专注', '集中', '坐不住', '走神']):
+            _add("儿童注意力发展")
+        if any(kw in question for kw in ['学习', '作业', '成绩', '上课']):
+            _add("儿童学习方法")
+        if any(kw in question for kw in ['情绪', '多动', '冲动', '投诉', '行为']):
+            _add("儿童情绪调节")
+    elif intent == "problem_diagnosis":
+        _add("儿童发展心理学")
+        _add("儿童认知发展")
+    elif intent == "knowledge_query":
+        # 知识查询类：直接用问题搜索更准确
+        _add(question)
+
+    # 来源 E: 书名提及
+    for bm in re.findall(r'《([^》]+)》', question):
+        _add(bm)
+
+    # 来源 F: 通用领域词
+    _add("儿童发展")
+
+    # Fallback
+    if not queries:
+        _add(question)
+
+    logger.info(f"match_books 搜索策略: {len(queries)} 组 query, 意图={intent}, 前3: {queries[:3]}")
 
     all_results = []
     seen_ids = set()
@@ -126,11 +392,11 @@ async def _search_for_books(question: str) -> List[Dict]:
         base_url=f"http://{host}:{port}",
         timeout=httpx.Timeout(10.0),
     ) as client:
-        for query in queries[:3]:
+        for query in queries[:6]:
             try:
                 resp = await client.get(
                     "/rag/search",
-                    params={"query": query, "limit": 10},
+                    params={"query": query, "limit": 15},
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -146,7 +412,7 @@ async def _search_for_books(question: str) -> List[Dict]:
                     seen_ids.add(rid)
                     all_results.append(r)
 
-            if len(all_results) >= 10:
+            if len(all_results) >= 25:
                 break
 
     return all_results
@@ -208,13 +474,15 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     try:
         # Step 1: 直接调用 search_knowledge_base 工具搜索知识库
-        search_results = await _search_for_books(state.question)
+        search_results = await _analyze_and_search_books(state.question)
         logger.info(f"match_books 直接搜索: {len(search_results)} 条结果")
 
         if not search_results:
             raise NoMatchingBooksError()
 
         # Step 2: 从搜索结果中提取候选书籍
+        # 来源配额：防止单一书籍垄断搜索结果
+        search_results = _apply_source_quota(search_results)
         candidates = await _extract_candidate_books(search_results)
         logger.info(f"match_books 候选书籍: {[c['source_book'] for c in candidates]}")
 
@@ -224,7 +492,19 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
         # Step 3: 使用 27B LLM 做匹配评估（单次调用，无工具）
         matched_items = await _llm_match_books(state.question, candidates)
 
-        # Step 4: 如果 LLM 匹配失败，降级为直接提取全部候选
+        # Step 4: 确保足够多的书籍被匹配（至少 2 本，以增加引用多样性）
+        if len(matched_items) < 2 and len(candidates) >= 2:
+            logger.info(f"LLM 仅匹配 {len(matched_items)} 本，补充候选书籍以确保多样性")
+            existing_ids = {m.book_id for m in matched_items}
+            for c in candidates:
+                clean_name = c["source_book"]
+                if clean_name not in existing_ids:
+                    matched_items.append(MatchedBookItem(
+                        book_id=clean_name,
+                        title=clean_name,
+                        match_reason="综合匹配：该书籍内容与问题领域相关",
+                    ))
+                    existing_ids.add(clean_name)
         if not matched_items:
             logger.info("LLM 匹配返回空，降级为直接提取")
             for c in candidates:

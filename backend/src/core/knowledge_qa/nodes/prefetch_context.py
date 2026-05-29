@@ -77,6 +77,7 @@ async def _do_prefetch(question: str, book_ids: list[str]) -> Dict[str, Any] | N
                 question=question,
                 root_id=root.node_id,
                 community_repo=community_repo,
+                max_tokens=24000,  # 2× 默认值，更深遍历以覆盖更多关联实体
             )
             all_hits.extend(hits)
 
@@ -110,7 +111,21 @@ async def _do_prefetch(question: str, book_ids: list[str]) -> Dict[str, Any] | N
                 chunk_loader=_make_chunk_loader(),
             )
             if context:
-                logger.info(f"知识上下文预取完成: {len(context)} 字符, {len(deduped)} 社区")
+                # 提取所有命中的实体名称，嵌入上下文供 section nodes 使用
+                entity_names_set: set[str] = set()
+                for hit in deduped:
+                    for name in (hit.entity_names or []):
+                        if name.strip():
+                            entity_names_set.add(name.strip())
+                if entity_names_set:
+                    entity_hint = (
+                        "\n\n## 知识图谱关联实体\n"
+                        f"以下实体与问题相关，各节生成时可针对这些方向深入：\n"
+                        f"{', '.join(sorted(entity_names_set))}\n"
+                    )
+                    context += entity_hint
+
+                logger.info(f"知识上下文预取完成: {len(context)} 字符, {len(deduped)} 社区, {len(entity_names_set)} 实体")
                 return {
                     "knowledge_context": context,
                     "current_step": ["prefetch_context_done"],

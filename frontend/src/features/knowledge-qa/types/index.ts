@@ -62,12 +62,22 @@ export interface GenerationMetadata {
   review_model_used: string;
   retries: Record<string, number>;
   partial: boolean;
+  search_coverage: Record<string, number>;
+}
+
+export interface ContradictionItem {
+  topic: string;
+  view_a: string;
+  view_b: string;
+  resolution: string;
+  severity: 'minor' | 'moderate' | 'critical';
 }
 
 export interface KnowledgeQAResponse {
   question: string;
   matched_books: MatchedBook[];
   sections: SectionOutput[];
+  contradictions: ContradictionItem[];
   generation_metadata: GenerationMetadata;
 }
 

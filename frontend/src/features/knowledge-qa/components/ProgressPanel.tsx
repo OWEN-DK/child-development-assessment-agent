@@ -28,8 +28,8 @@ const STEP_LABELS: Record<string, string> = {
 
 const MAIN_STEPS = [
   'started',
-  'prefetch_context',
   'books_matched',
+  'prefetch_context',
   'section_1_done',
   'section_2_done',
   'section_3_done',

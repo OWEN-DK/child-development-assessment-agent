@@ -213,6 +213,10 @@ class ProblemItem(BaseModel):
     description: str = Field(default="", description="问题描述")
     severity: Literal["高", "中", "低", "待评估"] = Field(default="待评估", description="严重程度")
     category: str = Field(default="", description="问题分类（如：注意力、情绪、社交）")
+    source_books: List[str] = Field(
+        default_factory=list,
+        description="此问题在哪些书籍中被提及（书名列表，从搜索结果 📖 前缀中提取）",
+    )
 
 
 class Section2StructuredData(BaseModel):
@@ -277,6 +281,10 @@ class ExerciseTypeItem(BaseModel):
         default_factory=list,
         description="支持的引用ID列表，如 [\"C001\", \"C002\"]",
     )
+    source_books: List[str] = Field(
+        default_factory=list,
+        description="此运动类型推荐的来源书籍（书名列表，从搜索结果 📖 前缀中提取）",
+    )
 
 
 class Section3StructuredData(BaseModel):
@@ -317,6 +325,36 @@ class Section3Response(BaseModel):
     @classmethod
     def _parse_citations(cls, v):
         return _parse_list_field(v)
+
+
+class S3SelectionItem(BaseModel):
+    """S3 节点 LLM 轻量输出 — 只含需要判断力的 4 个字段。
+
+    name/category/target_skills/citation_ids/source_books 由后端代码填充。
+    """
+
+    type_id: str = Field(pattern=r"^ET\d{3}$", description="运动类型 ID，必须来自候选运动表")
+    tier: Literal["primary", "secondary", "supplementary"] = Field(
+        description="推荐层级：primary=核心推荐, secondary=辅助推荐, supplementary=补充推荐",
+    )
+    target_problem_ids: List[str] = Field(
+        default_factory=list,
+        description="针对的问题 ID 列表，引用第 2 节的 problem_id",
+    )
+    recommendation_rationale: str = Field(
+        default="",
+        description="推荐理由（含脑区/神经机制说明）",
+    )
+
+
+class S3SelectionResponse(BaseModel):
+    """S3 节点 LLM response_format — 轻量版，仅含选择结果。"""
+
+    selections: List[S3SelectionItem] = Field(
+        min_length=1, max_length=10,
+        description="从候选运动表中选择的结果列表",
+    )
+    child_age_group: str = Field(default="", description="适用年龄段，如 '8-12岁男孩'")
 
 
 class Section4OutlineResponse(BaseModel):
@@ -452,9 +490,13 @@ class Exercise(BaseModel):
     exercise_id: str = Field(..., description="EX001 格式唯一ID")
     name: str = Field(..., description="运动名称")
     type_id: str = Field(..., description="关联第3节 exercise_type.type_id")
-    duration_min: int = Field(..., description="单次时长(分钟)")
-    intensity: str = Field(..., description="强度等级: 低/中/高")
-    description: str = Field(default="", description="执行要点")
+    duration_min: int = Field(default=15, description="单次时长(分钟)")
+    intensity: str = Field(default="中", description="强度等级: 低/中/高")
+    intensity_hint: str = Field(default="", description="强度感知描述，如'能说话不能唱歌'")
+    target_skill: str = Field(default="", description="主要训练目标，如'专注力'、'抑制控制'")
+    sets: Optional[int] = Field(default=None, description="组数")
+    reps: Optional[int] = Field(default=None, description="每组次数")
+    description: str = Field(default="", description="执行要点和家长指导")
 
 
 class Day(BaseModel):
@@ -473,8 +515,9 @@ class Week(BaseModel):
 
 class Phase(BaseModel):
     """训练阶段"""
+    model_config = {'populate_by_name': True}
 
-    phase_name: str = Field(..., description="阶段名称，如 '适应期'、'强化期'")
+    phase_name: str = Field(..., alias="name", description="阶段名称，如 '适应期'、'强化期'")
     weeks: List[Week] = Field(default_factory=list)
 
 
@@ -485,6 +528,7 @@ class PlanSummary(BaseModel):
     total_phases: int = Field(..., description="阶段数")
     daily_duration_min: int = Field(..., description="每日训练时长(分钟)")
     weekly_frequency: int = Field(..., description="每周训练频率(天)")
+    intensity_overall: str = Field(default="中", description="整体强度: 低/中/高")
 
 
 class Section4StructuredData(BaseModel):
@@ -519,6 +563,10 @@ class GenerationMetadata(BaseModel):
     review_model_used: str = Field(default="qwen3.5-27b")
     retries: Dict[str, int] = Field(default_factory=dict)
     partial: bool = Field(default=False)
+    search_coverage: Dict[str, int] = Field(
+        default_factory=dict,
+        description="每本书的搜索命中条数，如 {'运动改变大脑': 12, '儿童发展心理学': 5}",
+    )
 
 
 class KnowledgeQAResponse(BaseModel):
@@ -528,6 +576,10 @@ class KnowledgeQAResponse(BaseModel):
     matched_books: List[MatchedBook]
     sections: List[SectionOutput]
     generation_metadata: GenerationMetadata
+    contradictions: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="跨书籍矛盾发现列表",
+    )
 
 
 class KnowledgeQAError(BaseModel):
@@ -594,6 +646,13 @@ class KnowledgeQAState(BaseModel):
         description="Service 层加载的权威运动清单（Markdown），仅注入 S3/S4 的 user_message 作为硬约束",
     )
 
+    # ===== S3 预筛选结果（调试/审计用） =====
+    filtered_exercise_candidates: str = Field(
+        default="",
+        description="S3 预筛选后的运动候选 Markdown，仅供审计和调试。"
+        "仅由 recommend_types_node 写入，其他节点不得依赖此字段作为输入。",
+    )
+
     # ===== 进度 =====
     current_step: Annotated[List[str], operator.add] = Field(
         default_factory=list,
@@ -614,6 +673,28 @@ class KnowledgeQAState(BaseModel):
     retry_counts: Dict[str, int] = Field(
         default_factory=dict,
         description="各 Agent 节点的 LLM 异常重试次数",
+    )
+
+    # ===== S4 方案生成重试 =====
+    s4_retry_count: int = Field(
+        default=0,
+        description="plan_outline/plan_expand/plan_assemble 链路重试次数",
+    )
+    s4_needs_retry: bool = Field(
+        default=False,
+        description="S4 链路是否需要重试（由 plan_assemble 降级时设置，_route_after_s4_assemble 消费）",
+    )
+
+    # ===== 矛盾审计 =====
+    contradictions: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="跨书籍矛盾发现列表（contradiction_audit_node 产出，conclusion_node 消费）",
+    )
+
+    # ===== 搜索缓存 =====
+    search_cache: Dict[str, List[Dict[str, Any]]] = Field(
+        default_factory=dict,
+        description="RAG 搜索结果缓存，key=question|book_ids，避免重复搜索",
     )
 
     class Config:

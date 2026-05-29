@@ -5,22 +5,65 @@ import logging
 from typing import Any, Dict
 
 from src.core.knowledge_qa.nodes.base import _run_section_node
-from src.schemas.knowledge_qa import KnowledgeQAState, Section5Response
+from src.schemas.knowledge_qa import KnowledgeQAState, Section5Response, SectionOutput
 
 
-def _safe_truncate_json(data: dict, max_len: int = 500) -> str:
-    """安全截断 JSON，确保不在 UTF-8 多字节字符中间截断且不产生非法 JSON 片段。"""
-    s = json.dumps(data, ensure_ascii=False)
-    if len(s) <= max_len:
-        return s
-    # 向前搜索最后一个完整 JSON 值结束位置
-    cut = s.rfind('",', 0, max_len)
-    if cut > 0:
-        return s[:cut + 1]
-    cut = s.rfind("',", 0, max_len)
-    if cut > 0:
-        return s[:cut + 1]
-    return s[:max_len]
+def _summarize_structured_data(section: "SectionOutput") -> str:
+    """从 structured_data 提取有意义的摘要文本，替代截断 JSON。
+
+    S3/S4 的 content 已被精简为短摘要（~56-200 字），
+    这里从 structured_data 展开关键字段供结论 LLM 理解上下文。
+    """
+    sd = section.structured_data or {}
+    if not sd:
+        return ""
+
+    idx = section.index
+    if idx == 2:
+        problems = sd.get("problems", [])
+        if not problems:
+            return ""
+        lines = ["识别到的问题："]
+        for p in problems[:5]:
+            name = p.get("name") or p.get("description", "")
+            severity = p.get("severity", "")
+            lines.append(f"- {name}" + (f"（{severity}）" if severity else ""))
+        return "\n".join(lines)
+
+    if idx == 3:
+        ets = sd.get("exercise_types", [])
+        if not ets:
+            return ""
+        lines = ["推荐的运动类型："]
+        for et in ets[:8]:
+            name = et.get("name", "")
+            tier_map = {"primary": "核心", "secondary": "辅助", "supplementary": "补充"}
+            tier = tier_map.get(et.get("tier", ""), "")
+            rationale = (et.get("recommendation_rationale", "") or "")[:80]
+            lines.append(f"- {name}" + (f"（{tier}）" if tier else ""))
+            if rationale:
+                lines.append(f"  理由: {rationale}")
+        return "\n".join(lines)
+
+    if idx == 4:
+        phases = sd.get("phases", [])
+        if not phases:
+            return ""
+        lines = ["运动方案阶段概览："]
+        for ph in phases[:3]:
+            phase_name = ph.get("phase_name") or ph.get("name", "")
+            ex_names = []
+            for wk in (ph.get("weeks") or [])[:1]:
+                for day in (wk.get("days") or [])[:2]:
+                    for ex in (day.get("main_exercises") or [])[:3]:
+                        n = ex.get("name", "")
+                        if n:
+                            ex_names.append(n)
+            if ex_names:
+                lines.append(f"- {phase_name}: {', '.join(ex_names)}")
+        return "\n".join(lines)
+
+    return ""
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +73,24 @@ async def conclusion_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     def build_msg(s, prompt):
         parts = []
+
+        # ── 矛盾审计结果（如果存在） ──
+        if s.contradictions:
+            parts.append("## 跨书籍观点差异（供参考）\n")
+            for c in s.contradictions:
+                parts.append(
+                    f"- **{c.get('topic', '')}**\n"
+                    f"  - {c.get('view_a', '')}\n"
+                    f"  - {c.get('view_b', '')}\n"
+                    f"  - 调和建议: {c.get('resolution', '请根据实际情况判断')}\n"
+                )
+
         for i in range(1, 5):
             sec = s.sections.get(i)
             if sec:
-                parts.append(f"## 第{i}节\n{sec.content}\n结构化数据：{_safe_truncate_json(sec.structured_data, 500)}")
+                sd_summary = _summarize_structured_data(sec)
+                sd_block = f"\n关键数据：{sd_summary}" if sd_summary else ""
+                parts.append(f"## 第{i}节\n{sec.content}{sd_block}")
         return prompt["user_template"].format(
             question=s.question,
             previous_sections="\n\n".join(parts),

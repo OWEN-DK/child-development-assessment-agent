@@ -113,46 +113,127 @@ class KnowledgeQAService:
             yield event
 
     async def generate_markdown(self, task_id: str) -> str:
-        """生成 Markdown 文件内容"""
+        """生成 Markdown 文件内容 — 结构化、美观的报告"""
         state = await self._task_state.get(task_id, TASK_TYPE)
         if not state or not state.result:
             raise ValueError("任务结果不存在或已过期")
         response = KnowledgeQAResponse(**state.result)
 
-        parts = [f"# 知识问答报告\n\n**问题**: {response.question}\n"]
+        lines = []
 
+        # ═══════════ 标题 ═══════════
+        lines.append("# 🧒 儿童发展评估报告")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        # ═══════════ 问题概述 ═══════════
+        lines.append("## 📋 评估问题")
+        lines.append("")
+        lines.append(f"> **{response.question}**")
+        lines.append("")
+
+        # ═══════════ 报告元信息 ═══════════
+        total_time = response.generation_metadata.total_time_ms / 1000
+        lines.append(f"📊 **共 {response.generation_metadata.total_sections} 节** · "
+                     f"**{response.generation_metadata.total_citations} 条引用** · "
+                     f"**耗时 {total_time:.0f}s**")
+        if response.generation_metadata.partial:
+            lines.append("")
+            lines.append("> ⚠️ **注意**：此结果为部分生成（存在超时或降级处理），内容可能不完整。")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        # ═══════════ 参考书籍 ═══════════
         if response.matched_books:
-            parts.append("## 参考书籍\n")
-            for b in response.matched_books:
-                parts.append(
-                    f"- **{b.title}**"
-                    + (f" ({b.author})" if b.author else "")
-                    + f" — {b.match_reason}\n"
-                )
-            parts.append("\n")
+            lines.append("## 📚 参考书籍")
+            lines.append("")
+            for i, b in enumerate(response.matched_books):
+                primary_tag = " ⭐ 主要参考" if b.is_primary else ""
+                author_str = f" — {b.author}" if b.author else ""
+                lines.append(f"### {i + 1}. {b.title}{author_str}{primary_tag}")
+                lines.append(f"> {b.match_reason}")
+                lines.append("")
+            lines.append("---")
+            lines.append("")
 
+        # ═══════════ 跨书籍观点差异 ═══════════
+        if response.contradictions:
+            lines.append("## ⚠️ 跨书籍观点差异")
+            lines.append("")
+            for i, c in enumerate(response.contradictions):
+                lines.append(f"### 差异 {i + 1}：{c.get('topic', '')}")
+                lines.append(f"- **观点 A**：{c.get('view_a', '')}")
+                lines.append(f"- **观点 B**：{c.get('view_b', '')}")
+                lines.append(f"- **💡 调和建议**：{c.get('resolution', '请根据实际情况判断')}")
+                lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        # ═══════════ 目录 ═══════════
+        lines.append("## 📑 报告目录")
+        lines.append("")
         for sec in response.sections:
-            if sec.index == 3:
-                # S3: 从 structured_data 渲染 Markdown
-                parts.append(_render_s3_markdown(sec.structured_data) + "\n")
-            elif sec.index == 4:
-                # S4: 从 structured_data 渲染 Markdown
-                from src.core.knowledge_qa.nodes.plan_assemble import _render_s4_markdown
-                parts.append(_render_s4_markdown(sec.structured_data) + "\n")
-            else:
-                parts.append(f"{sec.content}\n\n")
-            if sec.citations:
-                parts.append("### 本节引用\n")
-                for c in sec.citations:
-                    parts.append(
-                        f"- [{c.get('citation_id', '')}] {c.get('book_title', '')}, "
-                        f"{c.get('chapter', '')}"
-                        + (f", {c['section']}" if c.get("section") else "")
-                        + f"\n  > {c.get('excerpt', '')}\n"
-                    )
-                parts.append("\n")
+            icon = {1: "🔍", 2: "🔬", 3: "💪", 4: "📅", 5: "🎯"}.get(sec.index, "📄")
+            lines.append(f"- [{icon} S{sec.index}：{sec.title}](#s{sec.index}-{sec.title.replace(' ', '-').replace('：', '-')})")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
-        return "".join(parts)
+        # ═══════════ 各节内容 ═══════════
+        for sec in response.sections:
+            icon = {1: "🔍", 2: "🔬", 3: "💪", 4: "📅", 5: "🎯"}.get(sec.index, "📄")
+            color_hex = {1: "#1890ff", 2: "#fa8c16", 3: "#f5222d", 4: "#52c41a", 5: "#722ed1"}.get(sec.index, "#666")
+
+            lines.append(f'<span id="s{sec.index}-{sec.title.replace(" ", "-").replace("：", "-")}"></span>')
+            lines.append("")
+            lines.append(f"## {icon} S{sec.index}：{sec.title}")
+            lines.append("")
+
+            if sec.index in (3, 4):
+                # S3/S4: 从 structured_data 渲染
+                if sec.index == 3:
+                    lines.append(_render_s3_markdown(sec.structured_data) + "\n")
+                else:
+                    from src.core.knowledge_qa.nodes.plan_assemble import _render_s4_markdown
+                    lines.append(_render_s4_markdown(sec.structured_data) + "\n")
+            else:
+                # S1/S2/S5: 直接使用 content（LLM 生成的 Markdown）
+                if sec.content:
+                    # 确保 content 中的标题级别正确（二级标题 → 三级标题）
+                    content = sec.content.strip()
+                    lines.append(content)
+                    lines.append("")
+                else:
+                    lines.append("> *本节内容为空*")
+                    lines.append("")
+
+            # 引用
+            if sec.citations:
+                lines.append(f"#### 📖 本节参考来源")
+                lines.append("")
+                for c in sec.citations:
+                    cid = c.get('citation_id', '')
+                    book = c.get('book_title', '未知书籍')
+                    chapter = c.get('chapter', '')
+                    excerpt = c.get('excerpt', '')
+                    lines.append(f"- **[{cid}]** *{book}* — {chapter}")
+                    if excerpt:
+                        lines.append(f"  > {excerpt}")
+                lines.append("")
+
+            lines.append("---")
+            lines.append("")
+
+        # ═══════════ 页脚 ═══════════
+        lines.append("---")
+        lines.append("")
+        lines.append("*本报告由 AI 儿童发展评估系统自动生成，仅供参考。*")
+        lines.append("*如有疑虑，请咨询专业儿科医生或儿童发展专家。*")
+        lines.append("")
+
+        return "\n".join(lines)
 
     async def generate_pdf(self, task_id: str) -> bytes:
         """生成 PDF 文件"""
@@ -338,10 +419,10 @@ class KnowledgeQAService:
             # 执行前检查取消信号
             await _check_cancelled()
 
-            # 全局硬超时 600s（10分钟），防止 LLM 卡死
+            # 全局硬超时 900s（15分钟），防止 LLM 卡死
             final_state = await asyncio.wait_for(
                 self._graph.ainvoke(initial_state),
-                timeout=600.0,
+                timeout=900.0,
             )
 
             # LangGraph ainvoke 返回 dict，需要包装回 KnowledgeQAState
@@ -358,7 +439,8 @@ class KnowledgeQAService:
             )
             # 保存到历史记录 DB
             result_dict = jsonable_encoder(response.model_dump())
-            await self._save_history_to_db(task_id, question, result_dict)
+            status = "partial" if final_state.partial else "completed"
+            await self._save_history_to_db(task_id, question, result_dict, status=status)
             return jsonable_encoder(response.model_dump())
 
         except asyncio.CancelledError:
@@ -386,7 +468,7 @@ class KnowledgeQAService:
             raise
 
         except asyncio.TimeoutError:
-            logger.error(f"知识问答全局超时 (600s): task_id={task_id}")
+            logger.error(f"知识问答全局超时 (900s): task_id={task_id}")
             await TaskSsePublisher.publish_error(
                 task_type=task_type,
                 task_id=task_id,
@@ -495,10 +577,21 @@ class KnowledgeQAService:
         )
         total_citations = sum(len(s.citations) for s in sections_list)
 
+        # 从 S2/S3 structured_data 的 source_books 统计覆盖率
+        search_coverage: dict[str, int] = {}
+        for sec in sections_list:
+            sd = sec.structured_data or {}
+            for key in ("problems", "exercise_types"):
+                for item in sd.get(key) or []:
+                    for book in item.get("source_books") or []:
+                        if book:
+                            search_coverage[book] = search_coverage.get(book, 0) + 1
+
         return KnowledgeQAResponse(
             question=state.question,
             matched_books=state.matched_books_detail,
             sections=sections_list,
+            contradictions=getattr(state, "contradictions", []),
             generation_metadata=GenerationMetadata(
                 total_sections=len(sections_list),
                 total_citations=total_citations,
@@ -507,6 +600,7 @@ class KnowledgeQAService:
                 review_model_used="qwen3.5-27b",
                 retries=state.retry_counts,
                 partial=state.partial,
+                search_coverage=search_coverage,
             ),
         )
 
@@ -535,35 +629,61 @@ th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
 
 
 def _render_s3_markdown(structured_data: dict) -> str:
-    """从 S3 structured_data 渲染运动类型推荐 Markdown。"""
+    """从 S3 structured_data 渲染运动类型推荐 Markdown（美化版）。"""
     sd = structured_data
     if not isinstance(sd, dict):
         return ""
 
-    lines = ["## 运动类型推荐", ""]
+    lines = []
 
     ets = sd.get("exercise_types", [])
     if not ets:
-        return ""
+        return "> *暂无运动类型推荐数据*"
 
     child_age = sd.get("child_age_group", "")
     if child_age:
-        lines.append(f"> 适用年龄段：{child_age}")
+        lines.append(f"> 🧒 **适用年龄段**：{child_age}")
         lines.append("")
 
-    tier_labels = {"primary": "核心推荐", "secondary": "辅助推荐", "supplementary": "补充推荐"}
-    lines.append("| 推荐等级 | 运动类型 | 类型ID | 分类 | 训练目标 | 推荐理由 |")
-    lines.append("|---------|---------|--------|------|---------|--------|")
+    # 按 tier 分组
+    tier_order = ["primary", "secondary", "supplementary"]
+    tier_config = {
+        "primary": {"emoji": "🔴", "label": "核心推荐", "desc": "最针对性、解决首要问题的运动"},
+        "secondary": {"emoji": "🟡", "label": "辅助推荐", "desc": "补充性运动，增强干预效果"},
+        "supplementary": {"emoji": "🟢", "label": "补充推荐", "desc": "可选运动，丰富方案"},
+    }
 
+    grouped = {}
     for et in ets:
-        name = et.get("name", "")
-        type_id = et.get("type_id", "")
-        tier = tier_labels.get(et.get("tier", ""), et.get("tier", ""))
-        category = (et.get("category", "") or "")[:10]
-        skills = "、".join(et.get("target_skills", [])[:2])
-        rationale = (et.get("recommendation_rationale", "") or "")[:60]
+        tier = et.get("tier", "secondary")
+        if tier not in grouped:
+            grouped[tier] = []
+        grouped[tier].append(et)
 
-        lines.append(f"| {tier} | **{name}** | {type_id} | {category} | {skills} | {rationale} |")
+    for tier in tier_order:
+        items = grouped.get(tier, [])
+        if not items:
+            continue
+        
+        cfg = tier_config.get(tier, {"emoji": "⚪", "label": tier, "desc": ""})
+        lines.append(f"### {cfg['emoji']} {cfg['label']}")
+        if cfg['desc']:
+            lines.append(f"> {cfg['desc']}")
+        lines.append("")
 
-    lines.append("")
+        # 表格
+        lines.append("| 运动名称 | 类型ID | 分类 | 训练目标 | 推荐理由 |")
+        lines.append("|---------|--------|------|---------|--------|")
+
+        for et in items:
+            name = et.get("name", "")
+            type_id = et.get("type_id", "")
+            category = (et.get("category", "") or "")[:12]
+            skills = "、".join(et.get("target_skills", [])[:3])
+            rationale = (et.get("recommendation_rationale", "") or "")[:80]
+
+            lines.append(f"| **{name}** | {type_id} | {category} | {skills} | {rationale} |")
+
+        lines.append("")
+
     return "\n".join(lines)
