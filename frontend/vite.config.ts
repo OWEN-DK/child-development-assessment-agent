@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => {
       '@entities': path.resolve(__dirname, './src/entities'),
       '@widgets': path.resolve(__dirname, './src/widgets'),
       '@shared': path.resolve(__dirname, './src/shared'),
+      '@curation': path.resolve(__dirname, './src/features/curation'),
     },
   },
   css: {

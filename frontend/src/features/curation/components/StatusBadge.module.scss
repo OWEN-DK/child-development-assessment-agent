@@ -1,0 +1,23 @@
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &--draft &__dot { background: var(--badge-draft-fg, #8B847C); }
+  &--reviewed &__dot { background: var(--badge-reviewed-fg, #D97706); }
+  &--published &__dot { background: var(--badge-published-fg, #059669); }
+  &--generating &__dot { background: #3B82F6; animation: pulse 1.2s infinite; }
+  &--failed &__dot { background: #EF4444; }
+
+  &__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+}

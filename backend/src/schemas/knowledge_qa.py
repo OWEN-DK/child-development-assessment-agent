@@ -703,6 +703,12 @@ class KnowledgeQAState(BaseModel):
         description="RAG 搜索结果缓存，key=question|book_ids，避免重复搜索",
     )
 
+    # ===== Neo4j 知识图谱 (Layer 1) =====
+    neo4j_knowledge: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Neo4j 知识图谱查询结果 (query_neo4j_graph_node 写入)。keys: exercises, cross_book_relations, problem_context, source_coverage",
+    )
+
     class Config:
         arbitrary_types_allowed = True
 

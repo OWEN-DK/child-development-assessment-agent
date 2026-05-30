@@ -3,6 +3,14 @@ import { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
 import App from '../app/App';
 import { KnowledgeQAPage } from '@features/knowledge-qa';
+import {
+  BookListPage,
+  BindBookPage,
+  GeneratePage,
+  DraftEditorPage,
+  GraphPage,
+  PendingQueuePage,
+} from '@features/curation';
 import { KnowledgeBasePage } from '../features/documents';
 import { KnowledgeSearchPage } from '../features/knowledge';
 import { LLMMonitoringDashboard } from '../features/monitoring';
@@ -92,6 +100,43 @@ export const router = createBrowserRouter([
       {
         path: 'monitoring',
         element: <LLMMonitoringDashboard />,
+      },
+      /* ===== 知识管理 (Curation) 路由 ===== */
+      {
+        path: 'curation',
+        element: <Navigate to="books" replace />,
+      },
+      {
+        path: 'curation/books',
+        element: <BookListPage />,
+      },
+      {
+        path: 'curation/bind',
+        element: <BindBookPage />,
+      },
+      {
+        path: 'curation/generate/:bookId',
+        element: <GeneratePage />,
+      },
+      {
+        path: 'curation/editor/:bookId',
+        element: <DraftEditorPage />,
+      },
+      {
+        path: 'curation/editor/:bookId/compare',
+        element: <DraftEditorPage />,
+      },
+      {
+        path: 'curation/graph',
+        element: <GraphPage />,
+      },
+      {
+        path: 'curation/graph/:bookId',
+        element: <GraphPage />,
+      },
+      {
+        path: 'curation/pending',
+        element: <PendingQueuePage />,
       },
     ],
   },

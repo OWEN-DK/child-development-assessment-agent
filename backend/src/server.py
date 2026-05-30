@@ -224,6 +224,21 @@ def create_app() -> FastAPI:
     except Exception as e:
         logger.warning(f"知识问答模块注册失败（非致命）: {e}")
 
+    # Phase 8: 知识审核 (Curation) 控制器 — 仅 Neo4j 启用时注册
+    try:
+        from src.config.modules.neo4j import neo4j_settings
+        if neo4j_settings.neo4j_enabled:
+            from src.controller.curation_controller import CurationController
+            _curation_controller = CurationController()
+            _curation_router = APIRouter(prefix="/api/v2", tags=["知识审核"])
+            _curation_controller.register(_curation_router)
+            app.include_router(_curation_router)
+            logger.info("知识审核模块已注册 (Neo4j 已启用)")
+        else:
+            logger.info("知识审核模块跳过 (Neo4j 未启用)")
+    except Exception as e:
+        logger.warning(f"知识审核模块注册失败（非致命）: {e}")
+
     # Phase 7: RAG Eval controllers
     from src.controller.rag_eval.registry import RagEvalControllerRegistry
 

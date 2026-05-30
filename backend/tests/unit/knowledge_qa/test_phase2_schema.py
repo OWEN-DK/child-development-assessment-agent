@@ -72,8 +72,8 @@ class TestSection3StructuredData:
 
         data = Section3StructuredData(
             exercise_types=[
-                ExerciseTypeItem(name="跑步", tier="核心推荐", rationale="改善注意力"),
-                ExerciseTypeItem(name="游泳", tier="备选推荐"),
+                ExerciseTypeItem(type_id="ET001", name="跑步", tier="primary", rationale="改善注意力"),
+                ExerciseTypeItem(type_id="ET002", name="游泳", tier="secondary"),
             ],
             child_age_group="6-8岁",
         )
@@ -93,7 +93,7 @@ class TestSection3StructuredData:
         resp = Section3Response(
             content="## 运动推荐",
             structured_data=Section3StructuredData(
-                exercise_types=[{"name": "跑步", "tier": "核心推荐"}]
+                exercise_types=[{"type_id": "ET001", "name": "跑步", "tier": "primary"}]
             ),
         )
         assert isinstance(resp.structured_data, Section3StructuredData)
@@ -104,7 +104,7 @@ class TestSection3StructuredData:
         resp = Section3Response(
             content="## 运动推荐",
             structured_data={
-                "exercise_types": [{"name": "跑步", "tier": "核心推荐"}],
+                "exercise_types": [{"type_id": "ET001", "name": "跑步", "tier": "primary"}],
                 "child_age_group": "6-8岁",
             },
         )

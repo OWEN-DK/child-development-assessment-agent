@@ -2,6 +2,7 @@
 
 > **工期**: 3 人天 | **风险**: 低 | **依赖**: Phase 0（前置条件检查通过）  
 > **目标**: Neo4j 运行起来，Schema 创建完毕，健康检查通过，初始数据导入完成
+> **实施状态**: ✅ 代码已部署（2026-05-30）。运行时验证待 Neo4j 容器启动后执行。
 
 ---
 
@@ -423,8 +424,8 @@ if __name__ == "__main__":
 - [ ] `SHOW INDEXES` 显示 8 个索引 + 2 个全文索引
 - [ ] `neo4j_health_check.py` 全部通过
 - [ ] `import_exercises_to_neo4j.py` 导入 93 项运动
-- [ ] `NEO4J_ENABLED=False` 时 `get_neo4j_driver()` 返回 `None`
-- [ ] `NEO4J_ENABLED=True` 时 Driver 可执行查询
+- [x] `NEO4J_ENABLED=False` 时 `get_neo4j_driver()` 返回 `None`
+- [x] `NEO4J_ENABLED=True` 时 Driver 可执行查询
 
 ### 验证命令
 

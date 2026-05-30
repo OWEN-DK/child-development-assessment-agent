@@ -1,0 +1,37 @@
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-12) var(--space-8);
+  text-align: center;
+  cursor: pointer;
+  transition: all 200ms ease-out;
+  background: var(--surface-panel);
+
+  &:hover,
+  &--active {
+    border-color: var(--indigo-500);
+    background: rgba(79, 70, 229, 0.04);
+  }
+
+  &--active {
+    border-style: solid;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  }
+
+  &__icon {
+    font-size: 48px;
+    margin-bottom: var(--space-4);
+    opacity: 0.6;
+  }
+
+  &__text {
+    color: var(--text-secondary);
+    font-size: 15px;
+  }
+
+  &__hint {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    margin-top: var(--space-2);
+  }
+}

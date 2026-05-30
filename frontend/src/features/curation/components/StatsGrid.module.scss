@@ -1,0 +1,28 @@
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.card {
+  background: var(--surface-panel);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  border: 1px solid var(--border-default);
+  transition: box-shadow 200ms ease-out;
+
+  &:hover { box-shadow: var(--shadow-md); }
+
+  &__value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  &__label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+  }
+}

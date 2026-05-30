@@ -1,0 +1,38 @@
+# Neo4j 告警规则
+# 放置位置: prometheus/alerts/neo4j.yml
+
+groups:
+  - name: neo4j_alerts
+    rules:
+      - alert: Neo4jDegradationRateHigh
+        expr: rate(neo4j_degradation_total[10m]) / rate(knowledge_qa_requests_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Neo4j 降级率超过 10%"
+          description: "过去 10 分钟内，Neo4j 降级请求占比超过 10%，请检查 Neo4j 服务状态。"
+
+      - alert: Neo4jP99LatencyHigh
+        expr: histogram_quantile(0.99, neo4j_query_duration_seconds) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Neo4j P99 查询延迟超过 500ms"
+
+      - alert: PendingQueueGrowing
+        expr: pending_queue_length > 50
+        for: 1d
+        labels:
+          severity: info
+        annotations:
+          summary: "待提炼队列超过 50 项，建议增加审核频率"
+
+      - alert: Neo4jConnectionPoolExhausted
+        expr: neo4j_connections_active / neo4j_connections_pool_size > 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Neo4j 连接池使用率超过 90%"

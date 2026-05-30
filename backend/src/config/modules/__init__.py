@@ -7,6 +7,7 @@ from src.config.modules.models.embedding import EmbeddingSettings
 from src.config.modules.models.llm import (LLMProviderConfig, LLMSceneConfig,
                                            LLMSettings)
 from src.config.modules.models.ml_scoring import MLScoringSettings
+from src.config.modules.neo4j import Neo4jSettings, neo4j_settings
 from src.config.modules.paths import PathSettings
 from src.config.modules.rag.chunking import RagChunkingSettings
 from src.config.modules.rag.core import RagCoreSettings
@@ -28,6 +29,8 @@ __all__ = [
     "LLMSceneConfig",
     "LLMSettings",
     "MLScoringSettings",
+    "Neo4jSettings",
+    "neo4j_settings",
     "PathSettings",
     "RagChunkingSettings",
     "RagCoreSettings",

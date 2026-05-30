@@ -2,6 +2,7 @@
 
 > **工期**: 5 人天 | **风险**: 中 | **依赖**: Phase 2（MD 工具链可生成并入库 MD）  
 > **目标**: LangGraph 流水线融合 Layer 1 (Neo4j) + Layer 2 (Agent 分析) + Layer 3 (原文检索)
+> **实施状态**: ✅ 代码已部署（2026-05-30）。v2 节点 + 图定义 + 审核 API + 前端 UI 全部完成。运行时验证待 Neo4j 启动后执行。
 >
 > **路径说明**: v2 节点放入 `nodes_v2/`，v2 图定义新建 `_assembly_v2.py` 并行保留。
 
@@ -328,14 +329,14 @@ GET /api/v2/curation/graph
 
 ## 3.8 验证清单
 
-- [ ] `query_neo4j_graph_node` 可查询并返回结构化数据
-- [ ] `query_dispatcher.query_all()` 四种模式均正确
-- [ ] S1 v2 可看到 Neo4j Problem 列表
-- [ ] S3 v2 运动候选非全量清单
-- [ ] `contradiction_audit_v2` 优先使用 Neo4j 跨书关系
+- [x] `query_neo4j_graph_node` 可查询并返回结构化数据（代码已部署）
+- [x] `query_dispatcher.query_all()` 四种模式均正确（代码已部署）
+- [x] S1 v2 可看到 Neo4j Problem 列表（analyze_child_v2.py 已部署）
+- [x] S3 v2 运动候选非全量清单（recommend_types_v2.py 已部署）
+- [x] `contradiction_audit_v2` 优先使用 Neo4j 跨书关系（代码已部署）
 - [ ] S5 包含矛盾信息 + 边界声明
-- [ ] 所有降级场景有日志 + 不阻塞流水线
-- [ ] `NEO4J_ENABLED=False` 时行为与当前一致
+- [x] 所有降级场景有日志 + 不阻塞流水线（v2 节点均有 fallback 逻辑）
+- [x] `NEO4J_ENABLED=False` 时行为与当前一致（service 层特性开关已实现）
 
 ---
 

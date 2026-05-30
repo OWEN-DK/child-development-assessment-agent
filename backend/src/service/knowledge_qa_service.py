@@ -42,6 +42,28 @@ _EXERCISE_JSON_PATH = get_exercise_json_path()
 # 模块级缓存：首次加载后缓存为 Markdown 字符串，进程重启后自动刷新
 _exercise_context_cache: str | None = None
 
+
+
+def _should_use_neo4j(question_id: str) -> bool:
+    """根据灰度百分比决定是否使用 Neo4j（hash 稳定路由）。
+
+    同一 question_id 始终走同一路径，避免重试时行为不一致。
+    """
+    import hashlib
+    from src.config.modules.neo4j import neo4j_settings
+
+    if not neo4j_settings.neo4j_enabled:
+        return False
+
+    percentage = neo4j_settings.neo4j_rollout_percentage
+    if percentage >= 100:
+        return True
+    if percentage <= 0:
+        return False
+
+    hash_val = int(hashlib.md5(question_id.encode()).hexdigest()[:8], 16)
+    return (hash_val % 100) < percentage
+
 TASK_TYPE = "knowledge_qa"
 
 
@@ -56,9 +78,16 @@ class KnowledgeQAService:
         task_state_service: TaskStateService,
         prompt_manager,
     ):
-        from src.core.knowledge_qa.graph import knowledge_qa_graph
-
-        self._graph = knowledge_qa_graph
+        # 根据 NEO4J_ENABLED 特性开关选择 v1 或 v2 图
+        from src.config.modules.neo4j import neo4j_settings
+        if neo4j_settings.neo4j_enabled:
+            from src.core.knowledge_qa.graph import knowledge_qa_v2_graph
+            self._graph = knowledge_qa_v2_graph
+            logger.info("使用 v2 图（融合 Neo4j 三层架构）")
+        else:
+            from src.core.knowledge_qa.graph import knowledge_qa_graph
+            self._graph = knowledge_qa_graph
+            logger.info("使用 v1 图（Neo4j 未启用）")
         self._async = async_task_manager
         self._task_state = task_state_service
         self._prompt_manager = prompt_manager

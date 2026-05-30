@@ -3,7 +3,14 @@ import { PageContainer, ProLayout } from '@ant-design/pro-components';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../lib/queryClient';
-import { ExperimentOutlined } from '@ant-design/icons';
+import {
+  ExperimentOutlined,
+  AuditOutlined,
+  BookOutlined,
+  ApartmentOutlined,
+  ClockCircleOutlined,
+  LinkOutlined,
+} from '@ant-design/icons';
 
 function App() {
   const location = useLocation();
@@ -29,12 +36,22 @@ function App() {
             menuDataRender={() => [
               { path: '/', name: '知识问答' },
               { path: '/knowledge-base', name: '知识库' },
-               { path: '/knowledge-search', name: '内容搜索' },
-               { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
-               { path: '/prompt-management', name: '提示词管理' },
-               { path: '/monitoring', name: 'LLM监控' },
-               { path: '/system-config', name: '系统配置' },
-               // { path: '/history', name: '历史记录' },
+              { path: '/knowledge-search', name: '内容搜索' },
+              { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
+              { path: '/prompt-management', name: '提示词管理' },
+              { path: '/monitoring', name: 'LLM监控' },
+              {
+                path: '/curation',
+                name: '知识管理',
+                icon: <AuditOutlined />,
+                children: [
+                  { path: '/curation/books', name: '📚 书籍管理', icon: <BookOutlined /> },
+                  { path: '/curation/bind', name: '🔗 绑定书籍', icon: <LinkOutlined /> },
+                  { path: '/curation/graph', name: '🕸️ 知识图谱', icon: <ApartmentOutlined /> },
+                  { path: '/curation/pending', name: '⏱️ 待提炼队列', icon: <ClockCircleOutlined /> },
+                ],
+              },
+              { path: '/system-config', name: '系统配置' },
             ]}
             menuItemRender={(item, dom) => (
               <Link to={item.path || '/'} key={item.path}>

@@ -1,0 +1,124 @@
+import { apiClient } from '@shared/api/client';
+import type {
+  CurationBookListResponse,
+  DraftDetail,
+  DraftListResponse,
+  KGData,
+  PendingItem,
+  KBBookListResponse,
+  BindBookRequest,
+} from '../types';
+
+export const curationApi = {
+  /* ===== 书籍管理 ===== */
+
+  /** 获取策管书籍列表 */
+  listBooks: async (
+    params: { status?: string; page?: number; page_size?: number } = {},
+  ): Promise<CurationBookListResponse> => {
+    const res = await apiClient.get('/api/v2/curation/books', { params });
+    return res.data as CurationBookListResponse;
+  },
+
+  /** 删除策管书籍 */
+  deleteBook: async (bookId: string): Promise<void> => {
+    await apiClient.delete(`/api/v2/curation/books/${bookId}`);
+  },
+
+  /* ===== 绑定 ===== */
+
+  /** 获取知识库中可绑定的 EPUB 书籍 */
+  listKBBooks: async (): Promise<KBBookListResponse> => {
+    const res = await apiClient.get('/api/v2/curation/kb-books');
+    return res.data as KBBookListResponse;
+  },
+
+  /** 绑定知识库书籍到策管 */
+  bindBook: async (data: BindBookRequest): Promise<{ book_id: string }> => {
+    const res = await apiClient.post('/api/v2/curation/bind', data);
+    return res.data;
+  },
+
+  /* ===== 生成 ===== */
+
+  /** 触发 AI 生成 */
+  startGeneration: async (bookId: string): Promise<void> => {
+    await apiClient.post(`/api/v2/curation/books/${bookId}/generate`);
+  },
+
+  /** 获取生成进度 (SSE endpoint, 返回 URL) */
+  getGenerationProgressUrl: (bookId: string): string => {
+    return `/api/v2/curation/books/${bookId}/generate/progress`;
+  },
+
+  /* ===== 草稿 ===== */
+
+  /** 获取草稿列表 */
+  listDrafts: async (
+    params: { status?: string; book_id?: string; page?: number; page_size?: number } = {},
+  ): Promise<DraftListResponse> => {
+    const res = await apiClient.get('/api/v2/curation/drafts', { params });
+    return res.data as DraftListResponse;
+  },
+
+  /** 获取单个草稿详情 */
+  getDraft: async (draftId: string): Promise<DraftDetail> => {
+    const res = await apiClient.get(`/api/v2/curation/drafts/${draftId}`);
+    return res.data as DraftDetail;
+  },
+
+  /** 保存审核修改 */
+  updateDraft: async (draftId: string, content: string): Promise<void> => {
+    await apiClient.put(`/api/v2/curation/drafts/${draftId}`, { content });
+  },
+
+  /** 标记已审核 */
+  markReviewed: async (draftId: string, reviewer: string): Promise<void> => {
+    await apiClient.post(`/api/v2/curation/drafts/${draftId}/review`, { reviewer });
+  },
+
+  /** 入库 Neo4j */
+  publishToNeo4j: async (draftId: string): Promise<void> => {
+    await apiClient.post(`/api/v2/curation/drafts/${draftId}/publish`);
+  },
+
+  /* ===== 知识图谱 ===== */
+
+  /** 获取 KG 可视化数据 */
+  getGraph: async (bookId?: string): Promise<KGData> => {
+    const res = await apiClient.get('/api/v2/curation/graph', {
+      params: bookId ? { book_id: bookId } : {},
+    });
+    return res.data as KGData;
+  },
+
+  /* ===== 导出 ===== */
+
+  /** 获取跨书关系对 */
+  getCrossBookPairs: async (
+    bookIds?: string[],
+  ): Promise<{ pairs: { type: string; count: number }[]; relations: any[] }> => {
+    const res = await apiClient.get('/api/v2/curation/cross-book/pairs', {
+      params: bookIds ? { book_ids: bookIds.join(',') } : {},
+    });
+    return res.data as any;
+  },
+
+  /** 导出图谱为 Cypher */
+  exportCypher: async (bookId?: string): Promise<{ statements: string[]; count: number }> => {
+    const res = await apiClient.get('/api/v2/curation/graph/export-cypher', {
+      params: bookId ? { book_id: bookId } : {},
+    });
+    return res.data;
+  },
+
+  /* ===== 待提炼队列 ===== */
+
+  /** 获取待提炼队列 */
+  getPendingQueue: async (
+    params: { status?: string; book_id?: string; page?: number; page_size?: number } = {},
+  ): Promise<{ items: PendingItem[]; total: number }> => {
+    const res = await apiClient.get('/api/v2/curation/pending', { params });
+    return res.data;
+  },
+};

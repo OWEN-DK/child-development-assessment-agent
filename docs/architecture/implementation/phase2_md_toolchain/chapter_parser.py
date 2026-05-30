@@ -1,4 +1,4 @@
-"""EPUB 章节解析 -- 从 EPUB 提取结构化章节列表。
+shen"""EPUB 章节解析 -- 从 EPUB 提取结构化章节列表。
 
 放置位置: backend/src/core/knowledge_qa/neo4j/chapter_parser.py
 依赖: pip install ebooklib beautifulsoup4

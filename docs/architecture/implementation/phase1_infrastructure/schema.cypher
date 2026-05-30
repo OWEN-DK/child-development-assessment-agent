@@ -11,6 +11,13 @@ CREATE CONSTRAINT risk_id_unique IF NOT EXISTS FOR (r:Risk) REQUIRE r.risk_id IS
 CREATE CONSTRAINT chapter_id_unique IF NOT EXISTS FOR (c:Chapter) REQUIRE c.chapter_id IS UNIQUE;
 CREATE CONSTRAINT autoentity_name_book_unique IF NOT EXISTS FOR (ae:AutoEntity) REQUIRE (ae.name, ae.book_id) IS UNIQUE;
 CREATE CONSTRAINT autocommunity_node_id_unique IF NOT EXISTS FOR (ac:AutoCommunity) REQUIRE ac.node_id IS UNIQUE;
+CREATE CONSTRAINT cognitiveprocess_name_book_unique IF NOT EXISTS FOR (cp:CognitiveProcess) REQUIRE (cp.name, cp.book_id) IS UNIQUE;
+CREATE CONSTRAINT theory_name_book_unique IF NOT EXISTS FOR (t:Theory) REQUIRE (t.name, t.book_id) IS UNIQUE;
+CREATE CONSTRAINT mechanism_name_book_unique IF NOT EXISTS FOR (m:Mechanism) REQUIRE (m.name, m.book_id) IS UNIQUE;
+CREATE CONSTRAINT developmentalstage_name_book_unique IF NOT EXISTS FOR (ds:DevelopmentalStage) REQUIRE (ds.name, ds.book_id) IS UNIQUE;
+CREATE CONSTRAINT strategy_name_book_unique IF NOT EXISTS FOR (st:Strategy) REQUIRE (st.name, st.book_id) IS UNIQUE;
+CREATE CONSTRAINT keyinsight_name_book_unique IF NOT EXISTS FOR (ki:KeyInsight) REQUIRE (ki.name, ki.book_id) IS UNIQUE;
+CREATE CONSTRAINT researchfinding_name_book_unique IF NOT EXISTS FOR (rf:ResearchFinding) REQUIRE (rf.name, rf.book_id) IS UNIQUE;
 
 // ===== 索引（加速查询） =====
 CREATE INDEX exercise_name_idx IF NOT EXISTS FOR (e:Exercise) ON (e.name);
@@ -27,3 +34,15 @@ FOR (e:Exercise) ON EACH [e.name, e.description, e.benefits];
 
 CREATE FULLTEXT INDEX problem_fulltext IF NOT EXISTS
 FOR (p:Problem) ON EACH [p.name, p.description, p.symptoms];
+
+CREATE FULLTEXT INDEX theory_fulltext IF NOT EXISTS
+FOR (t:Theory) ON EACH [t.name, t.description, t.key_figures];
+
+CREATE FULLTEXT INDEX cognitiveprocess_fulltext IF NOT EXISTS
+FOR (cp:CognitiveProcess) ON EACH [cp.name, cp.description];
+
+CREATE FULLTEXT INDEX keyinsight_fulltext IF NOT EXISTS
+FOR (ki:KeyInsight) ON EACH [ki.name, ki.description];
+
+CREATE FULLTEXT INDEX researchfinding_fulltext IF NOT EXISTS
+FOR (rf:ResearchFinding) ON EACH [rf.name, rf.description];

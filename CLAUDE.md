@@ -11,7 +11,7 @@
 - 这是 AI 助手介入项目的**唯一全局规则与入口**。
 - 系统架构、业务逻辑、配置细节等所有底层文档统一存放在 `.ai/` 目录下。
 - 任何系统级架构改动，必须同步更新 `.ai/` 目录下的相应子文件。
-- 除 `CLAUDE.md` 和 `.ai/` 目录外，其他文档（如 `docs/`）可能随时过期，不作为权威参考。
+- 除 `CLAUDE.md` 和 `.ai/` 目录外，其他文档（如 `docs/`）可能随时过期，不作为权威参考。设计提案类文档（如 `docs/architecture/`）明确标注实施状态后方可使用。
 
 ---
 
@@ -26,6 +26,7 @@
 | **快速逻辑定位** | `.ai/business_logic_map.md` | 各大业务模块（Agent/RAG/基建/测试）的核心逻辑概述与具体代码文件入口。 |
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
 | **知识问答模块** | `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含知识图谱（graph/）、13个业务节点、子 Agent、工具集 |
+| **知识问答架构重设计** | `docs/architecture/00-审查报告与方案概述.md` | 🟡 设计提案（0% 已实施）— Neo4j 知识图谱 + Agent 三层改造方案。**非权威现状**，实施后应迁移至 `.ai/`。 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
 | **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |

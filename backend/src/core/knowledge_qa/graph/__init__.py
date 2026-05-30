@@ -27,10 +27,16 @@ from src.core.knowledge_qa.graph.traversal import (
 from src.core.knowledge_qa.graph.pipeline import build_graph_for_book
 from src.core.knowledge_qa.graph.global_rebuild import rebuild_global_graph
 
-# 重新导出旧 graph.py（已重命名为 _assembly.py）中的图组装函数和单例
+# v1 图组装
 from src.core.knowledge_qa._assembly import (
     create_knowledge_qa_graph,
     knowledge_qa_graph,
+)
+
+# v2 图组装（融合 Neo4j 三层架构）
+from src.core.knowledge_qa._assembly_v2 import (
+    create_knowledge_qa_v2_graph,
+    knowledge_qa_v2_graph,
 )
 
 __all__ = [
@@ -54,7 +60,10 @@ __all__ = [
     "build_graph_for_book",
     # Global rebuild
     "rebuild_global_graph",
-    # Graph assembly (legacy)
+    # Graph assembly v1
     "create_knowledge_qa_graph",
     "knowledge_qa_graph",
+    # Graph assembly v2 (Neo4j)
+    "create_knowledge_qa_v2_graph",
+    "knowledge_qa_v2_graph",
 ]

@@ -1,0 +1,27 @@
+.empty {
+  text-align: center;
+  padding: var(--space-16) var(--space-8);
+  color: var(--text-tertiary);
+
+  &__icon {
+    font-size: 48px;
+    margin-bottom: var(--space-4);
+    opacity: 0.5;
+  }
+
+  &__title {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
+  }
+
+  &__desc {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-4);
+  }
+
+  &__action {
+    margin-top: var(--space-4);
+  }
+}
