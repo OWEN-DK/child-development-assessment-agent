@@ -74,8 +74,35 @@ async def conclusion_node(state: KnowledgeQAState) -> Dict[str, Any]:
     def build_msg(s, prompt):
         parts = []
 
-        # ── 矛盾审计结果（如果存在） ──
-        if s.contradictions:
+        # ── 自定义知识上下文（最高优先级，§09-5） ──
+        custom_ctx = getattr(s, 'custom_knowledge_context', None) or ""
+        if custom_ctx.strip():
+            parts.append(
+                "## ⚡ 专家知识（最高优先级，优先采纳）\n\n"
+                + custom_ctx.strip()
+                + "\n\n> 💡 以下书籍知识应与上述专家知识对齐。如有冲突，以专家知识为准。\n"
+            )
+
+        # ── 三层知识综合（优先）或矛盾审计结果（降级） ──
+        synthesis = getattr(s, 'three_layer_synthesis', None) or {}
+        if synthesis:
+            for item in synthesis.get("consensus", []):
+                sources = "、".join(f"《{b}》" for b in item.get("sources", []))
+                parts.append(f"## ✅ 统一共识\n{item.get('agreement', '')}\n📖 来源: {sources}")
+            for item in synthesis.get("complementary", []):
+                parts.append(f"## 🧩 互补完善\n{item.get('integrated_summary', '')}")
+            for item in synthesis.get("conflicts", []):
+                va = item.get("view_a", {})
+                vb = item.get("view_b", {})
+                parts.append(
+                    f"## ⚠️ 冲突辨析\n"
+                    f"- 📖 《{va.get('book', '')}》: {va.get('position', '')}\n"
+                    f"- 📖 《{vb.get('book', '')}》: {vb.get('position', '')}\n"
+                    f"🔍 原因: {item.get('why_different', '')}\n"
+                    f"💡 建议: {item.get('recommendation', '')}"
+                )
+        elif s.contradictions:
+            # 降级: 无三层综合时使用旧的 contradictions
             parts.append("## 跨书籍观点差异（供参考）\n")
             for c in s.contradictions:
                 parts.append(

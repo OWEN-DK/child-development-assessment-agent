@@ -50,7 +50,12 @@ interface CurationState {
   generateError: string;
   generateBookTitle: string;
   generateChapters: { title: string; status: 'pending' | 'generating' | 'completed' | 'failed' }[];
-  startGeneration: (bookId: string) => void;
+  generatePhase: string;
+  generatePhaseLabel: string;
+  startGeneration: (bookId: string) => Promise<void>;
+  resumeGeneration: (bookId: string) => void;
+  _connectSSE: (bookId: string, onNotFound?: () => void) => void;
+  cancelGeneration: (bookId: string) => Promise<void>;
 }
 
 export const useCurationStore = create<CurationState>((set, get) => ({
@@ -169,30 +174,37 @@ export const useCurationStore = create<CurationState>((set, get) => ({
   generateError: '',
   generateBookTitle: '',
   generateChapters: [],
-  startGeneration: (bookId: string) => {
-    set({ generating: true, generateProgress: 0, generateStatus: 'generating', generateError: '', generateBookTitle: '', generateChapters: [] });
-
-    // Start generation
-    curationApi.startGeneration(bookId).catch(() => {
-      set({ generateStatus: 'failed', generateError: '启动生成失败', generating: false });
-    });
-
-    // Connect SSE
+  generatePhase: '',
+  generatePhaseLabel: '',
+  /** 内部：建立 SSE 连接，绑定消息/错误处理 */
+  _connectSSE: (bookId: string, onNotFound?: () => void) => {
     const url = curationApi.getGenerationProgressUrl(bookId);
     const eventSource = new EventSource(url);
 
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        const updates: any = {};
+        // 如果后端返回未找到，执行回调（用于判断是否需要启动生成）
+        if (data.status === 'not_found') {
+          eventSource.close();
+          onNotFound?.();
+          return;
+        }
+        const updates: any = { generating: true };
         if (data.progress !== undefined) updates.generateProgress = data.progress;
         if (data.book_title) updates.generateBookTitle = data.book_title;
         if (data.chapters && Array.isArray(data.chapters)) updates.generateChapters = data.chapters;
+        if (data.phase !== undefined) updates.generatePhase = data.phase;
+        if (data.phase_label !== undefined) updates.generatePhaseLabel = data.phase_label;
+        if (data.status === 'generating') {
+          updates.generateStatus = 'generating';
+        }
         if (data.status === 'completed') {
           updates.generateStatus = 'completed';
           updates.generating = false;
           updates.generateProgress = 100;
           eventSource.close();
+          get().loadDraft(bookId);
         }
         if (data.status === 'failed') {
           updates.generateStatus = 'failed';
@@ -207,8 +219,6 @@ export const useCurationStore = create<CurationState>((set, get) => ({
     eventSource.onerror = () => {
       eventSource.close();
       if (get().generating) {
-        // SSE 连接断开时，检查是否已收到 completed 事件
-        // 如果进度已达 100% 则视为完成，否则视为失败
         const { generateProgress } = get();
         if (generateProgress >= 100) {
           set({ generateStatus: 'completed', generating: false });
@@ -217,5 +227,38 @@ export const useCurationStore = create<CurationState>((set, get) => ({
         }
       }
     };
+  },
+
+  /** 页面挂载时恢复已有任务的 SSE 连接（不清空已有进度） */
+  resumeGeneration: (bookId: string) => {
+    get()._connectSSE(bookId, () => {
+      // SSE 返回 not_found，说明没有运行中的任务，重置为 idle
+      set({ generating: false, generateStatus: 'idle' });
+    });
+  },
+
+  /** 启动新生成任务并连接 SSE */
+  startGeneration: async (bookId: string) => {
+    set({ generating: true, generateProgress: 0, generateStatus: 'generating', generateError: '', generateBookTitle: '', generateChapters: [], generatePhase: '', generatePhaseLabel: '' });
+
+    try {
+      await curationApi.startGeneration(bookId);
+    } catch {
+      set({ generateStatus: 'failed', generateError: '启动生成失败', generating: false });
+      return;
+    }
+
+    get()._connectSSE(bookId);
+  },
+  cancelGeneration: async (bookId: string) => {
+    try {
+      await curationApi.cancelGeneration(bookId);
+    } catch {
+      // ignore cancel errors
+    }
+    const { generating } = get();
+    if (generating) {
+      set({ generating: false, generateStatus: 'failed', generateError: '用户取消' });
+    }
   },
 }));

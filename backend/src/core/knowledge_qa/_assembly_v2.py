@@ -3,7 +3,7 @@
 图结构变更（相对 v1）:
 1. 新增 query_neo4j_graph 节点（match_books → prefetch_context 之间）
 2. S1-S4 节点替换为 v2 变体（融合 Neo4j 知识）
-3. contradiction_audit 替换为 v2 变体（优先使用 Neo4j 跨书关系）
+3. contradiction_audit 替换为 knowledge_synthesis_v2（三层知识综合）
 4. NEO4J_ENABLED=False 时自动跳过 query_neo4j_graph，行为与 v1 一致
 
 降级路径:
@@ -24,7 +24,8 @@ from src.core.knowledge_qa.nodes_v2.plan_outline_v2 import plan_outline_v2_node
 from src.core.knowledge_qa.nodes_v2.plan_expand_parallel_v2 import plan_expand_parallel_v2_node
 from src.core.knowledge_qa.nodes.plan_assemble import plan_assemble_node
 from src.core.knowledge_qa.nodes.generate_s4_citations import generate_s4_citations_node
-from src.core.knowledge_qa.nodes_v2.contradiction_audit_v2 import contradiction_audit_v2_node
+from src.core.knowledge_qa.nodes.fast_knowledge_match import fast_knowledge_match_node
+from src.core.knowledge_qa.nodes_v2.knowledge_synthesis_v2 import knowledge_synthesis_v2_node
 from src.core.knowledge_qa.nodes.conclusion import conclusion_node
 from src.core.knowledge_qa.nodes.verify_citations import verify_citations_node
 from src.core.knowledge_qa.nodes.finalize import finalize_node
@@ -34,9 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 def _route_after_match_books(state: KnowledgeQAState) -> str:
-    """匹配到书籍 → 继续流水线；未匹配 → 直接结束。"""
+    """匹配到书籍 → 先走自定义知识匹配；未匹配 → 直接结束。"""
     if state.matched_book_ids:
-        return "query_neo4j_graph"
+        return "fast_knowledge_match"
     return "finalize"
 
 
@@ -80,7 +81,8 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
     workflow.add_node("recommend_types_v2", recommend_types_v2_node)
     workflow.add_node("plan_outline_v2", plan_outline_v2_node)
     workflow.add_node("plan_expand_parallel_v2", plan_expand_parallel_v2_node)
-    workflow.add_node("contradiction_audit_v2", contradiction_audit_v2_node)
+    workflow.add_node("fast_knowledge_match", fast_knowledge_match_node)
+    workflow.add_node("knowledge_synthesis_v2", knowledge_synthesis_v2_node)
 
     workflow.set_entry_point("match_books")
 
@@ -88,10 +90,12 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
     workflow.add_conditional_edges(
         "match_books",
         _route_after_match_books,
-        {"query_neo4j_graph": "query_neo4j_graph", "finalize": "finalize"},
+        {"fast_knowledge_match": "fast_knowledge_match", "finalize": "finalize"},
     )
 
     # v2 主链路
+    # fast_knowledge_match → query_neo4j_graph（无条件，不短路）
+    workflow.add_edge("fast_knowledge_match", "query_neo4j_graph")
     workflow.add_edge("query_neo4j_graph", "prefetch_context")
     workflow.add_edge("prefetch_context", "analyze_child_v2")
     workflow.add_edge("analyze_child_v2", "identify_problems_v2")
@@ -110,8 +114,9 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
         },
     )
 
-    workflow.add_edge("generate_s4_citations", "contradiction_audit_v2")
-    workflow.add_edge("contradiction_audit_v2", "conclusion")
+    # knowledge_synthesis_v2 替代 contradiction_audit_v2
+    workflow.add_edge("generate_s4_citations", "knowledge_synthesis_v2")
+    workflow.add_edge("knowledge_synthesis_v2", "conclusion")
     workflow.add_edge("conclusion", "verify_citations")
     workflow.add_edge("verify_citations", "finalize")
     workflow.add_edge("finalize", END)

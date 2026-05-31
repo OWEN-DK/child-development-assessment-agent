@@ -1,6 +1,8 @@
 # 实施方案代码
 
 > 本目录包含各阶段实施方案的完整代码。代码设计为可直接放置到项目对应路径中使用。
+>
+> **📊 实施进度**: [PROGRESS.md](PROGRESS.md)
 
 ## 目录结构
 
@@ -100,4 +102,113 @@ python phase2_md_toolchain/import_md.py --file reviewed.md
 # Phase 4: 验证
 pytest phase4_verification/test_degradation.py -v
 python phase4_verification/perf_test.py --concurrency 100
+```
+
+---
+
+## D2G 流水线（替换原 phase2_md_toolchain）
+
+> **设计文档**: [`../07-知识图谱直提方案-D2G.md`](../07-知识图谱直提方案-D2G.md)
+
+```
+phase2_d2g_pipeline/                   ← D2G: 书→知识图谱直提
+├── models.py                          ← Pydantic 数据模型（实体/关系/图质量/配置）
+├── book_reader.py                     ← Phase 0: 全书深度阅读
+├── chapter_extractor.py               ← Phase 1: 逐章 3 轮聚焦提取
+├── long_chapter.py                    ← 长章节分段处理（滑窗 + 合并）
+├── entity_resolver.py                 ← Phase 2: 增量实体消歧
+├── master_graph.py                    ← 内存主图（NetworkX 封装）
+├── review_md_generator.py             ← 审核 MD 生成（从图反向生成）
+├── graph_quality.py                   ← Phase 3: 图质量审计（纯程序化）
+├── graph_committer.py                 ← Phase 4: 入库 Neo4j
+└── book_pipeline.py                   ← 流水线编排（端到端流程）
+```
+
+### 代码放置映射
+
+| 本目录文件 | 项目目标路径 |
+|-----------|------------|
+| `phase2_d2g_pipeline/models.py` | `backend/src/core/knowledge_qa/d2g/models.py` |
+| `phase2_d2g_pipeline/book_reader.py` | `backend/src/core/knowledge_qa/d2g/book_reader.py` |
+| `phase2_d2g_pipeline/chapter_extractor.py` | `backend/src/core/knowledge_qa/d2g/chapter_extractor.py` |
+| `phase2_d2g_pipeline/long_chapter.py` | `backend/src/core/knowledge_qa/d2g/long_chapter.py` |
+| `phase2_d2g_pipeline/entity_resolver.py` | `backend/src/core/knowledge_qa/d2g/entity_resolver.py` |
+| `phase2_d2g_pipeline/master_graph.py` | `backend/src/core/knowledge_qa/d2g/master_graph.py` |
+| `phase2_d2g_pipeline/review_md_generator.py` | `backend/src/core/knowledge_qa/d2g/review_md_generator.py` |
+| `phase2_d2g_pipeline/graph_quality.py` | `backend/src/core/knowledge_qa/d2g/graph_quality.py` |
+| `phase2_d2g_pipeline/graph_committer.py` | `backend/src/core/knowledge_qa/d2g/graph_committer.py` |
+| `phase2_d2g_pipeline/book_pipeline.py` | `backend/src/core/knowledge_qa/d2g/book_pipeline.py` |
+
+### 替换关系（原 phase2_md_toolchain → D2G）
+
+| 原文件 | D2G 替换 | 变更说明 |
+|--------|---------|---------|
+| `md_generator.py` | `chapter_extractor.py` | 单次 LLM → 3 轮聚焦提取 |
+| `md_parser.py` | `graph_builder.py`（内置 `master_graph.py`） | MD 解析 → Pydantic 直接建图 |
+| `aggregator.py` | `entity_resolver.py` | 同名合并 → embedding + LLM 消歧 |
+| `md_renderer.py` | `review_md_generator.py` | 渲染 MD → 从图反向生成审核 MD |
+| `generate_draft.py` | `book_pipeline.py` | 新 5 阶段流程编排 |
+
+
+---
+
+## 自定义知识 + 三层综合（Phase 3）
+
+> **设计文档**: [`../09-自定义知识匹配方案.md`](../09-自定义知识匹配方案.md)
+
+```
+phase3_custom_knowledge/               ← 自定义知识匹配 + 三层知识综合
+├── custom_knowledge_repository.py     ← MySQL 索引 CRUD + Neo4j CustomRule 双写
+├── custom_knowledge_service.py        ← 三通道匹配引擎 + 上传解析 + LLM 关键词生成
+├── custom_knowledge_controller.py     ← REST API（6 端点）
+├── fast_knowledge_match.py            ← LangGraph 节点: 自定义知识快速匹配
+├── knowledge_synthesis_v2.py          ← LangGraph 节点: 三层知识综合
+├── schema_changes.py                  ← State + Assembly + 现有节点修改参考
+└── migration.sql                      ← MySQL migration
+```
+
+### 代码放置映射
+
+| 本目录文件 | 项目目标路径 |
+|-----------|------------|
+| `phase3_custom_knowledge/custom_knowledge_repository.py` | `backend/src/repository/custom_knowledge_repository.py` |
+| `phase3_custom_knowledge/custom_knowledge_service.py` | `backend/src/service/custom_knowledge_service.py` |
+| `phase3_custom_knowledge/custom_knowledge_controller.py` | `backend/src/controller/custom_knowledge_controller.py` |
+| `phase3_custom_knowledge/fast_knowledge_match.py` | `backend/src/core/knowledge_qa/nodes/fast_knowledge_match.py` |
+| `phase3_custom_knowledge/knowledge_synthesis_v2.py` | `backend/src/core/knowledge_qa/nodes_v2/knowledge_synthesis_v2.py` |
+| `phase3_custom_knowledge/migration.sql` | `backend/migrations/20260531_create_custom_knowledge_index.sql` |
+| `phase3_custom_knowledge/schema_changes.py` | 仅作参考，按注释修改对应文件 |
+
+### 需修改的现有文件
+
+| 文件 | 变更 | 参考 |
+|------|------|------|
+| `backend/src/schemas/knowledge_qa.py` | 新增 4 个 State 字段 | `schema_changes.py` §1 |
+| `backend/src/core/knowledge_qa/_assembly_v2.py` | 新增 2 节点 + 路由变更 | `schema_changes.py` §2 |
+| `backend/src/core/knowledge_qa/nodes/prefetch_context.py` | 删除 skip + 增强 question | `schema_changes.py` §3 |
+| `backend/src/core/knowledge_qa/nodes_v2/query_neo4j_graph.py` | 增强 s2_problems | `schema_changes.py` §4 |
+| `backend/src/core/knowledge_qa/nodes/base.py` | 新增 custom_knowledge_context 参数 | `schema_changes.py` §5 |
+| `backend/src/core/knowledge_qa/nodes/conclusion.py` | 注入三层综合 | `schema_changes.py` §6 |
+| `backend/src/server.py` | 注册 CustomKnowledgeController | — |
+
+### 使用方式
+
+```bash
+# 1. 执行 migration
+mysql -u root -p < phase3_custom_knowledge/migration.sql
+
+# 2. 部署新文件（按放置映射复制到 backend/src/）
+
+# 3. 修改现有文件（按 schema_changes.py 逐项修改）
+
+# 4. 重启服务
+
+# 5. 测试上传
+curl -X POST http://localhost:8000/api/v1/custom-knowledge/upload \
+  -F "files=@ADHD运动干预原则.md"
+
+# 6. 测试匹配
+curl -X POST http://localhost:8000/api/v1/custom-knowledge/match \
+  -H "Content-Type: application/json" \
+  -d '{"question": "我家孩子注意力不集中，适合什么运动？"}'
 ```

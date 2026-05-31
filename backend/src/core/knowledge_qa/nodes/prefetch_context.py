@@ -22,8 +22,9 @@ async def prefetch_context_node(state: KnowledgeQAState) -> Dict[str, Any]:
     """知识上下文预取：match_books → LazyGraphRAG 遍历 → knowledge_context"""
     await push_progress("prefetch_context", "正在预取知识上下文…")
 
-    if state.knowledge_context:
-        return {"current_step": ["prefetch_context_skipped"]}
+    # 不再跳过: 自定义知识命中后 knowledge_context 可能已有内容，但 LazyGraphRAG 仍需补充
+    # if state.knowledge_context:
+    #     return {"current_step": ["prefetch_context_skipped"]}
 
     book_ids = state.matched_book_ids
     if not book_ids:
@@ -31,7 +32,7 @@ async def prefetch_context_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     try:
         result = await asyncio.wait_for(
-            _do_prefetch(state.question, book_ids),
+            _do_prefetch(state.question, book_ids, getattr(state, "custom_knowledge_entities", None)),
             timeout=PREFETCH_TIMEOUT_SECONDS,
         )
         if result:
@@ -48,7 +49,7 @@ async def prefetch_context_node(state: KnowledgeQAState) -> Dict[str, Any]:
     return {"knowledge_context": "", "current_step": ["prefetch_context_empty"]}
 
 
-async def _do_prefetch(question: str, book_ids: list[str]) -> Dict[str, Any] | None:
+async def _do_prefetch(question: str, book_ids: list[str], custom_entities: list[str] = None) -> Dict[str, Any] | None:
     """执行实际的社区树遍历和知识上下文构建。
 
     所有图谱数据访问通过 HTTP 调用 RAG 服务（不直接访问数据库），
@@ -73,8 +74,11 @@ async def _do_prefetch(question: str, book_ids: list[str]) -> Dict[str, Any] | N
     for book_id in ready_ids:
         roots = await community_repo.get_roots(scope="book", book_id=book_id)
         for root in roots:
+            enhanced_q = question
+            if custom_entities:
+                enhanced_q = question + " " + " ".join(custom_entities[:5])
             hits = await explore_community_tree(
-                question=question,
+                question=enhanced_q,
                 root_id=root.node_id,
                 community_repo=community_repo,
                 max_tokens=24000,  # 2× 默认值，更深遍历以覆盖更多关联实体

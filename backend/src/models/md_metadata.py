@@ -26,6 +26,7 @@ class MDMetadata(Base):
     current_version_id = Column(String(36), nullable=True)  # → MDVersion.id
     version = Column(Integer, default=1, comment="当前版本号")
     status = Column(String(16), default="draft")  # draft / reviewed / published / generating / failed
+    file_hash = Column(String(64), nullable=True, comment="源文件哈希值")
     bind_source = Column(String(32), default="kb_bind", comment="来源: kb_bind=从知识库绑定, direct=直接上传")
     total_entities = Column(Integer, default=0)
     total_claims = Column(Integer, default=0)

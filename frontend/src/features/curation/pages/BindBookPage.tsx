@@ -65,7 +65,7 @@ export const BindBookPage: React.FC = () => {
     <div className={styles['bind-book-page']}>
       {/* 面包屑 */}
       <div className={styles.breadcrumb}>
-        <a onClick={() => navigate('/curation')}>📚 知识管理</a>
+        <a onClick={() => navigate('/curation/books')}>📚 书籍管理</a>
         <span> / </span>
         <span>从知识库绑定</span>
       </div>

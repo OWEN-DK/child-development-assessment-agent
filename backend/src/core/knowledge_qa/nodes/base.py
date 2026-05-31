@@ -516,11 +516,15 @@ def _build_full_user_message(
     user_message_from_template: str,
     search_context: str,
     previous_sections: Dict[int, SectionOutput],
-    knowledge_context: str,
+    custom_knowledge_context: str = "",
+    knowledge_context: str = "",
     exercise_context: str = "",
 ) -> str:
-    """构建完整的 user message：模板内容 + 搜索上下文 + 前序节 + 运动清单约束(S3/S4)。"""
+    """构建完整的 user message：自定义知识 + 模板内容 + 搜索上下文 + 前序节 + 运动清单约束(S3/S4)。"""
     parts = [user_message_from_template]
+
+    if custom_knowledge_context:
+        parts.append(f"\n\n{custom_knowledge_context}")
 
     if search_context and search_context != "（未搜索到相关内容）":
         parts.append(f"\n\n## 知识库检索结果\n{search_context}")
@@ -731,6 +735,7 @@ async def _run_section_node(
             user_message_from_template=user_message,
             search_context=search_context,
             previous_sections=state.sections,
+            custom_knowledge_context=getattr(state, "custom_knowledge_context", "") or "",
             knowledge_context=state.knowledge_context or "",
             exercise_context=state.exercise_context if section_index == 3 else "",
         )

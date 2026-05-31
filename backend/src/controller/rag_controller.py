@@ -1,6 +1,7 @@
 """RAG 文档上传控制器（已迁移到新任务状态服务）"""
 
 import asyncio
+import hashlib
 import os
 import shutil
 import uuid
@@ -24,13 +25,56 @@ from src.utils.exceptions import (ChunkNotFoundException,
                                    UnsupportedFileTypeException)
 from src.utils.logger import logger
 
+
+
+async def _update_source_file_path(file_hash: str, new_path: str) -> None:
+    """更新 source_documents 表中的 file_path 字段"""
+    from src.models.document import SourceDocument
+    from src.core.database import async_session_factory
+    from sqlalchemy import update as sa_update
+
+    async with async_session_factory() as session:
+        stmt = (
+            sa_update(SourceDocument)
+            .where(SourceDocument.file_hash == file_hash)
+            .values(file_path=new_path)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def _delete_source_document_by_title(title: str) -> bool:
+    """从 source_documents 表中按标题删除文档（回退方案）"""
+    from src.models.document import SourceDocument
+    from src.core.database import async_session_factory
+    from sqlalchemy import select, delete as sa_delete
+
+    async with async_session_factory() as session:
+        # 先查找匹配的记录
+        result = await session.execute(
+            select(SourceDocument).where(SourceDocument.title == title)
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            return False
+
+        # 删除记录
+        await session.execute(
+            sa_delete(SourceDocument).where(SourceDocument.id == doc.id)
+        )
+        await session.commit()
+        return True
+
 TASK_TYPE = "upload"
 UPLOAD_DIR = settings.rag_temp_upload_dir
+BOOKS_DIR = settings.rag_books_dir
 MAX_CONCURRENT_TASKS = settings.rag_upload_max_concurrent_tasks
 
-# 确保上传目录存在
+# 确保上传目录和永久存储目录存在
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
+if not os.path.exists(BOOKS_DIR):
+    os.makedirs(BOOKS_DIR)
 
 # 全局协程信号量，限制并发数（懒加载，确保绑定到正确的事件循环）
 _semaphore: asyncio.Semaphore | None = None
@@ -130,9 +174,19 @@ async def process_book_background(task_id: str, file_path: str, original_filenam
             # 清理取消信号
             service.cleanup_cancellation_signal(task_id, TASK_TYPE)
 
-            # 清理临时文件
+            # 移动文件到永久存储（而非删除），供后续 D2G 等流程使用
             if os.path.exists(file_path):
-                os.remove(file_path)
+                file_ext = os.path.splitext(original_filename)[1]
+                permanent_name = f"{uuid.uuid4()}{file_ext}"
+                permanent_path = os.path.join(BOOKS_DIR, permanent_name)
+                shutil.move(file_path, permanent_path)
+                # 更新 source_documents 的 file_path 为永久路径
+                try:
+                    file_hash = hashlib.md5(open(permanent_path, 'rb').read()).hexdigest()
+                    await _update_source_file_path(file_hash, permanent_path)
+                except Exception as e:
+                    logger.warning("更新 source_documents.file_path 失败: %s", e)
+                logger.info("文件已移至永久存储: %s", permanent_path)
 
             logger.info(f"Task {task_id} completed successfully")
 
@@ -372,7 +426,12 @@ async def get_rag_status():
 async def delete_document(filename: str):
     """删除指定文档及其索引"""
     # 删除文档记录
-    await rag_service.delete_document(filename)
+    success = await rag_service.delete_document(filename)
+    if not success:
+        # 回退：直接从 source_documents 按标题删除
+        fallback_success = await _delete_source_document_by_title(filename)
+        if not fallback_success:
+            raise ResourceNotFoundException(message=f"文档 {filename} 未找到或删除失败")
     
     return APIResponse.success(message=f"Document {filename} deleted.")
 

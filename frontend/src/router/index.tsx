@@ -10,6 +10,7 @@ import {
   DraftEditorPage,
   GraphPage,
   PendingQueuePage,
+  CustomKnowledgePage,
 } from '@features/curation';
 import { KnowledgeBasePage } from '../features/documents';
 import { KnowledgeSearchPage } from '../features/knowledge';
@@ -137,6 +138,10 @@ export const router = createBrowserRouter([
       {
         path: 'curation/pending',
         element: <PendingQueuePage />,
+      },
+      {
+        path: 'curation/custom-knowledge',
+        element: <CustomKnowledgePage />,
       },
     ],
   },

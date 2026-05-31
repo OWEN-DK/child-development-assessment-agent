@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button, App, Modal, Spin } from 'antd';
 import {
   SaveOutlined,
@@ -12,7 +12,6 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useDraftEditor } from '../hooks/useDraftEditor';
-import { curationApi } from '../api/curationApi';
 import { EntityNav } from '../components/EntityNav';
 import { InfoPanel } from '../components/InfoPanel';
 import styles from './DraftEditorPage.module.scss';
@@ -36,19 +35,6 @@ export const DraftEditorPage: React.FC = () => {
 
   const location = useLocation();
   const isCompareMode = location.pathname.endsWith('/compare');
-  const [crossBookRelations, setCrossBookRelations] = useState<any[]>([]);
-  const [crossBookLoading, setCrossBookLoading] = useState(false);
-
-  // Load cross-book data in compare mode
-  useEffect(() => {
-    if (isCompareMode && bookId) {
-      setCrossBookLoading(true);
-      curationApi.getCrossBookPairs([bookId])
-        .then((res) => setCrossBookRelations(res.relations || []))
-        .catch(() => setCrossBookRelations([]))
-        .finally(() => setCrossBookLoading(false));
-    }
-  }, [isCompareMode, bookId]);
 
   const {
     draft,
@@ -61,6 +47,8 @@ export const DraftEditorPage: React.FC = () => {
     activeEntity,
     totalEntities,
     confirmedCount,
+    crossBookRelations,
+    crossBookLoading,
     setContent,
     save,
     markReviewed,

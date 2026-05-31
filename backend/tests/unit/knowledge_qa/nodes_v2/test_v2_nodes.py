@@ -189,7 +189,7 @@ class TestAssemblyV2:
             "match_books", "query_neo4j_graph", "prefetch_context",
             "analyze_child_v2", "identify_problems_v2", "recommend_types_v2",
             "plan_outline_v2", "plan_expand_parallel_v2", "plan_assemble",
-            "generate_s4_citations", "contradiction_audit_v2",
+            "generate_s4_citations", "fast_knowledge_match", "knowledge_synthesis_v2",
             "conclusion", "verify_citations", "finalize",
         }
         # __start__ 和 __end__ 是 LangGraph 自动添加的

@@ -81,21 +81,31 @@ class DocumentManager:
 
     async def _sync_to_source_documents(self, doc_dict: dict) -> None:
         """将已索引文档同步到 source_documents 表"""
-        import os
+        import os, re
         from src.models.document import DocumentStatus
 
         file_name = doc_dict["file_name"]
+        # 规范化文件名: 修复 'name .ext' → 'name.ext' 等空格问题
+        file_name = re.sub(r'\s+\.', '.', file_name)
+        file_name = re.sub(r'\.\s+', '.', file_name)
         file_hash = doc_dict["file_hash"]
         ext = os.path.splitext(file_name)[1].lstrip(".").lower() or "txt"
         metadata = doc_dict.get("metadata", {}) or {}
         if not isinstance(metadata, dict):
             metadata = {}
 
+        title = metadata.get("title", file_name)
+        # 规范化标题: 修复 'name .ext' → 'name.ext'
+        title = re.sub(r'\s+\.', '.', title)
+        title = re.sub(r'\.\s+', '.', title)
+        # 优先使用 metadata 中的实际文件路径（含 UUID），回退到原始文件名
+        actual_path = metadata.get("file_path", file_name)
+
         source_data = {
             "file_hash": file_hash,
-            "title": metadata.get("title", file_name),
+            "title": title,
             "file_type": ext,
-            "file_path": file_name,
+            "file_path": actual_path,
             "page_count": metadata.get("total_pages"),
             "chapter_count": metadata.get("chapter_count"),
             "status": DocumentStatus.READY,

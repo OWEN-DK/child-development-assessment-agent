@@ -61,6 +61,81 @@ async def detect_cross_book_relations(
         WHERE ae.book_id <> $book_id
         RETURN ae.name AS name, ae.entity_type AS type,
                ae.description AS desc, ae.book_id AS book_id
+        UNION ALL
+        MATCH (n:Problem)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Solution)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:BrainRegion)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Risk)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Exercise)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:RootCause)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Prescription)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:ChildProfile)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:CognitiveProcess)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Theory)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Mechanism)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:DevelopmentalStage)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:Strategy)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:KeyInsight)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
+        UNION ALL
+        MATCH (n:ResearchFinding)
+        WHERE n.book_id <> $book_id
+        RETURN n.name AS name, n.entity_type AS type,
+               n.description AS desc, n.book_id AS book_id
     """, book_id=new_book_id).data()
 
     if not existing:
@@ -145,3 +220,50 @@ async def _llm_judge(
     except Exception as e:
         logger.warning("LLM 跨书判断失败: %s", e)
         return None
+
+
+# ── Phase 5 跨书关系检测（§08-5.3） ─────────────────────────
+
+
+async def detect_cross_book_relations_for_same_as(
+    neo4j_session,
+    llm_client: LLMClient,
+) -> list[CrossBookRelation]:
+    """检测已有 SAME_AS 边的实体对之间的跨书关系类型。
+
+    Phase 5 已完成相似实体发现和 SAME_AS 建边，
+    本函数只需对这些 SAME_AS 实体对检测 CONSENSUS/COMPLEMENTS/CONFLICTS。
+    """
+    pairs = neo4j_session.run("""
+        MATCH (a)-[r:SAME_AS]->(b)
+        WHERE a.book_id <> b.book_id
+          AND NOT coalesce(r.revoked, false)
+        RETURN a.name AS name_a, a.description AS desc_a, a.book_id AS book_a,
+               b.name AS name_b, b.description AS desc_b, b.book_id AS book_b,
+               r.confidence AS similarity
+    """).data()
+
+    if not pairs:
+        logger.info("无 SAME_AS 实体对，跳过跨书关系检测")
+        return []
+
+    logger.info("跨书关系检测: %d 个 SAME_AS 候选对", len(pairs))
+
+    relations = []
+    for pair in pairs:
+        new_ent = {
+            "name": pair["name_a"],
+            "description": pair.get("desc_a", ""),
+            "book_id": pair.get("book_a", ""),
+        }
+        old_ent = {
+            "name": pair["name_b"],
+            "desc": pair.get("desc_b", ""),
+            "book_id": pair.get("book_b", ""),
+        }
+        relation = await _llm_judge(new_ent, old_ent, llm_client)
+        if relation:
+            relations.append(relation)
+
+    logger.info("跨书关系检测完成: %d / %d 个确认", len(relations), len(pairs))
+    return relations

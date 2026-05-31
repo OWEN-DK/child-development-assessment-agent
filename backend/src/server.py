@@ -234,6 +234,23 @@ def create_app() -> FastAPI:
             _curation_controller.register(_curation_router)
             app.include_router(_curation_router)
             logger.info("知识审核模块已注册 (Neo4j 已启用)")
+            
+            # 清理残留的 generating 状态（上次异常退出导致）
+            async def _cleanup_stale_generating():
+                try:
+                    from src.core.database import async_session_factory
+                    from sqlalchemy import text
+                    async with async_session_factory() as session:
+                        result = await session.execute(
+                            text("UPDATE md_metadata SET status='failed' WHERE status='generating'")
+                        )
+                        if result.rowcount > 0:
+                            logger.info(f"已重置 {result.rowcount} 条残留 generating 状态为 failed")
+                        await session.commit()
+                except Exception as e:
+                    logger.warning(f"清理残留状态失败（非致命）: {e}")
+            import asyncio
+            asyncio.ensure_future(_cleanup_stale_generating())
         else:
             logger.info("知识审核模块跳过 (Neo4j 未启用)")
     except Exception as e:
@@ -246,6 +263,28 @@ def create_app() -> FastAPI:
     rag_eval_router = APIRouter(prefix="/api/v1/rag/eval", tags=["RAG评估"])
     rag_eval_registry.register_all(rag_eval_router)
     app.include_router(rag_eval_router)
+
+    # 自定义知识 API（§09-7）
+    try:
+        from src.controller.custom_knowledge_controller import CustomKnowledgeController
+        from src.service.custom_knowledge_service import CustomKnowledgeService
+        from src.repository.custom_knowledge_repository import CustomKnowledgeRepository
+        from src.core.database import async_session_factory
+        _ck_neo4j = None
+        try:
+            from src.core.knowledge_qa.neo4j.driver import get_neo4j_driver
+            _ck_neo4j = get_neo4j_driver()
+        except Exception:
+            pass
+        _ck_repo = CustomKnowledgeRepository(async_session_factory, _ck_neo4j)
+        _ck_svc = CustomKnowledgeService(_ck_repo)
+        _ck_controller = CustomKnowledgeController(_ck_svc)
+        _ck_router = APIRouter(prefix="/api/v1/custom-knowledge", tags=["自定义知识"])
+        _ck_controller.register(_ck_router)
+        app.include_router(_ck_router)
+        logger.info("自定义知识模块已注册")
+    except Exception as e:
+        logger.warning(f"自定义知识模块注册失败（非致命）: {e}")
 
     metrics_app = make_asgi_app()
     app.mount("/metrics", metrics_app)

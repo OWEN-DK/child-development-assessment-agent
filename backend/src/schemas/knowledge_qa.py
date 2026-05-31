@@ -709,6 +709,25 @@ class KnowledgeQAState(BaseModel):
         description="Neo4j 知识图谱查询结果 (query_neo4j_graph_node 写入)。keys: exercises, cross_book_relations, problem_context, source_coverage",
     )
 
+
+    # ===== 自定义知识（最高优先级，引导下游搜索） =====
+    custom_knowledge_context: str = Field(
+        default="",
+        description="自定义知识命中后注入的上下文 Markdown (fast_knowledge_match_node 写入)",
+    )
+    custom_knowledge_entities: List[str] = Field(
+        default_factory=list,
+        description="从自定义知识中提取的关键实体名，传递给下游搜索节点作为引导",
+    )
+    fast_knowledge_hit: bool = Field(
+        default=False,
+        description="自定义知识是否命中",
+    )
+    three_layer_synthesis: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="三层知识综合结果 (knowledge_synthesis_v2_node 写入)。keys: consensus, complementary, conflicts",
+    )
+
     class Config:
         arbitrary_types_allowed = True
 

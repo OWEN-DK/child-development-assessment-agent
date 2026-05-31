@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCurationStore } from '../stores/curationStore';
+import { curationApi } from '../api/curationApi';
 import type { EntityItem } from '../types';
 
 const ENTITY_TYPES = ['Problem', 'Solution', 'BrainRegion', 'Exercise', 'Prescription', 'RootCause'];
@@ -27,6 +28,21 @@ export function useDraftEditor(bookId?: string) {
   useEffect(() => {
     if (bookId) loadDraft(bookId);
   }, [bookId, loadDraft]);
+
+  // ── 跨书匹配数据获取（§08-3） ──
+  const [crossBookRelations, setCrossBookRelations] = useState<any[]>([]);
+  const [crossBookLoading, setCrossBookLoading] = useState(false);
+  const isCompareMode = typeof window !== 'undefined' && window.location.pathname.endsWith('/compare');
+
+  useEffect(() => {
+    if (isCompareMode && bookId) {
+      setCrossBookLoading(true);
+      curationApi.getCrossBookPairs([bookId])
+        .then((res: any) => setCrossBookRelations(res.relations || []))
+        .catch(() => setCrossBookRelations([]))
+        .finally(() => setCrossBookLoading(false));
+    }
+  }, [isCompareMode, bookId]);
 
   // Parse entities from MD content
   const parsedEntities = useMemo<EntityItem[]>(() => {
@@ -81,6 +97,8 @@ export function useDraftEditor(bookId?: string) {
     activeEntity,
     totalEntities,
     confirmedCount,
+    crossBookRelations,
+    crossBookLoading,
     setContent: setDraftContent,
     save: saveDraft,
     markReviewed,

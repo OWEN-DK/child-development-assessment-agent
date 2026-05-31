@@ -216,3 +216,96 @@ async def rebuild_global_graph(db_session_factory: async_sessionmaker) -> dict:
         result["error"] = str(e)[:200]
 
     return result
+
+
+# ── embedding 增强合并（§08-6.1 升级） ───────────────────────
+
+async def _merge_entities_with_embedding(
+    all_entities: list,
+    embedding_helper=None,
+    similarity_threshold: float = 0.9,
+) -> list[Entity]:
+    """基于 embedding 相似度的跨书实体合并（替代纯字符串匹配）。
+
+    当 embedding_helper 为 None 时降级为纯字符串匹配。
+    """
+    if not embedding_helper:
+        return _merge_entities_by_name(all_entities)
+
+    # Phase 1: 名称完全匹配的先合并
+    merged = _merge_entities_by_name(all_entities)
+
+    # Phase 2: embedding 相似度匹配
+    if len(merged) < 2:
+        return merged
+
+    # 计算所有实体的 embedding
+    emb_cache: dict[str, list[float]] = {}
+    for e in merged:
+        key = e.name.strip().lower()
+        if key not in emb_cache:
+            try:
+                emb = await embedding_helper.embed_text(f"{e.name} {e.description[:200]}")
+                if emb:
+                    emb_cache[key] = emb
+            except Exception:
+                pass
+
+    # 寻找高相似度对并合并
+    merge_pairs: list[tuple[str, str]] = []
+    for i, e1 in enumerate(merged):
+        key1 = e1.name.strip().lower()
+        emb1 = emb_cache.get(key1)
+        if not emb1:
+            continue
+        for j in range(i + 1, len(merged)):
+            e2 = merged[j]
+            key2 = e2.name.strip().lower()
+            emb2 = emb_cache.get(key2)
+            if not emb2:
+                continue
+            sim = embedding_helper.cosine_similarity(emb1, emb2)
+            if sim >= similarity_threshold:
+                merge_pairs.append((e1.name, e2.name))
+
+    # 执行合并（将 e2 合并到 e1）
+    merge_map: dict[str, str] = {}  # name → canonical_name
+    for name1, name2 in merge_pairs:
+        canonical = merge_map.get(name1, name1)
+        target = merge_map.get(name2, name2)
+        if canonical != target:
+            merge_map[target] = canonical
+
+    if not merge_map:
+        return merged
+
+    # 构建合并后的实体列表
+    result: dict[str, Entity] = {}
+    for e in merged:
+        canonical = merge_map.get(e.name, e.name)
+        if canonical in result:
+            existing = result[canonical]
+            existing.chunk_ids = list(dict.fromkeys(
+                str(c) for c in (existing.chunk_ids or []) + (e.chunk_ids or [])
+            ))
+            if e.aliases:
+                existing.aliases = list(dict.fromkeys(
+                    (existing.aliases or []) + e.aliases
+                ))
+            if e.description and (not existing.description or len(e.description) > len(existing.description)):
+                existing.description = e.description
+        else:
+            result[canonical] = Entity(
+                name=canonical,
+                entity_type=e.entity_type,
+                description=e.description or "",
+                aliases=e.aliases or [],
+                book_id="",
+                chunk_ids=e.chunk_ids or [],
+            )
+
+    logger.info(
+        "embedding 合并: %d → %d 实体 (%d 对合并)",
+        len(merged), len(result), len(merge_pairs),
+    )
+    return list(result.values())

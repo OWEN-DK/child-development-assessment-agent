@@ -51,6 +51,11 @@ export const curationApi = {
     return `/api/v2/curation/books/${bookId}/generate/progress`;
   },
 
+  /** 取消正在进行的生成任务 */
+  cancelGeneration: async (bookId: string): Promise<void> => {
+    await apiClient.post(`/api/v2/curation/books/${bookId}/generate/cancel`);
+  },
+
   /* ===== 草稿 ===== */
 
   /** 获取草稿列表 */
@@ -109,6 +114,46 @@ export const curationApi = {
     const res = await apiClient.get('/api/v2/curation/graph/export-cypher', {
       params: bookId ? { book_id: bookId } : {},
     });
+    return res.data;
+  },
+
+  /** 清空知识图谱 */
+  clearGraph: async (bookId?: string): Promise<{ message: string; deleted_nodes: number }> => {
+    const res = await apiClient.post('/api/v2/curation/graph/clear', null, {
+      params: bookId ? { book_id: bookId } : {},
+    });
+    return res.data;
+  },
+
+  /* ===== 自定义知识 ===== */
+
+  /** 获取自定义知识列表 */
+  listCustomRules: async (params?: { page?: number; page_size?: number }) => {
+    const res = await apiClient.get('/api/v1/custom-knowledge/', { params });
+    return res.data;
+  },
+
+  /** 确认入库自定义规则 */
+  confirmCustomRules: async (rules: any[]) => {
+    const res = await apiClient.post('/api/v1/custom-knowledge/confirm', { rules });
+    return res.data;
+  },
+
+  /** 更新自定义规则 */
+  updateCustomRule: async (ruleId: string, data: Record<string, any>) => {
+    const res = await apiClient.put(`/api/v1/custom-knowledge/${ruleId}`, data);
+    return res.data;
+  },
+
+  /** 删除自定义规则 */
+  deleteCustomRule: async (ruleId: string) => {
+    const res = await apiClient.delete(`/api/v1/custom-knowledge/${ruleId}`);
+    return res.data;
+  },
+
+  /** 测试匹配自定义知识 */
+  matchCustomKnowledge: async (question: string) => {
+    const res = await apiClient.post('/api/v1/custom-knowledge/match', { question });
     return res.data;
   },
 

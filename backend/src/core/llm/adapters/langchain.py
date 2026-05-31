@@ -208,3 +208,60 @@ class LangChainLLMAdapter(LLMService):
             except Exception as e:
                 await writer.record_llm_error(trace_id=trace_id, span_id=span_id, error=str(e))
                 raise
+
+    async def generate_structured(
+        self, prompt: str, schema: type, model: str | None = None,
+    ) -> dict | list | str:
+        """生成结构化输出（d2g 流水线统一接口）。
+
+        与 DashScopeMultiModalAdapter.generate_structured 签名一致，
+        满足 d2g.book_pipeline.LLMClient Protocol。
+        """
+        import json
+        import re
+        from langchain_core.output_parsers import JsonOutputParser
+
+        # DeepSeek JSON 模式要求:
+        #   1. response_format={"type": "json_object"}
+        #   2. prompt 中必须含有 "json" 字样
+        #   3. 给出期望的 JSON 格式样例
+        bound_llm = self.llm.bind(response_format={"type": "json_object"})
+
+        # 注入 JSON 格式指令（含 schema 说明）
+        if schema is not dict:
+            try:
+                parser = JsonOutputParser(pydantic_object=schema)
+                format_instructions = parser.get_format_instructions()
+            except Exception:
+                format_instructions = "请以合法 JSON 格式输出。"
+            enhanced_prompt = f"{prompt}\n\n{format_instructions}"
+        else:
+            enhanced_prompt = f"{prompt}\n\n请以合法 json 格式输出。"
+
+        from langchain_core.messages import HumanMessage
+        lc_msg = HumanMessage(content=enhanced_prompt)
+        raw = await bound_llm.ainvoke([lc_msg])
+        text = (raw.content or "").strip()
+
+        if schema is dict:
+            try:
+                return json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                return text
+
+        # 尝试从 ```json ... ``` 围栏或裸 JSON 中提取
+        for candidate in [text]:
+            fence_match = re.search(r"```(?:json)?\s*\n?(.*?)```", candidate, re.DOTALL)
+            if fence_match:
+                candidate = fence_match.group(1).strip()
+            try:
+                return json.loads(candidate)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        # JSON 解析失败，记录原始响应便于排查
+        logger.warning(
+            "generate_structured JSON 解析失败 (schema=%s), 原始响应前 500 字符: %s",
+            schema.__name__ if hasattr(schema, '__name__') else str(schema),
+            text[:500],
+        )
+        return text

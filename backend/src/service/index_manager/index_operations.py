@@ -107,10 +107,27 @@ class IndexOperations:
         except Exception as e:
             logger.warning(f"级联删除图谱数据失败 (不影响文档删除): {e}")
 
-        # 清理上传的原始文件
+        # 清理上传的原始文件（优先从 source_documents 获取永久路径）
         try:
-            metadata = doc.get("metadata", {}) or {}
-            file_path = metadata.get("file_path", "")
+            from src.models.document import SourceDocument
+            from src.core.database import async_session_factory
+            from sqlalchemy import select
+
+            file_path = ""
+            # 优先从 source_documents 获取永久存储路径
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(SourceDocument.file_path).where(SourceDocument.file_hash == doc["file_hash"])
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    file_path = row
+
+            # 回退到 metadata 中的路径
+            if not file_path:
+                metadata = doc.get("metadata", {}) or {}
+                file_path = metadata.get("file_path", "")
+
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
                 logger.info(f"已清理上传文件: {file_path}")

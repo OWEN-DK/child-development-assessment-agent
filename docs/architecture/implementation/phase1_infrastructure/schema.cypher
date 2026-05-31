@@ -46,3 +46,10 @@ FOR (ki:KeyInsight) ON EACH [ki.name, ki.description];
 
 CREATE FULLTEXT INDEX researchfinding_fulltext IF NOT EXISTS
 FOR (rf:ResearchFinding) ON EACH [rf.name, rf.description];
+
+// ===== 自定义知识 CustomRule 约束（§09-2.1） =====
+CREATE CONSTRAINT customrule_ruleid_unique IF NOT EXISTS FOR (cr:CustomRule) REQUIRE cr.rule_id IS UNIQUE;
+CREATE INDEX customrule_priority_idx IF NOT EXISTS FOR (cr:CustomRule) ON (cr.priority);
+CREATE INDEX customrule_enabled_idx IF NOT EXISTS FOR (cr:CustomRule) ON (cr.enabled);
+CREATE FULLTEXT INDEX customrule_fulltext IF NOT EXISTS
+FOR (cr:CustomRule) ON EACH [cr.title, cr.content];

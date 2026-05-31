@@ -21,3 +21,8 @@ class PathSettings(BaseSettings):
         validation_alias="RAG_TEMP_UPLOAD_DIR",
         description="上传文件临时存储目录"
     )
+    rag_books_dir: str = Field(
+        default=str(BASE_DIR / "app_data" / "books"),
+        validation_alias="RAG_BOOKS_DIR",
+        description="上传书籍永久存储目录（处理完成后从临时目录移入）"
+    )

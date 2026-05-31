@@ -60,6 +60,12 @@ class LLMSettings(BaseSettings):
         validation_alias="DASHSCOPE_API_KEY",
         description="阿里云百炼 API 密钥",
     )
+    
+    deepseek_api_key: str = Field(
+        default="",
+        validation_alias="DEEPSEEK_API_KEY",
+        description="DeepSeek API 密钥",
+    )
 
     # ===== 新增：提供商凭证配置 =====
     llm_providers: Dict[str, LLMProviderConfig] = Field(
@@ -68,19 +74,31 @@ class LLMSettings(BaseSettings):
                 api_key="",
                 base_url=None,
                 api_version=None,
-            )
+            ),
+            "deepseek": LLMProviderConfig(
+                api_key="",
+                base_url="https://api.deepseek.com/v1",
+                api_version=None,
+            ),
         },
-        description="LLM 提供商凭证映射（支持 dashscope/openai/anthropic/ollama）",
+        description="LLM 提供商凭证映射（支持 dashscope/openai/anthropic/ollama/deepseek）",
     )
 
     def model_post_init(self, __context) -> None:
-        """初始化后将 dashscope_api_key 同步到 llm_providers 中（仅当 providers 未单独配置时）"""
+        """初始化后将 API Key 同步到 llm_providers 中（仅当 providers 未单独配置时）"""
         if (
             self.dashscope_api_key
             and "dashscope" in self.llm_providers
             and not self.llm_providers["dashscope"].api_key
         ):
             self.llm_providers["dashscope"].api_key = self.dashscope_api_key
+        
+        if (
+            self.deepseek_api_key
+            and "deepseek" in self.llm_providers
+            and not self.llm_providers["deepseek"].api_key
+        ):
+            self.llm_providers["deepseek"].api_key = self.deepseek_api_key
 
     # ===== 新增：多模态模型前缀列表 =====
     llm_multimodal_model_prefixes: List[str] = Field(
@@ -144,6 +162,12 @@ class LLMSettings(BaseSettings):
             "qwen-turbo": ModelPricingConfig(
                 input_per_million=0.3,
                 output_per_million=0.6,
+                currency="CNY",
+            ),
+            # DeepSeek V4 Flash
+            "deepseek-v4-flash": ModelPricingConfig(
+                input_per_million=0.5,
+                output_per_million=2.0,
                 currency="CNY",
             ),
             # 多模态模型
@@ -216,6 +240,16 @@ class LLMSettings(BaseSettings):
         default="qwen3.5-27b",
         validation_alias="MODEL_KNOWLEDGE_QA",
         description="知识问答使用的模型（指令遵循能力强，支持 function calling + structured output）",
+    )
+    d2g_model: str = Field(
+        default="qwen-plus",
+        validation_alias="D2G_MODEL",
+        description="D2G 知识图谱流水线使用的模型（性价比之王，支持 deepseek-v4-flash 等）",
+    )
+    d2g_max_tokens: int = Field(
+        default=393216,
+        validation_alias="D2G_MAX_TOKENS",
+        description="D2G 流水线最大输出 Token 数（DeepSeek 支持最大 384K，建议 32K 起步）",
     )
 
     # ===== 新增：从旧字段自动构建的场景配置 =====

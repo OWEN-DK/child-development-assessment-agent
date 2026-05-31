@@ -1,36 +1,38 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { useCurationStore } from '../stores/curationStore';
 
 /**
  * SSE generation progress hook.
- * Wraps the store's startGeneration with cleanup support.
+ * Wraps the store's startGeneration with cleanup and cancel support.
  */
 export function useSSEGeneration() {
-  const eventSourceRef = useRef<EventSource | null>(null);
   const {
     generating, generateProgress, generateStatus, generateError,
     generateBookTitle, generateChapters,
-    startGeneration,
+    generatePhase, generatePhaseLabel,
+    startGeneration, resumeGeneration, cancelGeneration,
   } = useCurationStore();
 
   const start = useCallback(
     (bookId: string) => {
-      // Close previous if any
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
       startGeneration(bookId);
     },
     [startGeneration],
   );
 
-  const cancel = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-  }, []);
+  const resume = useCallback(
+    (bookId: string) => {
+      resumeGeneration(bookId);
+    },
+    [resumeGeneration],
+  );
+
+  const cancel = useCallback(
+    (bookId: string) => {
+      cancelGeneration(bookId);
+    },
+    [cancelGeneration],
+  );
 
   return {
     generating,
@@ -39,7 +41,10 @@ export function useSSEGeneration() {
     error: generateError,
     bookTitle: generateBookTitle,
     chapters: generateChapters,
+    phase: generatePhase,
+    phaseLabel: generatePhaseLabel,
     start,
+    resume,
     cancel,
   };
 }

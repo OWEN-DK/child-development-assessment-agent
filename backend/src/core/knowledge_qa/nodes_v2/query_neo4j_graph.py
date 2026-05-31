@@ -47,7 +47,7 @@ async def query_neo4j_graph_node(state) -> dict:
                 question=state.question,
                 child_profile=getattr(state, "child_profile", {}),
                 matched_book_ids=[b["book_id"] for b in getattr(state, "matched_books", [])],
-                s2_problems=[p["name"] for p in s2_data.get("problems", [])],
+                s2_problems=[p["name"] for p in s2_data.get("problems", [])] + list(getattr(state, "custom_knowledge_entities", []) or []),
                 s2_root_causes=s2_data.get("root_causes", []),
             ),
             timeout=NEO4J_QUERY_TIMEOUT,

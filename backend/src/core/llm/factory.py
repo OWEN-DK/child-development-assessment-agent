@@ -460,23 +460,25 @@ class LLMServiceFactoryCompat:
         # 使用配置中的默认模型
         model_name = model_name or "qwen-plus"
 
-        # 使用新工厂创建实例
-        factory = _get_legacy_factory()
-        loop = asyncio.get_event_loop()
-
         from src.config import settings
-        from src.core.llm.adapters.dashscope_multimodal import \
-            DashScopeMultiModalAdapter
 
-        # 统一使用 MultiModalConversation 适配器
-        instance = DashScopeMultiModalAdapter(
-            model=model_name,
-            api_key=settings.dashscope_api_key,
-            multimodal_prefixes=settings.llm_multimodal_model_prefixes,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        logger.info(f"DashScope MultiModal LLM 实例已创建：{model_name}")
+        # 自动识别提供商：deepseek 前缀走官方 DeepSeek API，其余走 DashScope
+        if model_name.startswith("deepseek"):
+            raw_llm = cls._create_deepseek_instance(model_name, temperature, max_tokens)
+            instance = LangChainLLMAdapter(raw_llm, model_name)
+            logger.info(f"DeepSeek 官方 LLM 实例已创建：{model_name}")
+        else:
+            from src.core.llm.adapters.dashscope_multimodal import \
+                DashScopeMultiModalAdapter
+
+            instance = DashScopeMultiModalAdapter(
+                model=model_name,
+                api_key=settings.dashscope_api_key,
+                multimodal_prefixes=settings.llm_multimodal_model_prefixes,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            logger.info(f"DashScope MultiModal LLM 实例已创建：{model_name}")
 
         # 缓存实例
         cls._instances[cache_key] = instance
@@ -499,7 +501,7 @@ class LLMServiceFactoryCompat:
             1. DashScope 不支持 json_schema structured outputs，
                with_structured_output 默认 method 从 "json_schema" 改为 "function_calling"。
             2. qwen3.5/3.6 系列默认开启思考模式，思考模式不支持 tool_choice=required，
-               因此禁用思考模式（extra_body: enable_thinking=false）。
+               因此禁用思考模式（extra_body: {thinking: {type: disabled}}）。
             """
 
             def with_structured_output(self, schema, *, method="function_calling", **kwargs):
@@ -530,8 +532,9 @@ class LLMServiceFactoryCompat:
         用途：create_react_agent、bind_tools、with_structured_output 等
         需要直接操作 BaseChatModel 的场景。
 
-        统一使用 DashScope OpenAI 兼容端点（/compatible-mode/v1），
-        支持所有 Qwen 模型包括 qwen3.5/3.6 系列。
+        自动识别模型提供商：
+        - deepseek* → DeepSeek API
+        - 其他 → DashScope OpenAI 兼容端点
 
         Args:
             no_cache: 为 True 时创建独立实例不走缓存。
@@ -545,13 +548,102 @@ class LLMServiceFactoryCompat:
             if cache_key in cls._raw_instances:
                 return cls._raw_instances[cache_key]
 
-        instance = cls._create_dashscope_instance(model_name, temperature, max_tokens)
+        # 自动识别提供商
+        if model_name.startswith("deepseek"):
+            instance = cls._create_deepseek_instance(model_name, temperature, max_tokens)
+            provider = "DeepSeek"
+        else:
+            instance = cls._create_dashscope_instance(model_name, temperature, max_tokens)
+            provider = "DashScope"
 
         if not no_cache:
             cache_key = f"raw:{model_name}:{temperature}"
             cls._raw_instances[cache_key] = instance
-            logger.info(f"原始 BaseChatModel 实例已创建（DashScope 兼容端点）：{model_name}")
+            logger.info(f"原始 BaseChatModel 实例已创建（{provider}）：{model_name}")
         return instance
+
+    @classmethod
+    def _create_deepseek_instance(
+        cls,
+        model_name: str,
+        temperature: float,
+        max_tokens: int,
+    ):
+        """创建 DeepSeek ChatOpenAI 实例。"""
+        from src.config import settings
+        from langchain_openai import ChatOpenAI
+
+        class DeepSeekChatOpenAI(ChatOpenAI):
+            """DeepSeek 适配器：使用 json_object 模式实现结构化输出"""
+
+            def with_structured_output(self, schema, *, method="function_calling", **kwargs):
+                """使用 response_format=json_object 确保 JSON 输出，配合 JsonOutputParser 解析"""
+                from langchain_core.output_parsers import JsonOutputParser
+
+                json_llm = self.bind(response_format={"type": "json_object"})
+                parser = JsonOutputParser(pydantic_object=schema)
+
+                class StructuredLLM:
+                    def __init__(self, llm, parser):
+                        self._llm = llm
+                        self._parser = parser
+
+                    async def ainvoke(self, prompt, **kwargs):
+                        from langchain_core.messages import HumanMessage
+
+                        format_instructions = self._parser.get_format_instructions()
+                        if isinstance(prompt, str):
+                            enhanced_prompt = f"{prompt}\n\n{format_instructions}"
+                        elif isinstance(prompt, list):
+                            enhanced_prompt = f"{prompt[-1].content}\n\n{format_instructions}"
+                            prompt = prompt[:-1] + [HumanMessage(content=enhanced_prompt)]
+                        else:
+                            enhanced_prompt = f"{prompt}\n\n{format_instructions}"
+
+                        response = await self._llm.ainvoke(prompt, **kwargs)
+                        content = getattr(response, "content", "") or ""
+
+                        if not content or not content.strip():
+                            raise ValueError("DeepSeek 返回空内容")
+
+                        import json as _json
+                        try:
+                            return self._parser.parse(content)
+                        except Exception:
+                            try:
+                                return _json.loads(content)
+                            except _json.JSONDecodeError:
+                                raise ValueError(
+                                    f"DeepSeek 结构化输出解析失败: {content[:300]}"
+                                )
+
+                    def invoke(self, prompt, **kwargs):
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                import concurrent.futures
+                                future = asyncio.run_coroutine_threadsafe(
+                                    self.ainvoke(prompt, **kwargs), loop
+                                )
+                                return future.result()
+                        except RuntimeError:
+                            pass
+                        return asyncio.run(self.ainvoke(prompt, **kwargs))
+
+                return StructuredLLM(json_llm, parser)
+
+        return DeepSeekChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            streaming=True,
+            api_key=settings.deepseek_api_key,
+            base_url="https://api.deepseek.com",
+            extra_body={
+                "thinking": {"type": "disabled"},
+                "max_tokens": max_tokens,
+            },
+        )
 
     @classmethod
     def clear_cache(cls):

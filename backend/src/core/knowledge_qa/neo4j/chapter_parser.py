@@ -152,3 +152,37 @@ def _split_long_chapters(chapters: list[Chapter], max_tokens: int) -> list[Chapt
             ))
 
     return result
+
+
+class ChapterParser:
+    """通过 file_hash 查询数据库获取 EPUB 文件路径并解析章节。"""
+
+    async def parse_by_hash(self, file_hash: str) -> ChapterParseResult:
+        """根据 file_hash 解析对应的 EPUB 文件。
+
+        Args:
+            file_hash: 源文件的哈希标识
+
+        Returns:
+            ChapterParseResult 包含所有章节
+
+        Raises:
+            FileNotFoundError: 找不到对应的文档记录或文件路径
+        """
+        from src.core.database import async_session_factory
+        from src.models.document import SourceDocument
+        from sqlalchemy import select
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(SourceDocument).where(SourceDocument.file_hash == file_hash)
+            )
+            doc = result.scalar_one_or_none()
+
+        if not doc:
+            raise FileNotFoundError(f"未找到 file_hash={file_hash} 对应的文档记录")
+
+        file_path = doc.file_path
+        book_id = doc.id or file_hash
+
+        return parse_epub(file_path, book_id)

@@ -5,11 +5,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../lib/queryClient';
 import {
   ExperimentOutlined,
-  AuditOutlined,
   BookOutlined,
   ApartmentOutlined,
-  ClockCircleOutlined,
-  LinkOutlined,
+  SettingOutlined,
+  EditOutlined,
+  FolderOpenOutlined,
+  SearchOutlined,
+  ThunderboltOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 
 function App() {
@@ -34,24 +37,37 @@ function App() {
               pathname: location.pathname,
             }}
             menuDataRender={() => [
-              { path: '/', name: '知识问答' },
-              { path: '/knowledge-base', name: '知识库' },
-              { path: '/knowledge-search', name: '内容搜索' },
-              { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
-              { path: '/prompt-management', name: '提示词管理' },
-              { path: '/monitoring', name: 'LLM监控' },
+              { path: '/', name: '知识问答', icon: <ThunderboltOutlined /> },
               {
-                path: '/curation',
-                name: '知识管理',
-                icon: <AuditOutlined />,
+                path: '/knowledge-lib',
+                name: '知识库',
+                icon: <FolderOpenOutlined />,
                 children: [
-                  { path: '/curation/books', name: '📚 书籍管理', icon: <BookOutlined /> },
-                  { path: '/curation/bind', name: '🔗 绑定书籍', icon: <LinkOutlined /> },
-                  { path: '/curation/graph', name: '🕸️ 知识图谱', icon: <ApartmentOutlined /> },
-                  { path: '/curation/pending', name: '⏱️ 待提炼队列', icon: <ClockCircleOutlined /> },
+                  { path: '/knowledge-base', name: '文档管理', icon: <FolderOpenOutlined /> },
+                  { path: '/knowledge-search', name: '内容搜索', icon: <SearchOutlined /> },
+                  { path: '/curation/books', name: '书籍管理', icon: <BookOutlined /> },
+                  { path: '/curation/graph', name: '知识图谱', icon: <ApartmentOutlined /> },
+                  { path: '/curation/custom-knowledge', name: '自定义知识', icon: <EditOutlined /> },
                 ],
               },
-              { path: '/system-config', name: '系统配置' },
+              {
+                path: '/quality',
+                name: '质量保障',
+                icon: <ExperimentOutlined />,
+                children: [
+                  { path: '/rag-eval', name: 'RAG 评估', icon: <ExperimentOutlined /> },
+                  { path: '/prompt-management', name: '提示词管理', icon: <EditOutlined /> },
+                ],
+              },
+              {
+                path: '/sys',
+                name: '系统',
+                icon: <SettingOutlined />,
+                children: [
+                  { path: '/monitoring', name: 'LLM 监控', icon: <DashboardOutlined /> },
+                  { path: '/system-config', name: '系统配置', icon: <SettingOutlined /> },
+                ],
+              },
             ]}
             menuItemRender={(item, dom) => (
               <Link to={item.path || '/'} key={item.path}>
@@ -60,7 +76,7 @@ function App() {
             )}
           >
             <PageContainer
-              subTitle="基于知识库的智能问答与运动方案推荐"
+              subTitle={false}
             >
               <Outlet />
             </PageContainer>

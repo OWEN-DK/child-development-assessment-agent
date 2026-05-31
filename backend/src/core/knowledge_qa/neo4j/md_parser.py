@@ -273,7 +273,7 @@ def _extract_props(text: str) -> dict:
 def parse_md_to_cypher(content: str, book_id: str) -> MDParseResult:
     """解析 MD 内容生成 Cypher 语句（无需 YAML front matter）。
 
-    支持 _generate_sample_md 产出的格式：
+    支持 _placeholder_md 产出的格式：
     ## 问题 (Problem) / 方案 (Solution) / 脑区 (BrainRegion) / 运动 (Exercise) / 处方 (Prescription) / 根因 (RootCause)
 
     Args:

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Select, Tooltip, Spin, Empty, Input } from 'antd';
+import { Button, Select, Tooltip, Spin, Empty, Input, Modal, message } from 'antd';
 import {
   ReloadOutlined,
   SearchOutlined,
@@ -8,6 +8,7 @@ import {
   EyeOutlined,
   ArrowLeftOutlined,
   CodeOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useGraphData } from '../hooks/useGraphData';
@@ -57,6 +58,31 @@ export const GraphPage: React.FC = () => {
     } catch {
       // handled silently
     }
+  };
+
+  const [clearing, setClearing] = useState(false);
+
+  const handleClearGraph = () => {
+    const target = bookId ? `书籍 ${bookId}` : '全部知识图谱';
+    Modal.confirm({
+      title: '确认清空',
+      content: `确定要清空 ${target} 的数据吗？此操作不可撤销。`,
+      okText: '确认清空',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        setClearing(true);
+        try {
+          const res = await curationApi.clearGraph(bookId);
+          message.success(res.message || '清空成功');
+          refresh();
+        } catch (e: any) {
+          message.error(e?.message || '清空失败');
+        } finally {
+          setClearing(false);
+        }
+      },
+    });
   };
 
   const {
@@ -150,6 +176,17 @@ export const GraphPage: React.FC = () => {
           <Button size="small" icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
             刷新
           </Button>
+          <Tooltip title={bookId ? '清空当前书籍图谱' : '清空全部图谱'}>
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleClearGraph}
+              loading={clearing}
+            >
+              清空
+            </Button>
+          </Tooltip>
         </div>
       </div>
 

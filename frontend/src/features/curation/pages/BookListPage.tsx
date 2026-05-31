@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Button, Tag, Space, Dropdown, Modal, App, Spin } from 'antd';
 import {
   PlusOutlined,
@@ -12,6 +12,7 @@ import {
   SendOutlined,
   RedoOutlined,
   BookOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useCurationStore } from '../stores/curationStore';
@@ -24,10 +25,22 @@ import styles from './BookListPage.module.scss';
 
 export const BookListPage: React.FC = () => {
   const navigate = useNavigate();
+
+  const handleCancelGeneration = async (book: any) => {
+    Modal.confirm({
+      title: '取消生成',
+      content: `确定要取消《${book.book_title}》的生成任务吗？`,
+      okText: '确认取消',
+      cancelText: '返回',
+      onOk: async () => {
+        await curationApi.cancelGeneration(book.book_id);
+        message.success('已取消');
+        loadBooks();
+      },
+    });
+  };
   const { message } = App.useApp();
   const { books, booksLoading, loadBooks } = useCurationStore();
-  const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
-
   useEffect(() => {
     loadBooks();
   }, [loadBooks]);
@@ -75,7 +88,9 @@ export const BookListPage: React.FC = () => {
         );
         break;
       case 'generating':
-        // No actions during generation
+        items.push(
+          { key: 'cancel', icon: <StopOutlined />, label: '取消生成', onClick: () => handleCancelGeneration(book) },
+        );
         break;
       case 'failed':
         items.push(
@@ -85,8 +100,8 @@ export const BookListPage: React.FC = () => {
         break;
     }
 
-    // Delete is always available (except during generation)
-    if (book.status !== 'generating') {
+    // Delete is always available
+    if (true) {
       items.push({ type: 'divider' as const });
       items.push({
         key: 'delete',

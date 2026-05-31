@@ -295,6 +295,50 @@ class DashScopeMultiModalAdapter(LLMService):
         """获取模型名称"""
         return self._model
 
+    async def generate_structured(
+        self, prompt: str, schema: type, model: str | None = None,
+    ) -> dict | list | str:
+        """生成结构化输出（d2g 流水线统一接口）。
+
+        Args:
+            prompt: 完整提示词
+            schema: 期望返回类型（dict 表示自由文本）
+            model: 模型名称（可选，默认使用初始化时的模型）
+
+        Returns:
+            当 schema=dict 时返回原始文本字符串；
+            当 schema 为 Pydantic model 时尝试解析 JSON 并返回 dict/list。
+        """
+        import json
+        import re
+
+        request = LLMRequest(
+            messages=[LLMMessage(role="user", content=prompt)],
+            model_name=model or self._model,
+            timeout=180,
+        )
+        response = await self.chat_with_retry(request)
+        text = response.content.strip()
+
+        if schema is dict:
+            # 自由文本输出，尝试 JSON 解析，失败则返回原始文本
+            try:
+                return json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                return text
+
+        # 尝试从 ```json ... ``` 围栏或裸 JSON 中提取
+        for candidate in [text]:
+            # 去除 markdown 代码块
+            fence_match = re.search(r"```(?:json)?\s*\n?(.*?)```", candidate, re.DOTALL)
+            if fence_match:
+                candidate = fence_match.group(1).strip()
+            try:
+                return json.loads(candidate)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return text
+
     async def chat_stream(self, request: LLMRequest):
         """流式聊天接口（自动选择文本或多模态 API，带 Tracing）"""
         from src.core.tracing.context import trace_context as async_trace_context
