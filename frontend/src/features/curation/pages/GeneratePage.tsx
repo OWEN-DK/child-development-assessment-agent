@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Space, Tag } from 'antd';
+import { Button, Space, Tag, Modal, message } from 'antd';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -7,6 +7,7 @@ import {
   EditOutlined,
   WarningOutlined,
   RedoOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSSEGeneration } from '../hooks/useSSEGeneration';
@@ -18,11 +19,30 @@ import styles from './GeneratePage.module.scss';
 export const GeneratePage: React.FC = () => {
   const { bookId } = useParams<{ bookId: string }>();
   const navigate = useNavigate();
-  const { progress, status, error, start } = useSSEGeneration();
+
+  const { progress, status, error, phase, phaseLabel, start, resume, cancel } = useSSEGeneration();
+
+  const handleCancel = async () => {
+    if (!bookId) return;
+    Modal.confirm({
+      title: '取消生成',
+      content: '确定要取消当前生成任务吗？已生成的部分数据将丢失。',
+      okText: '确认取消',
+      cancelText: '继续生成',
+      onOk: async () => {
+        try {
+          await cancel(bookId);
+          message.info('已取消');
+          navigate('/curation/books');
+        } catch (e: any) {
+          message.error(e?.message || '取消失败');
+        }
+      },
+    });
+  };
   const { generateBookTitle, generateChapters } = useCurationStore();
   const bookTitle = generateBookTitle;
   const chapters = generateChapters;
-  const currentChapter = chapters.find((c) => c.status === 'generating')?.title || '';
 
   // 聚合摘要状态
   const [summary, setSummary] = useState<{
@@ -32,26 +52,32 @@ export const GeneratePage: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    if (bookId) start(bookId);
-  }, [bookId, start]);
+    if (bookId) resume(bookId);
+  }, [bookId, resume]);
 
-  // 模拟从SSE获取摘要数据
+  // D2G 完成后，从实际章节状态聚合摘要
   useEffect(() => {
     if (status === 'completed') {
-      // 实际应从SSE或API获取，这里用模拟数据
+      const failed = chapters.filter((c) => c.status === 'failed').map((c) => c.title);
       setSummary({
-        entityStats: [
-          { type: '问题', count: 12 },
-          { type: '方案', count: 8 },
-          { type: '脑区', count: 6 },
-          { type: '主张', count: 15 },
-          { type: '处方', count: 5 },
-        ],
-        failedChapters: chapters.filter((c) => c.status === 'failed').map((c) => c.title),
+        entityStats: [],  // D2G 流程不按类型统计，用章节完成度替代
+        failedChapters: failed,
         contradictions: [],
       });
+    } else {
+      setSummary(null);
     }
   }, [status, chapters]);
+
+  // SSE 完成后自动跳转到草稿编辑器
+  useEffect(() => {
+    if (status === 'completed' && bookId) {
+      const timer = setTimeout(() => {
+        navigate(`/curation/editor/${bookId}`, { replace: true });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status, bookId, navigate]);
 
   const completedCount = chapters.filter((c) => c.status === 'completed').length;
   const failedCount = chapters.filter((c) => c.status === 'failed').length;
@@ -60,7 +86,7 @@ export const GeneratePage: React.FC = () => {
   return (
     <div className={styles['generate-page']}>
       <div className={styles.breadcrumb}>
-        <a onClick={() => navigate('/curation')}>📚 知识管理</a>
+        <a onClick={() => navigate('/curation/books')}>📚 书籍管理</a>
         <span> / </span>
         <a onClick={() => navigate('/curation/bind')}>绑定书籍</a>
         <span> / </span>
@@ -70,17 +96,73 @@ export const GeneratePage: React.FC = () => {
       {status === 'generating' && (
         <div className={styles['progress-card']}>
           <div className={styles['progress-card__icon']}>🤖</div>
-          <div className={styles['progress-card__title']}>AI 正在生成知识结构</div>
+          <div className={styles['progress-card__title']}>
+            {phaseLabel || 'AI 正在生成知识结构'}
+          </div>
+
+          {/* 流程步骤指示器 */}
+          <div className={styles['pipeline-steps']}>
+            {[
+             { key: 'locating', label: '定位文件' },
+             { key: 'parsing', label: '解析 EPUB' },
+             { key: 'preparing', label: '准备模型' },
+             { key: 'phase0_reading', label: '深度阅读' },
+              { key: 'phase1_extraction', label: '逐章提取' },
+              { key: 'phase2_resolution', label: '全局消歧' },
+              { key: 'phase2_5_global_inference', label: '关系补全' },
+              { key: 'phase3_quality', label: '质量检查' },
+              { key: 'phase4_commit', label: '入库' },
+            ].map((step, i, arr) => {
+              const stepOrder = arr.map(s => s.key);
+              const currentIdx = stepOrder.indexOf(phase);
+              const stepIdx = stepOrder.indexOf(step.key);
+              const isDone = currentIdx > stepIdx;
+              const isCurrent = step.key === phase;
+              return (
+                <div
+                  key={step.key}
+                  className={`${styles['pipeline-step']} ${isDone ? styles['pipeline-step--done'] : ''} ${isCurrent ? styles['pipeline-step--current'] : ''}`}
+                >
+                  <span className={styles['pipeline-step__dot']}>
+                    {isDone ? '✓' : isCurrent ? <LoadingOutlined spin /> : (i + 1)}
+                  </span>
+                  <span className={styles['pipeline-step__label']}>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+
           <div className={styles['progress-card__subtitle']}>
             {bookTitle && `《${bookTitle}》`}
-            {currentChapter && ` · 当前: ${currentChapter}`}
+            {/* 阶段感知的副标题 */}
+            {phase === 'phase1_extraction' && totalCount > 0 &&
+              ` · ${completedCount}/${totalCount} 章已提取到暂存区`}
+            {phase === 'phase2_resolution' &&
+              ' · 正在对所有实体做跨章消歧...'}
+            {phase === 'phase2_5_global_inference' &&
+              ' · 正在补全跨章关系...'}
+            <Button
+              size="small"
+              danger
+              icon={<StopOutlined />}
+              onClick={handleCancel}
+              style={{ marginLeft: 16 }}
+            >
+              取消生成
+            </Button>
           </div>
 
           <div className={styles['progress-bar-wrapper']}>
             <ProgressBar percent={progress} showLabel />
-            {totalCount > 0 && (
+            {/* Phase 0/1/2 阶段显示有意义的进度文字 */}
+            {phase === 'phase1_extraction' && totalCount > 0 && (
               <div className={styles['progress-text']}>
                 {completedCount} / {totalCount} 章
+              </div>
+            )}
+            {phase === 'phase2_resolution' && (
+              <div className={styles['progress-text']}>
+                全局消歧中...
               </div>
             )}
           </div>
@@ -128,14 +210,17 @@ export const GeneratePage: React.FC = () => {
 
             {summary && (
               <>
-                {/* 实体统计网格 */}
+                {/* 实体统计网格 - D2G 完成后显示章节统计 */}
+                {summary && (
                 <StatsGrid
-                  items={summary.entityStats.map((s) => ({
-                    value: s.count,
-                    label: s.type,
-                  }))}
-                  columns={5}
+                  items={[
+                    { value: completedCount, label: '已完成章节' },
+                    { value: failedCount, label: '失败章节' },
+                    { value: totalCount, label: '总章节数' },
+                  ]}
+                  columns={3}
                 />
+                )}
 
                 {/* 章节进度 */}
               {totalCount > 0 && (
@@ -191,7 +276,7 @@ export const GeneratePage: React.FC = () => {
                 重试失败章节
               </Button>
             )}
-            <Button onClick={() => navigate('/curation')}>返回书籍列表</Button>
+            <Button onClick={() => navigate('/curation/books')}>返回书籍列表</Button>
             <Button type="primary" icon={<EditOutlined />} onClick={() => navigate(`/curation/editor/${bookId}`)}>
               查看 MD 草稿 →
             </Button>
@@ -205,7 +290,7 @@ export const GeneratePage: React.FC = () => {
           <div className={styles['result-card__title']}>生成失败</div>
           <div className={styles['result-card__desc']}>{error || 'AI 生成过程中出现错误，请重试'}</div>
           <Space>
-            <Button onClick={() => navigate('/curation')}>返回书籍列表</Button>
+            <Button onClick={() => navigate('/curation/books')}>返回书籍列表</Button>
             <Button type="primary" onClick={() => bookId && start(bookId)}>重试</Button>
           </Space>
         </div>
@@ -213,9 +298,17 @@ export const GeneratePage: React.FC = () => {
 
       {status === 'idle' && (
         <div className={styles['progress-card']}>
-          <div className={styles['progress-card__icon']}>⏳</div>
-          <div className={styles['progress-card__title']}>准备中...</div>
-          <div className={styles['progress-card__subtitle']}>正在启动 AI 生成流程</div>
+          <div className={styles['progress-card__icon']}>🤖</div>
+          <div className={styles['progress-card__title']}>AI 知识生成</div>
+          <div className={styles['progress-card__subtitle']}>
+            {bookTitle ? `准备为《${bookTitle}》生成知识结构` : '点击下方按钮开始 AI 生成流程'}
+          </div>
+          <Space style={{ marginTop: 24 }}>
+            <Button onClick={() => navigate('/curation/books')}>返回书籍列表</Button>
+            <Button type="primary" onClick={() => bookId && start(bookId)}>
+              开始生成
+            </Button>
+          </Space>
         </div>
       )}
     </div>

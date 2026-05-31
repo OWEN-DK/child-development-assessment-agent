@@ -26,8 +26,17 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.schemas.common import APIResponse
+import asyncio as _asyncio
+import json as _json
+import traceback as _traceback
+import time as _time
 
 logger = logging.getLogger(__name__)
+
+# ── 运行中的 D2G 流水线任务（独立于 SSE 连接，浏览器断开不影响） ──
+_running_tasks: dict[str, _asyncio.Task] = {}    # book_id → task
+_progress_states: dict[str, dict] = {}            # book_id → 共享进度状态
+_progress_events: dict[str, _asyncio.Event] = {}  # book_id → 进度更新信号
 
 
 class BindBookRequest(BaseModel):
@@ -116,6 +125,343 @@ def _generate_sample_md(book_title: str, chapters: list) -> str:
     md += "- 脑源性神经营养因子(BDNF)分泌不足是注意力和学习障碍的重要生理因素。\n\n"
 
     return md
+
+
+# ═══════════════════════════════════════════════════════════════
+# D2G 流水线独立任务（不依赖 SSE 连接）
+# ═══════════════════════════════════════════════════════════════
+
+
+def _update_progress(book_id: str, **kwargs):
+    """更新共享进度状态并通知 SSE 订阅者。"""
+    if book_id in _progress_states:
+        _progress_states[book_id].update(kwargs)
+    if book_id in _progress_events:
+        _progress_events[book_id].set()
+
+
+def _cleanup_task(book_id: str):
+    """任务完成后的清理（done callback）。"""
+    task = _running_tasks.pop(book_id, None)
+    if task and not task.cancelled():
+        try:
+            exc = task.exception()
+            if exc and book_id in _progress_states:
+                _update_progress(book_id, status="failed", error=str(exc)[:200],
+                                 phase_label="流水线异常")
+        except asyncio.InvalidStateError:
+            pass  # 异常已被 _run_d2g_pipeline 的 except 分支消费
+    if book_id in _progress_events:
+        _progress_events[book_id].set()
+
+
+async def _save_draft_from_result(book_id: str, book_title: str,
+                                   result) -> None:
+    """从 D2G 流水线结果保存 MD 草稿到数据库。
+
+    独立于 SSE 连接，失败不影响任务成功状态。
+    """
+    try:
+        review_md = ""
+        if hasattr(result, "review_mds") and result.review_mds:
+            for ch_id, md_text in result.review_mds.items():
+                if md_text:
+                    review_md += md_text + "\n\n---\n\n"
+        if not review_md:
+            if hasattr(result, "book_context") and result.book_context:
+                bc = result.book_context
+                review_md = f"# {bc.book_title}\n\n"
+                review_md += f"## 全书主旨\n\n{bc.core_thesis}\n\n"
+                if bc.key_arguments:
+                    review_md += "## 核心论点\n\n"
+                    for arg in bc.key_arguments:
+                        review_md += f"- {arg}\n"
+                    review_md += "\n"
+        if not review_md:
+            review_md = _generate_sample_md(book_title, [])
+
+        from src.models.md_metadata import MDMetadata
+        from src.models.md_version import MDVersion
+        from src.core.database import async_session_factory
+        from sqlalchemy import select
+
+        async with async_session_factory() as session:
+            result_db = await session.execute(
+                select(MDMetadata).where(MDMetadata.book_id == book_id)
+            )
+            meta = result_db.scalar_one_or_none()
+            if meta:
+                meta.status = "draft"
+                import uuid as _uuid
+                if meta.current_version_id:
+                    ver_result = await session.execute(
+                        select(MDVersion).where(
+                            MDVersion.id == meta.current_version_id)
+                    )
+                    version = ver_result.scalar_one_or_none()
+                    if version:
+                        version.md_content = review_md
+                else:
+                    version_id = str(_uuid.uuid4())
+                    version = MDVersion(
+                        id=version_id,
+                        book_id=book_id,
+                        md_content=review_md,
+                        version=1,
+                        status="draft",
+                    )
+                    session.add(version)
+                    meta.current_version_id = version_id
+                await session.commit()
+        logger.info("[生成流程] 草稿保存成功 book_id=%s", book_id)
+    except Exception as e:
+        logger.error("[生成流程] 草稿保存失败 book_id=%s: %s", book_id, e)
+
+
+async def _run_d2g_pipeline(book_id: str, book_title: str):
+    """独立 asyncio.Task：Phase 0→4 + 保存草稿。
+
+    不依赖任何 SSE 连接，浏览器断开不影响执行。
+    """
+    _t0 = _time.monotonic()
+    neo4j_session = None  # 初始化，finally 中需要
+
+    try:
+        _update_progress(book_id, phase="phase0_reading",
+                         phase_label="正在初始化...", progress=0)
+
+        from src.models.md_metadata import MDMetadata
+        from src.core.database import async_session_factory
+        from sqlalchemy import select
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(MDMetadata).where(MDMetadata.book_id == book_id)
+            )
+            meta = result.scalar_one_or_none()
+            if not meta:
+                _update_progress(book_id, status="failed",
+                                 error="书籍未绑定", progress=0)
+                return
+
+        file_hash = meta.file_hash
+        if not file_hash:
+            _update_progress(book_id, status="failed",
+                             error="无源文件", progress=0)
+            return
+
+        from src.core.knowledge_qa.neo4j.chapter_parser import ChapterParser
+
+        parser = ChapterParser()
+        parse_result = await parser.parse_by_hash(file_hash)
+        chapters_raw = parse_result.chapters
+        chapters = [{"title": ch.title, "id": ch.id, "status": "pending"}
+                     for ch in chapters_raw]
+
+        _update_progress(book_id, chapters=chapters, progress=5,
+                         phase_label=f"已解析 {len(chapters)} 章")
+        logger.info("[生成流程] EPUB 解析完成 book_id=%s, %d 章, %.1fs",
+                    book_id, len(chapters), _time.monotonic() - _t0)
+
+        from src.config import settings
+        from src.core.llm.factory import LLMServiceFactoryCompat
+
+        d2g_model = settings.d2g_model
+        d2g_max_tokens = settings.d2g_max_tokens
+        llm_factory = LLMServiceFactoryCompat()
+        llm_adapter = llm_factory.create(model_name=d2g_model, max_tokens=d2g_max_tokens)
+        logger.info("[生成流程] LLM 适配器就绪 book_id=%s, model=%s", book_id, d2g_model)
+
+        from src.utils.di import get_embedding_helper
+
+        emb_helper = get_embedding_helper()
+
+        class _D2GEmbedAdapter:
+            def __init__(self, h):
+                self._h = h
+
+            async def embed(self, texts):
+                if isinstance(texts, str):
+                    texts = [texts]
+                return await self._h.embed_batch(texts)
+
+        emb_adapter = _D2GEmbedAdapter(emb_helper)
+        logger.info("[生成流程] Embedding 适配器就绪 book_id=%s", book_id)
+
+        from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver
+
+        neo4j_driver = get_async_neo4j_driver()
+        neo4j_session = neo4j_driver.session() if neo4j_driver else None
+        logger.info("[生成流程] Neo4j 驱动就绪 book_id=%s", book_id)
+
+        import os
+        from src.core.knowledge_qa.d2g.models import PipelineConfig, ModelConfig
+        from src.core.knowledge_qa.d2g.models import QualityThresholds
+
+        config = PipelineConfig(
+            concurrency=int(os.environ.get("D2G_CONCURRENCY", "5")),
+            models=ModelConfig(
+                context=d2g_model,
+                extraction=d2g_model,
+                resolution=d2g_model,
+            ),
+        )
+
+        from src.core.knowledge_qa.d2g.book_pipeline import (
+            run_full_pipeline, finalize_and_commit, run_phase5_cross_book,
+        )
+
+        phase_progress_map = {
+            "phase0_reading": (5, 15),
+            "phase1_extraction": (15, 55),
+            "phase2_resolution": (55, 75),
+            "phase2_5_global_inference": (75, 85),
+            "phase3_quality": (85, 93),
+            "phase4_commit": (93, 98),
+            "phase5_cross_book": (98, 100),
+        }
+
+        phase_labels = {
+            "phase0_reading": "正在深度阅读全书...",
+            "phase1_extraction": "正在逐章提取实体与关系...",
+            "phase2_resolution": "正在全局消歧合并...",
+            "phase2_5_global_inference": "正在补全跨章关系...",
+            "phase3_quality": "正在质量检查...",
+            "phase4_commit": "正在入库 Neo4j...",
+            "phase5_cross_book": "正在跨书关联...",
+            "completed": "生成完成",
+        }
+
+        def _on_progress(progress_dict: dict):
+            phase = progress_dict.get("phase", "")
+            lo, hi = phase_progress_map.get(phase, (85, 90))
+            approved_raw = progress_dict.get("approved_chapters", 0)
+            total_raw = progress_dict.get("total_chapters", len(chapters))
+
+            approved_set = (set(approved_raw) if isinstance(approved_raw, list)
+                           else set())
+            # Phase 1 用 staging_extractions，Phase 2+ 用 chapter_extractions
+            extracted_set = set(
+                progress_dict.get("staging_extractions", {}).keys()
+                or progress_dict.get("chapter_extractions", {}).keys()
+            )
+            total = (len(total_raw) if isinstance(total_raw, list)
+                     else (total_raw if isinstance(total_raw, int) else len(chapters)))
+            approved_count = len(approved_set)
+
+            # 计算总体进度百分比
+            if phase == "phase1_extraction" and total > 0:
+                pct = lo + int(len(extracted_set) / total * (hi - lo))
+            elif phase == "phase2_resolution":
+                pct = lo  # 全局消歧是单步操作，无法细分
+            elif phase == "phase2_5_global_inference":
+                pct = lo
+            else:
+                pct = lo
+
+            # 同步各章节状态
+            updated_chapters = []
+            for ch in chapters:
+                cid = ch["id"]
+                if cid in approved_set:
+                    ch_status = "completed"
+                elif cid in extracted_set:
+                    ch_status = "completed"
+                else:
+                    ch_status = "pending"
+                updated_chapters.append({**ch, "status": ch_status})
+
+            label = progress_dict.get("phase_label") or phase_labels.get(phase, phase)
+            _update_progress(book_id, phase=phase, phase_label=label,
+                             progress=min(pct, 99), chapters=updated_chapters)
+
+        state = await run_full_pipeline(
+            parse_result=parse_result,
+            llm_client=llm_adapter,
+            embedding_client=emb_adapter,
+            neo4j_session=neo4j_session,
+            config=config,
+            on_progress=_on_progress,
+        )
+
+        logger.info("[生成流程] Phase 0-2 完成 book_id=%s (%.1fs)",
+                    book_id, _time.monotonic() - _t0)
+
+        _update_progress(book_id, phase="phase3_quality",
+                         phase_label="正在质量检查...", progress=85)
+
+        success, report = await finalize_and_commit(
+            state=state,
+            neo4j_session=neo4j_session,
+            thresholds=QualityThresholds(),
+            embedding_client=emb_adapter,
+            llm_client=llm_adapter,
+        )
+
+        if not success:
+            logger.warning("[生成流程] 质量检查未通过 book_id=%s\n%s", book_id, report)
+            _update_progress(book_id, status="failed",
+                             error=report,
+                             progress=90)
+            return
+
+        _update_progress(book_id, phase="phase4_commit",
+                         phase_label="正在入库 Neo4j...", progress=95)
+        logger.info("[生成流程] Phase 4 入库完成 book_id=%s", book_id)
+
+        enable_phase5 = os.environ.get("D2G_ENABLE_PHASE5", "true").lower() == "true"
+        if enable_phase5:
+            _update_progress(book_id, phase="phase5_cross_book",
+                             phase_label="正在跨书关联...", progress=98)
+            try:
+                await run_phase5_cross_book(
+                    book_id=book_id,
+                    neo4j_driver=neo4j_driver,
+                    embedding_helper=emb_helper,
+                    llm_client=llm_adapter,
+                    enable_phase5=True,
+                )
+                logger.info("[生成流程] Phase 5 跨书消歧完成 book_id=%s", book_id)
+            except Exception as e:
+                logger.warning("[生成流程] Phase 5 失败（不阻塞）: %s", e)
+
+        _update_progress(book_id, phase_label="正在保存草稿...", progress=99)
+        await _save_draft_from_result(book_id, book_title, state)
+
+        elapsed = _time.monotonic() - _t0
+        _update_progress(book_id, status="completed", progress=100,
+                         phase_label=f"生成完成 ({elapsed:.0f}s)")
+        logger.info("[生成流程] 全部完成 book_id=%s (%.1fs)", book_id, elapsed)
+
+    except _asyncio.CancelledError:
+        _update_progress(book_id, status="cancelled", phase_label="任务已取消")
+        logger.info("[生成流程] 任务取消 book_id=%s", book_id)
+    except Exception as e:
+        logger.error("[生成流程] 流水线异常 book_id=%s: %s\n%s",
+                     book_id, e, _traceback.format_exc())
+        _update_progress(book_id, status="failed", error=str(e)[:200],
+                         phase_label="流水线异常")
+    finally:
+        try:
+            from src.models.md_metadata import MDMetadata
+            from src.core.database import async_session_factory as _asf
+            from sqlalchemy import select as _sel
+            async with _asf() as _ses:
+                _r = await _ses.execute(
+                    _sel(MDMetadata).where(MDMetadata.book_id == book_id))
+                _m = _r.scalar_one_or_none()
+                if _m and _m.status == "generating":
+                    final_status = _progress_states.get(book_id, {}).get("status", "failed")
+                    _m.status = "draft" if final_status == "completed" else "failed"
+                    await _ses.commit()
+        except Exception:
+            pass
+        if neo4j_session:
+            try:
+                await neo4j_session.close()
+            except Exception:
+                pass
+
 
 class CurationController:
     """知识审核控制器"""
@@ -319,12 +665,23 @@ class CurationController:
             raise HTTPException(status_code=500, detail=str(e))
 
     async def start_generation(self, book_id: str) -> APIResponse:
-        """触发 AI 生成"""
+        """触发 AI 生成 — 启动独立 asyncio.Task。
+
+        任务在后台运行（Phase 0→4 + 保存草稿），不受 SSE 连接影响。
+        浏览器断开后任务继续执行，重新连接 SSE 可恢复进度。
+        """
         try:
             from src.models.md_metadata import MDMetadata
             from src.core.database import async_session_factory
             from sqlalchemy import select
 
+            # 检查是否已在运行
+            if book_id in _running_tasks and not _running_tasks[book_id].done():
+                return APIResponse.success(
+                    message="任务已在运行中", data={"book_id": book_id, "status": "running"}
+                )
+
+            # 检查书籍是否绑定
             async with async_session_factory() as session:
                 result = await session.execute(
                     select(MDMetadata).where(MDMetadata.book_id == book_id)
@@ -337,8 +694,34 @@ class CurationController:
                 meta.status = "generating"
                 await session.commit()
 
-            logger.info("触发 AI 生成: book_id=%s", book_id)
-            return APIResponse.success(message="生成任务已启动")
+                book_title = meta.book_title
+
+            # 初始化进度状态
+            _progress_states[book_id] = {
+                "book_id": book_id,
+                "book_title": book_title,
+                "status": "generating",
+                "phase": "phase0_reading",
+                "phase_label": "正在初始化...",
+                "progress": 0,
+                "chapters": [],
+                "error": None,
+            }
+            _progress_events[book_id] = _asyncio.Event()
+
+            # 启动独立任务
+            task = _asyncio.create_task(
+                _run_d2g_pipeline(book_id, book_title),
+                name=f"d2g-{book_id}",
+            )
+            _running_tasks[book_id] = task
+            task.add_done_callback(lambda t: _cleanup_task(book_id))
+
+            logger.info("[生成流程] 独立任务已启动 book_id=%s", book_id)
+            return APIResponse.success(
+                message="生成任务已启动",
+                data={"book_id": book_id, "status": "running"},
+            )
         except HTTPException:
             raise
         except Exception as e:
@@ -346,97 +729,98 @@ class CurationController:
             raise HTTPException(status_code=500, detail=str(e))
 
     async def generation_progress(self, book_id: str):
-        """生成进度 SSE"""
+        """生成进度 SSE — 纯只读订阅，不驱动任何任务逻辑。
+
+        只从共享状态 _progress_states 读取进度并推送。
+        浏览器断开不影响后台任务。
+        """
         from fastapi.responses import StreamingResponse
-        import json
-        import asyncio
-
-        # 获取书籍标题
-        book_title = book_id
-        try:
-            from src.models.md_metadata import MDMetadata
-            from src.core.database import async_session_factory
-            from sqlalchemy import select
-
-            async with async_session_factory() as session:
-                result = await session.execute(
-                    select(MDMetadata).where(MDMetadata.book_id == book_id)
-                )
-                meta = result.scalar_one_or_none()
-                if meta:
-                    book_title = meta.book_title
-        except Exception:
-            pass
 
         async def event_stream():
-            # 模拟章节级进度推送
-            chapters = [
-                {"title": "第一章 导论", "status": "pending"},
-                {"title": "第二章 认知发展基础", "status": "pending"},
-                {"title": "第三章 运动与大脑", "status": "pending"},
-                {"title": "第四章 注意力训练", "status": "pending"},
-                {"title": "第五章 实践指南", "status": "pending"},
-            ]
-
-            # 开始生成
-            yield f"data: {json.dumps({'status': 'generating', 'progress': 0, 'book_title': book_title, 'chapters': chapters})}\n\n"
-            await asyncio.sleep(0.5)
-
-            # 逐章完成
-            for i in range(len(chapters)):
-                chapters[i]["status"] = "generating"
-                progress = int((i / len(chapters)) * 100)
-                yield f"data: {json.dumps({'status': 'generating', 'progress': progress, 'book_title': book_title, 'chapters': chapters})}\n\n"
-                await asyncio.sleep(0.3)
-
-                chapters[i]["status"] = "completed"
-                progress = int(((i + 1) / len(chapters)) * 100)
-                yield f"data: {json.dumps({'status': 'generating', 'progress': progress, 'book_title': book_title, 'chapters': chapters})}\n\n"
-                await asyncio.sleep(0.2)
-
-            # 完成 — 更新数据库状态
             try:
-                from src.models.md_metadata import MDMetadata
-                from src.core.database import async_session_factory
-                from sqlalchemy import select
+                # 等待进度状态初始化（最多 10 秒）
+                for _ in range(20):
+                    if book_id in _progress_states:
+                        break
+                    await _asyncio.sleep(0.5)
+                else:
+                    # 没有运行中的任务 — 检查数据库是否有残留的 "generating" 状态
+                    # （后端重启后内存状态丢失，但 DB 元数据仍标记为 generating）
+                    try:
+                        from src.models.md_metadata import MDMetadata
+                        from src.core.database import async_session_factory
+                        from sqlalchemy import select
 
-                async with async_session_factory() as session:
-                    result = await session.execute(
-                        select(MDMetadata).where(MDMetadata.book_id == book_id)
-                    )
-                    meta = result.scalar_one_or_none()
-                    if meta:
-                        meta.status = "draft"
-                        # 更新或创建 MD 版本内容（AI 生成的结构化知识）
-                        from src.models.md_version import MDVersion
-                        if meta.current_version_id:
-                            ver_result = await session.execute(
-                                select(MDVersion).where(MDVersion.id == meta.current_version_id)
+                        async with async_session_factory() as session:
+                            result = await session.execute(
+                                select(MDMetadata).where(MDMetadata.book_id == book_id)
                             )
-                            version = ver_result.scalar_one_or_none()
-                            if version:
-                                version.md_content = _generate_sample_md(book_title, chapters)
+                            meta = result.scalar_one_or_none()
+                            if meta and meta.status == "generating":
+                                # 残留状态：任务已丢失，重置为 failed
+                                meta.status = "failed"
+                                await session.commit()
+                                logger.warning(
+                                    "[SSE] 检测到残留 generating 状态，已重置为 failed book_id=%s",
+                                    book_id,
+                                )
+                                yield f"data: {_json.dumps({'status': 'failed', 'error': '生成任务已中断（可能因服务重启），请重试'}, ensure_ascii=False)}\n\n"
+                                return
+                    except Exception as _db_exc:
+                        logger.warning("[SSE] 检查 DB 状态失败: %s", _db_exc)
+
+                    yield f"data: {_json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'})}\n\n"
+                    return
+
+                if book_id not in _progress_events:
+                    _progress_events[book_id] = _asyncio.Event()
+
+                # 发送首条快照（当前状态）
+                state = _progress_states[book_id]
+                yield f"data: {_json.dumps(state, ensure_ascii=False)}\n\n"
+
+                # 轮询进度直到任务完成
+                while True:
+                    try:
+                        evt = _progress_events.get(book_id)
+                        if evt:
+                            await _asyncio.wait_for(evt.wait(), timeout=15.0)
+                            evt.clear()
                         else:
-                            version_id = str(uuid.uuid4())
-                            version = MDVersion(
-                                id=version_id,
-                                book_id=book_id,
-                                md_content=_generate_sample_md(book_title, chapters),
-                                version=1,
-                                status="draft",
-                            )
-                            session.add(version)
-                            meta.current_version_id = version_id
-                        await session.commit()
-            except Exception as e:
-                logger.warning("更新生成状态失败: %s", e)
+                            await _asyncio.sleep(1.0)
+                    except _asyncio.TimeoutError:
+                        pass  # 超时发送心跳
 
-            yield f"data: {json.dumps({'status': 'completed', 'progress': 100, 'book_title': book_title, 'chapters': chapters})}\n\n"
+                    state = _progress_states.get(book_id, {})
+                    yield f"data: {_json.dumps(state, ensure_ascii=False)}\n\n"
+
+                    if state.get("status") in ("completed", "failed", "cancelled"):
+                        break
+
+                    # 任务已完成但状态未更新
+                    task = _running_tasks.get(book_id)
+                    if task is None or task.done():
+                        final = _progress_states.get(book_id, {})
+                        if final.get("status") not in ("completed", "failed", "cancelled"):
+                            final["status"] = "failed"
+                            final["error"] = final.get("error") or "任务已结束"
+                        yield f"data: {_json.dumps(final, ensure_ascii=False)}\n\n"
+                        break
+            except Exception as _sse_exc:
+                logger.warning("[SSE] event_stream 异常 book_id=%s: %s", book_id, _sse_exc)
+                try:
+                    yield f"data: {_json.dumps({'status': 'failed', 'error': f'SSE 异常: {str(_sse_exc)[:100]}'})}\n\n"
+                except Exception:
+                    pass
 
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     # ================================================================
@@ -575,6 +959,7 @@ class CurationController:
                     author=req.author,
                     status="draft",
                     bind_source="kb_bind",
+                    file_hash=kb_book.file_hash,
                     total_entities=0,
                     total_claims=0,
                     total_prescriptions=0,
@@ -1123,3 +1508,4 @@ AI 生成后将自动填充根因分析。
         except Exception as e:
             logger.error("获取待提炼队列失败: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
+            "phase2_5_global_inference": "正在补全跨章关系与桥接分量...",
