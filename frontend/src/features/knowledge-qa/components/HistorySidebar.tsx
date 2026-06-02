@@ -58,8 +58,17 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   const [deleting, setDeleting] = useState<string | null>(null);
 
   // 侧边栏打开时刷新列表
+  // 使用 ref 防止严格模式下重复请求，同时确保首次打开时一定会拉取数据。
+  const fetchRequestedRef = React.useRef(false);
   useEffect(() => {
-    if (open) onRefresh();
+    if (!open) {
+      fetchRequestedRef.current = false;
+      return;
+    }
+    if (!fetchRequestedRef.current) {
+      fetchRequestedRef.current = true;
+      onRefresh();
+    }
   }, [open, onRefresh]);
 
   const handleDelete = async (taskId: string, e: React.MouseEvent) => {

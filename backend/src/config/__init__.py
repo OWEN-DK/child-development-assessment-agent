@@ -130,6 +130,7 @@ class Settings(
         elif (
             field_name.startswith("data_dir")
             or field_name.startswith("rag_storage_dir")
+            or field_name.startswith("curation_md_dir")
             or field_name.startswith("path_")
         ):
             return "paths"

@@ -177,14 +177,14 @@ def _generate_staging_cypher(master: MasterGraph) -> list[dict]:
     # 边（关系）
     for src, tgt, data in master.graph.edges(data=True):
         rel_type = data.get("relation_type", "RELATES_TO")
-        rel_type = rel_type.value if hasattr(rel_type, "value") else str(rel_type).upper().replace(" ", "_").replace("-", "_")
+        rel_type = rel_type.value if hasattr(rel_type, "value") else str(rel_type).upper().replace(" ", "_").replace("-", "_").replace("/", "_")
         evidence = data.get("evidence", "")
 
         statements.append({
             "query": (
                 f"MATCH (a {{name_normalized: $src_norm, book_id: $book_id}}) "
                 f"MATCH (b {{name_normalized: $tgt_norm, book_id: $book_id}}) "
-                f"MERGE (a)-[r:{rel_type}]->(b) "
+                f"MERGE (a)-[r:`{rel_type}`]->(b) "
                 f"SET r.evidence = $evidence"
             ),
             "params": {
@@ -312,14 +312,14 @@ def _generate_cypher(master: MasterGraph) -> list[dict]:
     # 边（关系）
     for src, tgt, data in master.graph.edges(data=True):
         rel_type = data.get("relation_type", "RELATES_TO")
-        rel_type = rel_type.value if hasattr(rel_type, "value") else str(rel_type).upper().replace(" ", "_").replace("-", "_")
+        rel_type = rel_type.value if hasattr(rel_type, "value") else str(rel_type).upper().replace(" ", "_").replace("-", "_").replace("/", "_")
         evidence = data.get("evidence", "")
 
         statements.append({
             "query": (
                 f"MATCH (a {{name_normalized: $src_norm, book_id: $book_id}}) "
                 f"MATCH (b {{name_normalized: $tgt_norm, book_id: $book_id}}) "
-                f"MERGE (a)-[r:{rel_type}]->(b) "
+                f"MERGE (a)-[r:`{rel_type}`]->(b) "
                 f"SET r.evidence = $evidence"
             ),
             "params": {"book_id": book_id, "src_norm": src.strip().lower(), "tgt_norm": tgt.strip().lower(), "evidence": evidence},

@@ -8,6 +8,7 @@ interface StatusBadgeProps {
 }
 
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
+  bound: { color: 'processing', label: '待生成' },
   draft: { color: 'default', label: '草稿' },
   reviewed: { color: 'warning', label: '已审核' },
   published: { color: 'success', label: '已入库' },

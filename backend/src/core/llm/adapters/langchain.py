@@ -265,3 +265,14 @@ class LangChainLLMAdapter(LLMService):
             text[:500],
         )
         return text
+
+    async def generate(self, prompt: str, model: str = "") -> str:
+        """简单文本生成便捷接口，满足 cross_book_phase5a.LLMClient Protocol。"""
+        from src.schemas import LLMMessage, LLMRequest
+
+        request = LLMRequest(
+            messages=[LLMMessage(role="user", content=prompt)],
+            model_name=model or self._model_name,
+        )
+        response = await self.chat(request)
+        return response.content

@@ -60,7 +60,7 @@ def poor_graph():
     ), "ch01")
     mg.add_relationship(ExtractedRelationship(
         source="B", target="A",
-        relation_type=RelationType.SOLVES,
+        relation_type=RelationType.THERAPEUTIC_TREATS,
         evidence="证据", source_para_ids=[7],
     ), "ch01")
     mg.chapter_para_count["ch01"] = 10

@@ -293,4 +293,60 @@ graph LR
 2. **6层全维度校验**: 从规则到语义、从质量到效果、从单版本到多版本对比的全链路诊断
 3. **自动化回归**: 优化后自动触发回归测试，与历史基线对比验证优化效果
 4. **趋势追踪**: 支持多版本效果趋势分析，直观展示优化迭代效果
+
+---
+
+## 7. 跨书知识融合 (Cross-Book Knowledge Fusion)
+
+### 7.1 概述
+
+跨书知识融合管线负责发现和建立不同书籍之间的实体对应关系和语义关联，使多本书籍的知识图谱形成一个连通的知识网络。
+
+### 7.2 两阶段流程
+
+**Phase 5a — 分析 (Discovery)**
+
+在 D2G 生成完成后触发，也可通过 `POST /api/v2/curation/cross-book/analyze-all` 或 `POST /api/v2/curation/books/{book_id}/cross-book/retry` 手动触发。
+
+执行流程：
+1. 从 Neo4j 加载新书和已有书的全部实体节点
+2. 加载社区结构（优先复用已有 AutoCommunity，否则 Louvain 聚类）
+3. 增量计算实体 embedding（已有 embedding 从 Neo4j 直接读取，新计算的写回持久化）
+4. 社区级匹配 → 实体消歧候选 → 批量 LLM 精判
+5. 跨书关系发现 → 批量 LLM 分类
+6. 结果写入 `data_dir/{book_id}/cross_book_relations.json`（原子写入，保留已有审核决策）
+
+高置信度候选自动标记 `"auto"`（entity_match: sim >= 0.95 && llm_same; cross_relation: confidence >= 0.90），其余为 `"skip"` 待人工审核。
+
+**Phase 5b — 执行 (Commit)**
+
+在草稿发布时触发，读取 Phase 5a 分析结果（Redis 优先，JSON 文件兜底），将审核通过的决策应用到 Neo4j：
+- `merge`: 合并实体（关系迁移 + book_ids 合并 + 删除旧节点）
+- `auto` (high confidence): 自动 merge 或创建 SAME_AS 边
+- `confirm`/`modify`: 创建 CROSS_* 关系边
+- `skip`: 不处理
+
+### 7.3 关键文件
+
+| 文件 | 职责 |
+|------|------|
+| `core/knowledge_qa/neo4j/cross_book_phase5a.py` | 跨书分析引擎（社区检测、embedding、LLM 批量判断） |
+| `core/knowledge_qa/neo4j/cross_book_phase5b.py` | 决策执行引擎（合并实体、建边、跨书关系） |
+| `core/knowledge_qa/neo4j/relation_migration.py` | 实体合并时关系迁移工具函数（Phase 5b 和 cross_book_resolver 共用） |
+| `core/knowledge_qa/neo4j/cross_book_cleanup.py` | 书籍删除/重生成时 Neo4j 数据清理 |
+| `controller/curation_controller.py` | 跨书管理 API 端点 + 级联清理 + 重试逻辑 |
+| `frontend/features/curation/pages/CrossBookPage.tsx` | 跨书关系管理前端页面 |
+| `frontend/features/curation/components/CrossBookPanel.tsx` | 实体消歧 + 跨书关系审核面板 |
+
+### 7.4 数据存储
+
+- **Neo4j**: 实体 embedding 持久化在节点 `n.embedding` 属性；SAME_AS 和 CROSS_* 边存储在图中
+- **JSON 文件**: `data_dir/{book_id}/cross_book_relations.json` — 跨书分析完整结果（含审核决策）
+- **Redis**: `d2g:cross_analysis:{book_id}` — 热缓存（30 天 TTL），Phase 5b 优先读 Redis，JSON 兜底
+
+### 7.5 重试与级联清理
+
+- Phase 5a 失败自动重试 3 次（指数退避 30s/60s/120s）
+- 书籍删除或重新生成后，自动清理其他书籍 JSON 和 Redis 中的陈旧引用
+- Phase 5b 包含幂等检查：合并前先检查实体是否已被合并
 5. **SSE实时推送**: 测试执行进度、校验结果、报告生成过程实时推送到前端

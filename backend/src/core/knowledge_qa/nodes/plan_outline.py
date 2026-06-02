@@ -34,10 +34,25 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
     data = None  # 初始化，确保异常处理中可安全引用
     try:
-        # Step 1: 直接搜索
+        # Step 1: 获取知识上下文
         s4_query = state.section_queries.get(4, state.question)
-        search_results = await _direct_search(s4_query, state.matched_book_ids, state=state)
-        search_context = _format_search_context(search_results)
+        bundle = getattr(state, "knowledge_bundle", None)
+
+        if bundle is not None:
+            from src.core.knowledge_qa.bundle_consumer import (
+                extract_for_section, build_priority_context,
+            )
+            section_passages = extract_for_section(bundle, 4, s4_query)
+            search_context = build_priority_context(
+                bundle=bundle, section_passages=section_passages, section_index=4,
+                custom_knowledge_context=getattr(state, "custom_knowledge_context", "") or "",
+                knowledge_context=getattr(state, "knowledge_context", "") or "",
+                exercise_context=state.exercise_context or "",
+            )
+            logger.info("S4 outline Bundle 模式: %d passages", len(section_passages))
+        else:
+            search_results = await _direct_search(s4_query, state.matched_book_ids, state=state)
+            search_context = _format_search_context(search_results)
 
         # Step 2: 构建前序节内容
         s1 = state.sections.get(1)

@@ -244,6 +244,13 @@ class RagHttpClient:
 
 
 
+    async def close(self):
+        """关闭 HTTP 客户端，释放连接池"""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+
+
 class HttpGraphAdapter:
     """通过 HTTP 调用 RAG 服务的社区树查询适配器。
 

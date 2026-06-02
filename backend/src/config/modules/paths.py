@@ -26,3 +26,8 @@ class PathSettings(BaseSettings):
         validation_alias="RAG_BOOKS_DIR",
         description="上传书籍永久存储目录（处理完成后从临时目录移入）"
     )
+    curation_md_dir: str = Field(
+        default=str(BASE_DIR / "app_data" / "curation_md"),
+        validation_alias="CURATION_MD_DIR",
+        description="策管生成的 MD 草稿存储目录"
+    )

@@ -53,7 +53,7 @@ def sample_graph():
     mg.add_relationship(ExtractedRelationship(
         source="感觉统合训练",
         target="注意力不集中",
-        relation_type=RelationType.SOLVES,
+        relation_type=RelationType.THERAPEUTIC_TREATS,
         evidence="研究表明有效",
         source_para_ids=[3],
     ), chapter_id="ch01")
@@ -61,7 +61,7 @@ def sample_graph():
     mg.add_relationship(ExtractedRelationship(
         source="前额叶皮层",
         target="注意力不集中",
-        relation_type=RelationType.AFFECTS,
+        relation_type=RelationType.CAUSAL_CAUSES,
         evidence="脑科学依据",
         source_para_ids=[1],
     ), chapter_id="ch01")
@@ -154,7 +154,7 @@ class TestMasterGraphMerge:
         sample_graph.add_relationship(ExtractedRelationship(
             source="前额叶皮层",
             target="注意力缺陷",
-            relation_type=RelationType.AFFECTS,
+            relation_type=RelationType.CAUSAL_CAUSES,
             evidence="证据",
         ), chapter_id="ch01")
 
@@ -252,7 +252,7 @@ class TestIngestChapter:
                 ExtractedRelationship(
                     source="实体B",
                     target="实体A",
-                    relation_type=RelationType.SOLVES,
+                    relation_type=RelationType.THERAPEUTIC_TREATS,
                     evidence="B 解决 A",
                     source_para_ids=[2],
                 ),

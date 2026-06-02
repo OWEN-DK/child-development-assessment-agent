@@ -367,8 +367,8 @@ def _ingest_to_graph(
     from .models import ExtractedRelationship
 
     for ch_id, ext in staging_extractions.items():
-        # 设置段落总数
-        para_count = max(
+        # 设置段落总数（优先用提取时记录的实际段落数）
+        para_count = ext.para_count or max(
             (pid for e in ext.entities for pid in e.source_para_ids),
             default=0,
         )

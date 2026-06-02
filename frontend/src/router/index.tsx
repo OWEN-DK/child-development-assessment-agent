@@ -11,6 +11,7 @@ import {
   GraphPage,
   PendingQueuePage,
   CustomKnowledgePage,
+  CrossBookPage,
 } from '@features/curation';
 import { KnowledgeBasePage } from '../features/documents';
 import { KnowledgeSearchPage } from '../features/knowledge';
@@ -142,6 +143,10 @@ export const router = createBrowserRouter([
       {
         path: 'curation/custom-knowledge',
         element: <CustomKnowledgePage />,
+      },
+      {
+        path: 'curation/cross-book',
+        element: <CrossBookPage />,
       },
     ],
   },

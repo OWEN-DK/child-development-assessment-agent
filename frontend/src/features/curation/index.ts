@@ -5,5 +5,6 @@ export { DraftEditorPage } from './pages/DraftEditorPage';
 export { GraphPage } from './pages/GraphPage';
 export { PendingQueuePage } from './pages/PendingQueuePage';
 export { CustomKnowledgePage } from './pages/CustomKnowledgePage';
+export { CrossBookPage } from './pages/CrossBookPage';
 export { curationApi } from './api/curationApi';
 export type * from './types';

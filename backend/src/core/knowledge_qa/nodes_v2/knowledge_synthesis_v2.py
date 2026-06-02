@@ -16,6 +16,7 @@ import json
 import logging
 from typing import Any, Dict
 
+from src.core.knowledge_qa.bundle import CrossBookConflict, CrossBookConsensus, KnowledgeBundle
 from src.schemas.knowledge_qa import KnowledgeQAState, push_progress
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,70 @@ def _extract_three_layers(neo4j_knowledge: dict) -> Dict[str, Any]:
     }
 
 
+
+def _extract_three_layers_from_bundle(
+    consensus_list: list[CrossBookConsensus],
+    conflicts_list: list[CrossBookConflict],
+) -> dict:
+    """从 Bundle 跨书关系提取三层综合结果。
+
+    替代 _extract_three_layers——直接消费 Bundle 数据，
+    避免重复查询 Neo4j。
+    """
+    if not consensus_list and not conflicts_list:
+        return {}
+
+    _consensus, _complementary, _conflicts = [], [], []
+
+    for c in consensus_list:
+        topic = c.entity_name
+        books = c.books or []
+        sources = list(dict.fromkeys(books))  # 去重保序
+        entry = {
+            "topic": topic,
+            "source_book": sources[0] if sources else "",
+            "target_book": sources[1] if len(sources) > 1 else "",
+            "explanation": c.description or "",
+        }
+
+        if c.relation_type == "SAME_AS":
+            _consensus.append({
+                "topic": entry["topic"],
+                "agreement": entry["explanation"] or f"两书对 {topic} 达成共识",
+                "confidence": "high",
+                "sources": sources,
+            })
+        elif c.relation_type in ("CROSS_BOOK_COMPLEMENTS", "CROSS_TREATS"):
+            _complementary.append({
+                "topic": entry["topic"],
+                "fragments": [
+                    {"book": s, "perspective": entry["explanation"] if s == sources[0] else ""}
+                    for s in sources
+                ],
+                "integrated_summary": entry["explanation"] or f"多书从不同角度补充 {topic}",
+            })
+
+    for c in conflicts_list:
+        books = c.books or []
+        _conflicts.append({
+            "topic": c.entity_name,
+            "view_a": {"book": books[0] if books else "", "position": c.positions[0] if c.positions else ""},
+            "view_b": {"book": books[1] if len(books) > 1 else "", "position": c.positions[1] if len(c.positions) > 1 else ""},
+            "why_different": c.neo4j_relation_type,
+            "recommendation": "请根据孩子具体情况选择",
+            "severity": "moderate",
+        })
+
+    if not any([_consensus, _complementary, _conflicts]):
+        return {}
+
+    return {
+        "consensus": _consensus,
+        "complementary": _complementary,
+        "conflicts": _conflicts,
+    }
+
+
 async def _llm_infer_three_layers(state: KnowledgeQAState) -> Dict[str, Any]:
     """Neo4j 数据不足时，LLM 从前 4 节内容推断三层。"""
     from src.core.llm.factory import LLMServiceFactoryCompat
@@ -117,8 +182,20 @@ async def knowledge_synthesis_v2_node(state: KnowledgeQAState) -> Dict[str, Any]
     """三层知识综合: 统一共识 / 互补完善 / 冲突辨析。"""
     await push_progress("knowledge_synthesis", "正在综合多书知识…")
 
-    # Step 1: 从 Neo4j 提取
-    synthesis = _extract_three_layers(state.neo4j_knowledge)
+    # Step 1: 优先从 Bundle 提取跨书关系（避免重复查询 Neo4j）
+    bundle = getattr(state, "knowledge_bundle", None)
+    bundle_has_cross_book = (
+        isinstance(bundle, KnowledgeBundle)
+        and (bundle.cross_book_consensus or bundle.cross_book_conflicts)
+    )
+    if bundle_has_cross_book:
+        synthesis = _extract_three_layers_from_bundle(
+            bundle.cross_book_consensus,
+            bundle.cross_book_conflicts,
+        )
+        logger.info("三层综合: 从 Bundle 消费跨书关系")
+    else:
+        synthesis = _extract_three_layers(state.neo4j_knowledge)
 
     # Step 2: Neo4j 不足时 LLM 推断（仅多书场景）
     if not synthesis:

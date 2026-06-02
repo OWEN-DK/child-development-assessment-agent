@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Button, Space, Tag, Modal, message } from 'antd';
 import {
   CheckCircleFilled,
@@ -9,7 +9,7 @@ import {
   RedoOutlined,
   StopOutlined,
 } from '@ant-design/icons';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSSEGeneration } from '../hooks/useSSEGeneration';
 import { useCurationStore } from '../stores/curationStore';
 import { ProgressBar } from '../components/ProgressBar';
@@ -51,9 +51,20 @@ export const GeneratePage: React.FC = () => {
     contradictions: { desc: string; chA: string; chB: string }[];
   } | null>(null);
 
+  const [searchParams] = useSearchParams();
+  const autoStart = searchParams.get('autoStart') === 'true';
+  const autoStartTriggered = useRef(false);
+
   useEffect(() => {
-    if (bookId) resume(bookId);
-  }, [bookId, resume]);
+    if (!bookId) return;
+    if (autoStart && !autoStartTriggered.current) {
+      // Auto-start: skip SSE resume, go directly to start
+      autoStartTriggered.current = true;
+      start(bookId);
+    } else {
+      resume(bookId);
+    }
+  }, [bookId, autoStart, resume, start]);
 
   // D2G 完成后，从实际章节状态聚合摘要
   useEffect(() => {
@@ -69,15 +80,6 @@ export const GeneratePage: React.FC = () => {
     }
   }, [status, chapters]);
 
-  // SSE 完成后自动跳转到草稿编辑器
-  useEffect(() => {
-    if (status === 'completed' && bookId) {
-      const timer = setTimeout(() => {
-        navigate(`/curation/editor/${bookId}`, { replace: true });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [status, bookId, navigate]);
 
   const completedCount = chapters.filter((c) => c.status === 'completed').length;
   const failedCount = chapters.filter((c) => c.status === 'failed').length;

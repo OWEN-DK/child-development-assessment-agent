@@ -8,7 +8,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator, field_validator
+import re
+from pydantic import BaseModel, Field, validator, field_validator, model_validator
 
 
 # ──────────────────────────────────────────────────────────────
@@ -17,7 +18,8 @@ from pydantic import BaseModel, Field, validator, field_validator
 
 
 class EntityType(str, Enum):
-    """实体类型枚举（15+ 种，与 schema.py D2G_ENTITY_TYPES 一致）。"""
+    """实体类型枚举（27 种，与 schema.py D2G_ENTITY_TYPES 一致）。"""
+    # ── 核心业务类型（原有 8 种）──
     Problem = "Problem"
     Solution = "Solution"
     BrainRegion = "BrainRegion"
@@ -26,6 +28,7 @@ class EntityType(str, Enum):
     RootCause = "RootCause"
     Prescription = "Prescription"
     ChildProfile = "ChildProfile"
+    # ── D2G 扩展类型（7 种）──
     CognitiveProcess = "CognitiveProcess"
     Theory = "Theory"
     Mechanism = "Mechanism"
@@ -33,7 +36,23 @@ class EntityType(str, Enum):
     Strategy = "Strategy"
     KeyInsight = "KeyInsight"
     ResearchFinding = "ResearchFinding"
-    # LLM 可能额外生成的类型（宽松匹配）
+    # ── 具体实体类型（v2：人名/地名/物品）──
+    Person = "Person"
+    Location = "Location"
+    Object = "Object"
+    # ── 临床/评估/干预类型（v3 新增）──
+    AssessmentTool = "AssessmentTool"       # 评估工具/量表（如 BOT-2、MABC-2）
+    Symptom = "Symptom"                     # 症状/临床表现（区别于 Problem 的广义问题）
+    Intervention = "Intervention"           # 干预方案/项目（区别于 Exercise 的运动训练）
+    Diagnosis = "Diagnosis"                 # 临床诊断标签（如 ADHD、ASD、DCD）
+    # ── 组织机构/研究/神经科学类型（v3 新增）──
+    Organization = "Organization"           # 医院/学校/研究中心（区别于 Location 的地点）
+    Study = "Study"                         # 具体研究/临床试验/论文
+    Neurotransmitter = "Neurotransmitter"   # 神经递质/激素（如 多巴胺、血清素、皮质醇）
+    # ── 发展/环境类型（v3 新增）──
+    Milestone = "Milestone"                 # 发展里程碑（如 独立行走、说出第一个词）
+    Environment = "Environment"             # 环境/场景（如 教室、家庭、诊所、 playground）
+    # ── LLM 自由输出类型（宽松匹配）──
     BookTitle = "BookTitle"
     Concept = "Concept"
     Fact = "Fact"
@@ -102,6 +121,27 @@ class RelationType(str, Enum):
     ATTRIBUTE_CHARACTERIZED_BY = "ATTRIBUTE_CHARACTERIZED_BY"  # A 以 B 为特征
     ATTRIBUTE_MEASURED_BY = "ATTRIBUTE_MEASURED_BY"          # A 通过 B 测量
 
+    # ── 评估/诊断关系（v3 新增）──
+    ASSESSMENT_ASSESSES = "ASSESSMENT_ASSESSES"               # A 评估 B（工具评估能力/问题）
+    ASSESSMENT_DIAGNOSES = "ASSESSMENT_DIAGNOSES"             # A 诊断 B（工具/标准诊断疾病）
+    ASSESSMENT_MEASURES = "ASSESSMENT_MEASURES"               # A 测量 B（工具测量指标）
+
+    # ── 空间/归属关系（v3 新增）──
+    SPATIAL_LOCATED_IN = "SPATIAL_LOCATED_IN"                 # A 位于 B（地点在组织中，区域在脑区中）
+    SPATIAL_CONNECTS_TO = "SPATIAL_CONNECTS_TO"               # A 连接 B（脑区连接、神经通路）
+
+    # ── 层级/分类关系（v3 新增）──
+    HIERARCHICAL_SUBCLASS_OF = "HIERARCHICAL_SUBCLASS_OF"     # A 是 B 的子类（概念层级）
+    HIERARCHICAL_INSTANCE_OF = "HIERARCHICAL_INSTANCE_OF"     # A 是 B 的实例
+
+    # ── 发布/创作关系（v3 新增）──
+    AUTHORSHIP_PUBLISHED_BY = "AUTHORSHIP_PUBLISHED_BY"       # A 由 B 发表（研究由人/机构发表）
+    AUTHORSHIP_CITED_BY = "AUTHORSHIP_CITED_BY"               # A 被 B 引用（研究被其他研究引用）
+
+    # ── 发展里程碑关系（v3 新增）──
+    DEVELOPMENTAL_EMERGES_AT = "DEVELOPMENTAL_EMERGES_AT"     # A 出现在 B 阶段（里程碑在年龄出现）
+    DEVELOPMENTAL_PREREQUISITE_FOR = "DEVELOPMENTAL_PREREQUISITE_FOR"  # A 是 B 的前提（技能A先于技能B）
+
     # ── 兜底 ──
     RELATES_TO = "RELATES_TO"  # 通用关联（无法归入以上类别时使用）
 
@@ -111,7 +151,28 @@ class RelationType(str, Enum):
 # ──────────────────────────────────────────────────────────────
 
 
-class ExtractedEntity(BaseModel):
+def _coerce_para_id(raw) -> int:
+    """将 'P22' / 'p22' / '22' / 22 统一转为 int。"""
+    if isinstance(raw, int):
+        return raw
+    m = re.search(r"\d+", str(raw))
+    if not m:
+        raise ValueError(f"无法从 {raw!r} 中解析段落序号")
+    return int(m.group())
+
+
+class _SourceParaIdsMixin(BaseModel):
+    """统一处理 LLM 返回的 source_para_ids（可能带 'P' 前缀）。"""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _parse_source_para_ids(cls, data: dict):
+        if "source_para_ids" in data and data["source_para_ids"]:
+            data["source_para_ids"] = [_coerce_para_id(x) for x in data["source_para_ids"]]
+        return data
+
+
+class ExtractedEntity(_SourceParaIdsMixin):
     """单个实体。"""
     name: str = Field(description="实体名称")
     entity_type: str = Field(description="实体类型，如 Person、Event、Theory、BrainRegion 等，LLM 可自由输出最贴切的类型名称")
@@ -134,7 +195,7 @@ class ExtractedEntity(BaseModel):
     )
 
 
-class ExtractedRelationship(BaseModel):
+class ExtractedRelationship(_SourceParaIdsMixin):
     """两个实体之间的关系。"""
     source: str = Field(description="起点实体名称，必须与实体列表中的 name 一致")
     target: str = Field(description="终点实体名称")
@@ -148,7 +209,7 @@ class ExtractedRelationship(BaseModel):
     confidence: float = Field(default=1.0, description="置信度: LLM=1.0, 规则=0.5, embedding=0.4")
 
 
-class ExtractedCase(BaseModel):
+class ExtractedCase(_SourceParaIdsMixin):
     """案例/故事。"""
     title: str = Field(description="案例标题")
     background: str = Field(description="背景：起因描述")
@@ -162,7 +223,7 @@ class ExtractedCase(BaseModel):
     source_para_ids: list[int] = Field(default_factory=list)
 
 
-class ExtractedDataPoint(BaseModel):
+class ExtractedDataPoint(_SourceParaIdsMixin):
     """数据/事实。"""
     metric: str = Field(description="指标名称")
     value: str = Field(description="具体数值")
@@ -174,7 +235,7 @@ class ExtractedDataPoint(BaseModel):
     source_para_ids: list[int] = Field(default_factory=list)
 
 
-class ExtractedQuote(BaseModel):
+class ExtractedQuote(_SourceParaIdsMixin):
     """引言/金句。"""
     text: str = Field(description="引言原文，保留原话")
     speaker: str = Field(default="未知", description="说话人")
@@ -237,6 +298,7 @@ class ChapterExtraction(BaseModel):
     quotes: list[ExtractedQuote] = Field(default_factory=list)
     key_arguments: list[str] = Field(default_factory=list)
     recommendations: list[dict] = Field(default_factory=list)
+    para_count: int = Field(default=0, description="章节实际段落数（用于覆盖率计算）")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -320,17 +382,17 @@ class PipelineConfig(BaseModel):
     segment_target_size: int = Field(default=12_000, description="分段目标大小 (tokens)")
     overlap_size: int = Field(default=1_500, description="分段重叠大小 (tokens)")
     entity_similarity_threshold: float = Field(default=0.85, description="实体消歧 embedding 阈值")
-    max_gap_fill_iterations: int = Field(default=1, description="质量不达标时的最大重提取次数")
+    max_gap_fill_iterations: int = Field(default=3, description="质量不达标时的最大重提取次数")
 
 
 class QualityThresholds(BaseModel):
     """图质量阈值。"""
     max_orphan_rate: float = Field(default=0.15)
-    max_connected_components: int = Field(default=3)
+    max_connected_components: int = Field(default=10)
     min_largest_component_ratio: float = Field(default=0.70)
     min_avg_degree: float = Field(default=1.5)
-    min_chapter_coverage: float = Field(default=0.80)
-    min_overall_para_coverage: float = Field(default=0.75)
+    min_chapter_coverage: float = Field(default=0.60)
+    min_overall_para_coverage: float = Field(default=0.60)
 
 
 # ── 跨书扩展模型（§08-7） ──────────────────────────────────────

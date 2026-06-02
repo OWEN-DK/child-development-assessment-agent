@@ -174,6 +174,7 @@ async def explore_community_tree(
     community_repo: Any,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     relevance_model: str = "qwen3.5-27b",
+    entity_boost_names: set[str] | None = None,
 ) -> list[TraversalHit]:
     """从根节点开始，逐层判定社区相关性，剪枝后加载命中叶子社区的 chunk_ids。
 
@@ -241,15 +242,40 @@ async def explore_community_tree(
                     for c in all_children
                 ]
 
-                relevance_scores = await _batch_check_relevance(
-                    question=question,
-                    communities=child_infos,
-                    model_name=relevance_model,
-                )
+                # ── 实体加分: 包含 Neo4j 实体的社区直接判定为相关（跳过 LLM）──
+                boosted_ids: set[str] = set()
+                if entity_boost_names:
+                    for info in child_infos:
+                        community_ents = set(info.get("entity_names") or [])
+                        if community_ents & entity_boost_names:
+                            boosted_ids.add(info["id"])
+                    if boosted_ids:
+                        logger.debug(
+                            "实体加分: %d/%d 个社区包含关联实体，跳过 LLM 判定",
+                            len(boosted_ids), len(child_infos),
+                        )
 
-                for child, relevant in zip(all_children, relevance_scores):
-                    if relevant and child.node_id not in visited:
-                        next_level.append(child)  # 携带完整对象，下轮免查 get_node
+                # 只对未被加分的社区做 LLM 相关性判定
+                unchecked_items = [
+                    (c, info) for c, info in zip(all_children, child_infos)
+                    if info["id"] not in boosted_ids
+                ]
+
+                if unchecked_items:
+                    unchecked_infos = [info for _, info in unchecked_items]
+                    relevance_scores = await _batch_check_relevance(
+                        question=question,
+                        communities=unchecked_infos,
+                        model_name=relevance_model,
+                    )
+                    for (child, _), relevant in zip(unchecked_items, relevance_scores):
+                        if relevant and child.node_id not in visited:
+                            next_level.append(child)
+
+                # 加分社区直接加入下一层
+                for child in all_children:
+                    if child.node_id in boosted_ids and child.node_id not in visited:
+                        next_level.append(child)
 
         current_level = next_level
 

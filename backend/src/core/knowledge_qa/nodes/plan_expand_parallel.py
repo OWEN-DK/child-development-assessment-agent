@@ -314,30 +314,64 @@ async def plan_expand_parallel_node(state: KnowledgeQAState) -> Dict[str, Any]:
     )
 
     # 共享搜索上下文（所有组共用同一份检索结果）
-    search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
-    base_search_context = _format_search_context(search_results)
+    bundle = getattr(state, "knowledge_bundle", None)
 
-    # 为每组预取运动专项搜索上下文（含动作要领等关键词）
-    group_search_contexts = []
-    for group_idx, group_slots in enumerate(groups):
-        ex_names = " ".join(
-            s["exercise"]["name"] for s in group_slots if s["exercise"].get("name")
+    if bundle is not None:
+        from src.core.knowledge_qa.bundle_consumer import (
+            extract_for_section, build_priority_context,
         )
-        if ex_names and len(ex_names) > 5:
-            ex_query = f"{ex_names} 动作要领 执行要点 家长指导"
-            try:
-                ex_results = await _direct_search(
-                    ex_query, state.matched_book_ids, state=state
-                )
-                gc = _format_search_context(ex_results)
-                if gc:
-                    group_search_contexts.append(
-                        base_search_context + "\n\n## 本组运动专项检索结果\n" + gc
+        section_passages = extract_for_section(bundle, 4, state.question)
+        base_search_context = build_priority_context(
+            bundle=bundle, section_passages=section_passages, section_index=4,
+            custom_knowledge_context=getattr(state, "custom_knowledge_context", "") or "",
+            knowledge_context=getattr(state, "knowledge_context", "") or "",
+            exercise_context=state.exercise_context or "",
+        )
+        # 每组按运动名过滤 Bundle passages 做专项上下文
+        group_search_contexts = []
+        for group_idx, group_slots in enumerate(groups):
+            ex_names = " ".join(
+                s["exercise"]["name"] for s in group_slots if s["exercise"].get("name")
+            )
+            ex_context = base_search_context
+            if ex_names and len(ex_names) > 5:
+                keywords = [w.strip() for w in ex_names.split() if len(w.strip()) >= 2]
+                matched_passages = [
+                    p for p in section_passages
+                    if any(kw in p.content for kw in keywords)
+                ]
+                if matched_passages:
+                    parts = ["\n\n## 本组运动专项知识"]
+                    for mp in matched_passages[:5]:
+                        parts.append(f"> **{mp.chapter_title}**\n> {mp.content[:300]}\n")
+                    ex_context = base_search_context + "\n".join(parts)
+            group_search_contexts.append(ex_context)
+        logger.info("S4 expand Bundle 模式: %d passages", len(section_passages))
+    else:
+        search_results = await _direct_search(state.question, state.matched_book_ids, state=state)
+        base_search_context = _format_search_context(search_results)
+
+        # 为每组预取运动专项搜索上下文（含动作要领等关键词）
+        group_search_contexts = []
+        for group_idx, group_slots in enumerate(groups):
+            ex_names = " ".join(
+                s["exercise"]["name"] for s in group_slots if s["exercise"].get("name")
+            )
+            if ex_names and len(ex_names) > 5:
+                ex_query = f"{ex_names} 动作要领 执行要点 家长指导"
+                try:
+                    ex_results = await _direct_search(
+                        ex_query, state.matched_book_ids, state=state
                     )
-                    continue
-            except Exception:
-                pass
-        group_search_contexts.append(base_search_context)
+                    gc = _format_search_context(ex_results)
+                    if gc:
+                        group_search_contexts.append(
+                            base_search_context + "\n\n## 本组运动专项检索结果\n" + gc
+                        )
+                        continue
+                except Exception:
+                    pass
+            group_search_contexts.append(base_search_context)
 
     # 并行展开（信号量限流）
     sem = asyncio.Semaphore(MAX_PARALLEL)

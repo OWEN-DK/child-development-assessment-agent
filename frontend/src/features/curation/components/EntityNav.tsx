@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { Input } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Input, Tooltip } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { EntityItem } from '../types';
+import { ENTITY_TYPE_LABELS } from '../hooks/useDraftEditor';
 import styles from './EntityNav.module.scss';
 
-const TYPE_LABELS: Record<string, string> = {
-  Problem: '📋 问题',
-  Solution: '✅ 方案',
-  BrainRegion: '🧠 脑区',
-  Exercise: '🏃 运动',
-  Prescription: '💉 处方',
-  RootCause: '⚠️ 根因',
+const ENTITY_TYPE_FALLBACK_COLOR = '#78716C';
+
+const getEntityLabel = (type: string) => {
+  const meta = ENTITY_TYPE_LABELS[type];
+  return meta ? `${meta.icon} ${meta.label}` : `🧩 ${type}`;
 };
+
+const getEntityColor = (type: string) => ENTITY_TYPE_LABELS[type]?.color || ENTITY_TYPE_FALLBACK_COLOR;
 
 interface EntityNavProps {
   entities: EntityItem[];
@@ -34,8 +35,30 @@ export const EntityNav: React.FC<EntityNavProps> = ({
   onToggleConfirm,
 }) => {
   const [search, setSearch] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(Object.keys(groupedEntities)),
+  const defaultExpanded = useMemo(() => {
+    return new Set(
+      Object.entries(groupedEntities)
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, 12)
+        .map(([type]) => type),
+    );
+  }, [groupedEntities]);
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(defaultExpanded);
+
+  const filtered: Record<string, EntityItem[]> = useMemo(
+    () =>
+      search
+        ? Object.fromEntries(
+            Object.entries(groupedEntities)
+              .map(([type, items]) => [
+                type,
+                items.filter((e) => e.name.toLowerCase().includes(search.toLowerCase())),
+              ])
+              .filter(([, items]) => items.length > 0),
+          )
+        : groupedEntities,
+    [groupedEntities, search],
   );
 
   const toggleGroup = (type: string) => {
@@ -46,17 +69,6 @@ export const EntityNav: React.FC<EntityNavProps> = ({
       return next;
     });
   };
-
-  const filtered: Record<string, EntityItem[]> = search
-    ? Object.fromEntries(
-        Object.entries(groupedEntities)
-          .map(([type, items]) => [
-            type,
-            items.filter((e) => e.name.toLowerCase().includes(search.toLowerCase())),
-          ])
-          .filter(([, items]) => items.length > 0),
-      )
-    : groupedEntities;
 
   return (
     <div className={styles.nav}>
@@ -79,28 +91,36 @@ export const EntityNav: React.FC<EntityNavProps> = ({
             <span className={`${styles.group__arrow} ${expandedGroups.has(type) ? styles['group__arrow--expanded'] : ''}`}>
               ▶
             </span>
-            <span>{TYPE_LABELS[type] || type}</span>
-            <span className={styles.group__count}>{items.length}</span>
+            <span className={styles.group__title}>{getEntityLabel(type)}</span>
+            <span className={styles.group__badge} style={{ background: getEntityColor(type) }}>{items.length}</span>
           </div>
-          {expandedGroups.has(type) &&
-            items.map((entity) => (
-              <div
-                key={entity.name}
-                className={`${styles.item} ${activeEntity === entity.name ? styles['item--active'] : ''}`}
-                onClick={() => onSelect(entity.name)}
-              >
-                <div
-                  className={`${styles.item__check} ${confirmedEntities.has(entity.name) ? styles['item__check--confirmed'] : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleConfirm(entity.name);
-                  }}
+          {expandedGroups.has(type) && (
+            <div className={styles.group__grid}>
+              {items.map((entity, entityIdx) => (
+                <button
+                  key={`${entity.name}-${entity.type}-${entityIdx}`}
+                  type="button"
+                  className={`${styles.item} ${activeEntity === entity.name ? styles['item--active'] : ''}`}
+                  onClick={() => onSelect(entity.name)}
                 >
-                  {confirmedEntities.has(entity.name) && '✓'}
-                </div>
-                <span className={styles.item__name}>{entity.name}</span>
-              </div>
-            ))}
+                  <span
+                    role="checkbox"
+                    aria-checked={confirmedEntities.has(entity.name)}
+                    className={`${styles.item__check} ${confirmedEntities.has(entity.name) ? styles['item__check--confirmed'] : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleConfirm(entity.name);
+                    }}
+                  >
+                    {confirmedEntities.has(entity.name) && '✓'}
+                  </span>
+                  <Tooltip title={entity.name.length > 18 ? entity.name : undefined}>
+                    <span className={styles.item__name}>{entity.name}</span>
+                  </Tooltip>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

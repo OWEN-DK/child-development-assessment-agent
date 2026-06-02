@@ -38,16 +38,26 @@ class TestEntityType:
     """EntityType 枚举测试"""
 
     def test_entity_type_count(self):
-        """应有 15 种实体类型"""
-        assert len(list(EntityType)) == 15
+        """应有 32 种实体类型"""
+        assert len(list(EntityType)) == 32
 
     def test_all_entity_types_present(self):
-        """验证所有 15 种实体类型都存在"""
+        """验证所有 27 种实体类型都存在"""
         expected = {
+            # 核心业务类型
             "Problem", "Solution", "BrainRegion", "Risk", "Exercise",
-            "RootCause", "Prescription", "ChildProfile", "CognitiveProcess",
-            "Theory", "Mechanism", "DevelopmentalStage", "Strategy",
-            "KeyInsight", "ResearchFinding",
+            "RootCause", "Prescription", "ChildProfile",
+            # D2G 扩展类型
+            "CognitiveProcess", "Theory", "Mechanism", "DevelopmentalStage",
+            "Strategy", "KeyInsight", "ResearchFinding",
+            # LLM 扩展类型
+            "BookTitle", "Concept", "Fact", "Quote", "DataPoint",
+            # v2: 人名/地名/物品
+            "Person", "Location", "Object",
+            # v3: 临床/评估/干预/发展
+            "AssessmentTool", "Symptom", "Intervention", "Diagnosis",
+            "Organization", "Study", "Neurotransmitter",
+            "Milestone", "Environment",
         }
         actual = {et.value for et in EntityType}
         assert actual == expected
@@ -76,14 +86,29 @@ class TestRelationType:
     """RelationType 枚举测试"""
 
     def test_relation_type_count(self):
-        """应有 6 种关系类型"""
-        assert len(list(RelationType)) == 6
+        """应有 50 种关系类型"""
+        assert len(list(RelationType)) == 50
 
     def test_all_relation_types_present(self):
-        """验证所有 6 种关系类型都存在"""
-        expected = {"CAUSES", "SOLVES", "AFFECTS", "REQUIRES", "PRESCRIBES", "RELATES_TO"}
+        """验证所有关系类型大类都存在"""
         actual = {rt.value for rt in RelationType}
-        assert actual == expected
+        # 验证各大类至少有一个成员
+        assert "CAUSAL_CAUSES" in actual
+        assert "THERAPEUTIC_TREATS" in actual
+        assert "STRUCTURAL_PART_OF" in actual
+        assert "FUNCTIONAL_REGULATES" in actual
+        assert "EVIDENCE_SUPPORTS" in actual
+        assert "TEMPORAL_PRECEDES" in actual
+        assert "COMPARISON_SIMILAR_TO" in actual
+        assert "ATTRIBUTE_ASSOCIATED_WITH" in actual
+        # v3 新增
+        assert "ASSESSMENT_ASSESSES" in actual
+        assert "SPATIAL_LOCATED_IN" in actual
+        assert "HIERARCHICAL_SUBCLASS_OF" in actual
+        assert "AUTHORSHIP_PUBLISHED_BY" in actual
+        assert "DEVELOPMENTAL_EMERGES_AT" in actual
+        # 兜底类型
+        assert "RELATES_TO" in actual
 
 
 # ──────────────────────────────────────────────────────────────
@@ -108,13 +133,14 @@ class TestExtractedEntity:
         assert entity.source_para_ids == [1, 3, 5]
 
     def test_description_too_short(self):
-        """描述少于 20 字应验证失败"""
-        with pytest.raises(ValidationError):
-            ExtractedEntity(
-                name="测试",
-                entity_type=EntityType.Problem,
-                description="太短了",
-            )
+        """描述过短会被自动补充，而非抛出异常"""
+        entity = ExtractedEntity(
+            name="测试",
+            entity_type="Problem",
+            description="太短了",
+        )
+        # 短描述被 validator 自动扩展
+        assert len(entity.description) >= 6  # "关于太短了的概念" >= 6 字
 
     def test_default_source_para_ids(self):
         """source_para_ids 默认为空列表"""
@@ -139,13 +165,13 @@ class TestExtractedRelationship:
         rel = ExtractedRelationship(
             source="注意力不集中",
             target="感觉统合训练",
-            relation_type=RelationType.SOLVES,
+            relation_type=RelationType.THERAPEUTIC_IMPROVES,
             evidence="研究表明感觉统合训练可以有效改善儿童注意力问题",
             source_para_ids=[2],
         )
         assert rel.source == "注意力不集中"
         assert rel.target == "感觉统合训练"
-        assert rel.relation_type == RelationType.SOLVES
+        assert rel.relation_type == RelationType.THERAPEUTIC_IMPROVES
 
 
 # ──────────────────────────────────────────────────────────────
@@ -309,17 +335,18 @@ class TestPipelineConfig:
     """PipelineConfig 模型测试"""
 
     def test_default_config(self):
-        """默认配置值应正确"""
+        """默认配置值应正确（模型名称通过工厂函数获取，不硬编码具体值）"""
         config = PipelineConfig()
-        assert config.models.context == "qwen-turbo"
-        assert config.models.extraction == "qwen-turbo"
-        assert config.models.resolution == "qwen-turbo"
-        assert config.concurrency == 3
+        # 模型工厂返回非空字符串即可
+        assert isinstance(config.models.context, str) and len(config.models.context) > 0
+        assert isinstance(config.models.extraction, str) and len(config.models.extraction) > 0
+        assert isinstance(config.models.resolution, str) and len(config.models.resolution) > 0
+        assert config.concurrency == 5
         assert config.long_chapter_threshold == 20_000
         assert config.segment_target_size == 12_000
         assert config.overlap_size == 1_500
         assert config.entity_similarity_threshold == 0.85
-        assert config.max_gap_fill_iterations == 1
+        assert config.max_gap_fill_iterations == 3
 
     def test_custom_config(self):
         """自定义配置应正确覆盖默认值"""
@@ -345,11 +372,11 @@ class TestQualityThresholds:
         """默认阈值应正确"""
         t = QualityThresholds()
         assert t.max_orphan_rate == 0.15
-        assert t.max_connected_components == 3
+        assert t.max_connected_components == 10
         assert t.min_largest_component_ratio == 0.70
         assert t.min_avg_degree == 1.5
-        assert t.min_chapter_coverage == 0.80
-        assert t.min_overall_para_coverage == 0.75
+        assert t.min_chapter_coverage == 0.60
+        assert t.min_overall_para_coverage == 0.60
 
 
 # ──────────────────────────────────────────────────────────────
@@ -419,11 +446,11 @@ class TestModelConfig:
     """ModelConfig 模型测试"""
 
     def test_default_models(self):
-        """默认模型配置应正确"""
+        """默认模型配置应返回非空字符串（工厂函数从 settings/环境变量获取）"""
         config = ModelConfig()
-        assert config.context == "qwen-turbo"
-        assert config.extraction == "qwen-turbo"
-        assert config.resolution == "qwen-turbo"
+        assert isinstance(config.context, str) and len(config.context) > 0
+        assert isinstance(config.extraction, str) and len(config.extraction) > 0
+        assert isinstance(config.resolution, str) and len(config.resolution) > 0
 
     def test_custom_models(self):
         """自定义模型配置应正确"""

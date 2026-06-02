@@ -15,7 +15,7 @@ import logging
 from typing import List, Protocol, Type, TypeVar
 
 from src.core.knowledge_qa.neo4j.chapter_parser import Chapter
-from .long_chapter import segment_chapter, merge_entity_results, merge_relationship_results, merge_detail_results
+from .long_chapter import segment_chapter, merge_entity_results, merge_relationship_results, merge_detail_results, split_paragraphs
 from .models import (
     EntityListResponse, RelationshipListResponse, JointExtractionResponse,
     BookContext,
@@ -30,7 +30,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 # 覆盖度阈值：孤立实体率超过此值触发补全
-COVERAGE_ORPHAN_THRESHOLD = 0.20
+COVERAGE_ORPHAN_THRESHOLD = 0.10
 
 
 _T = TypeVar("_T")
@@ -51,6 +51,35 @@ def _normalize_entity_dict(d: dict) -> dict:
     return d
 
 
+
+# 关系必需字段
+_RELATION_REQUIRED_FIELDS = {"source", "target", "relation_type"}
+
+
+def _filter_valid_relations(relations: list) -> list:
+    """过滤掉缺少必需字段的残缺关系，保留所有可用的。"""
+    valid = []
+    for r in relations:
+        if not isinstance(r, dict):
+            valid.append(r)
+            continue
+        # 必须有 source, target, 以及 relation_type 或 type
+        has_source = bool(r.get("source"))
+        has_target = bool(r.get("target"))
+        has_rtype = bool(r.get("relation_type") or r.get("type"))
+        if not (has_source and has_target and has_rtype):
+            logger.debug("过滤残缺关系: source=%s target=%s rtype=%s",
+                         r.get("source", "?"), r.get("target", "?"),
+                         r.get("relation_type") or r.get("type", "?"))
+            continue
+        # 规范化 type → relation_type
+        if "type" in r and "relation_type" not in r:
+            r = dict(r)
+            r["relation_type"] = r.pop("type")
+        valid.append(r)
+    return valid
+
+
 def _as_model(result: object, schema: Type[_T]) -> _T:
     """将 generate_structured 的 dict/list 返回值规范化为 Pydantic model。"""
     if isinstance(result, schema):
@@ -67,14 +96,14 @@ def _as_model(result: object, schema: Type[_T]) -> _T:
             if "entities" in normalized:
                 normalized["entities"] = [_normalize_entity_dict(e) for e in normalized["entities"]]
             if "relations" in normalized:
-                normalized["relations"] = [_normalize_relation_dict(r) for r in normalized["relations"]]
+                normalized["relations"] = _filter_valid_relations(normalized["relations"])
             # RelationshipListResponse / EntityListResponse 用 items
             if "items" in normalized and normalized["items"]:
                 sample = normalized["items"][0] if normalized["items"] else {}
                 if "name" in sample and "entity_type" not in sample:
                     normalized["items"] = [_normalize_entity_dict(e) for e in normalized["items"]]
-                elif "source" in sample and "relation_type" not in sample:
-                    normalized["items"] = [_normalize_relation_dict(r) for r in normalized["items"]]
+                elif "source" in sample:
+                    normalized["items"] = _filter_valid_relations(normalized["items"])
             return schema(**normalized)
         except Exception as e:
             logger.warning("_as_model 规范化解析 %s 失败: %s, 输入 keys=%s", schema.__name__, e, list(result.keys()) if isinstance(result, dict) else type(result))
@@ -113,7 +142,7 @@ def _as_model(result: object, schema: Type[_T]) -> _T:
                         source_para_ids=e.get("source_para_ids", []),
                     ))
             relations = []
-            for r in result.get("relations", []):
+            for r in _filter_valid_relations(result.get("relations", [])):
                 if isinstance(r, dict) and r.get("source") and r.get("target"):
                     rtype_str = r.get("relation_type") or r.get("type", "RELATES_TO")
                     # 回退未知枚举值
@@ -158,21 +187,45 @@ JOINT_EXTRACTION_PROMPT = """你是一位儿童发展领域知识提取专家。
 ---
 
 ## 任务
-1. 提取所有重要实体（宁多勿漏，不确定时也提取）
+1. 提取所有**有知识价值的实体**（概念、理论、方法、脑区、问题、策略、人名、地名、物品等）
 2. 为每个实体找到至少 1 个关系（作为 source 或 target）
 3. 关系必须有原文证据（带段落号）
-4. entity_type 使用英文 PascalCase（如 BrainRegion、CognitiveProcess、Exercise 等）
+4. **source_para_ids 必填**：每个实体和关系必须标注来自哪些段落（如 [1, 3]），不可省略
+5. entity_type 使用英文 PascalCase，从以下类型中选择最合适的：
+   - **人物/地点/物品**：Person（研究者、临床医生、案例人物）、Location（机构所在地、实验地点、案例发生地）、Object（治疗工具、评估设备、运动器材、教具、药物）
+   - **核心领域**：BrainRegion、CognitiveProcess、Exercise、Problem、Solution、Risk、RootCause、Prescription、ChildProfile
+   - **理论/证据**：Theory、Mechanism、Concept、Fact、DataPoint、ResearchFinding、KeyInsight
+   - **临床/评估**：AssessmentTool（评估量表/工具如 BOT-2）、Symptom（具体症状表现）、Intervention（干预方案/项目）、Diagnosis（临床诊断如 ADHD、ASD）
+   - **机构/研究**：Organization（医院/学校/研究中心，区别于 Location）、Study（具体研究/临床试验/论文）、Neurotransmitter（神经递质/激素如 多巴胺、血清素）
+   - **发展/环境**：Milestone（发展里程碑如 独立行走）、Environment（场景如 教室、家庭、诊所）、DevelopmentalStage、Strategy 等
 
-### 关系类型（从以下大类中选择）
-- CAUSAL_CAUSES / CAUSAL_LEADS_TO / CAUSAL_CONTRIBUTES_TO: 因果关系
-- THERAPEUTIC_TREATS / THERAPEUTIC_IMPROVES / THERAPEUTIC_ALLEVIATES: 治疗/干预
-- STRUCTURAL_PART_OF / STRUCTURAL_CONTAINS / STRUCTURAL_BELONGS_TO: 结构/组成
-- FUNCTIONAL_REGULATES / FUNCTIONAL_INVOLVED_IN / FUNCTIONAL_MEDIATES: 功能/参与
-- EVIDENCE_SUPPORTS / EVIDENCE_BASED_ON / EVIDENCE_DEMONSTRATES: 证据/研究
-- TEMPORAL_PRECEDES / TEMPORAL_DEVELOPS_INTO: 时间/发展
-- COMPARISON_SIMILAR_TO / COMPARISON_DIFFERENT_FROM: 比较
-- ATTRIBUTE_ASSOCIATED_WITH / ATTRIBUTE_MEASURED_BY: 属性/关联
-- RELATES_TO: 兜底（尽量少用）
+### ⚠️ 不提取以下噪声（提取了也会被过滤掉）
+- **纯时间/日期**：如 "2015年"、"2012年"、"第3章"、"1990年代"、"20分钟"、"每天"
+- **无意义片段**：如 UUID、乱码、截断文本、纯数字
+
+### 提取标准
+- ✅ 提取：有明确定义的领域概念（如 "ADHD"、"前额叶皮层"、"有氧运动"）
+- ✅ 提取：有学术意义的机构/理论/方法（如 "哈佛医学院"、"执行功能理论"）
+- ✅ 提取：人名 —— 研究者、临床专家、被引用的作者、案例中的关键人物（如 "尼尔·泰斯"、"Jean Ayres"）
+- ✅ 提取：地名 —— 研究机构、实验室、医院、案例发生地，标注为 Location 类型（如 "加州大学"、"波士顿儿童医院"）
+- ✅ 提取：物品/工具 —— 治疗设备、评估量表、运动器材、教具、药物，标注为 Object 类型（如 "BOT-2评估工具"、"治疗球"、"利他林"）
+- ✅ 提取：有因果/治疗/功能关系的实体对
+- ❌ 不提取：只出现一次且无任何上下文关联的孤立名词
+
+### 关系类型（从以下大类中选择，尽量用精确类型，少用 RELATES_TO）
+- **因果**：CAUSAL_CAUSES / CAUSAL_LEADS_TO / CAUSAL_CONTRIBUTES_TO / CAUSAL_TRIGGERS / CAUSAL_RESULTS_IN
+- **治疗/干预**：THERAPEUTIC_TREATS / THERAPEUTIC_PREVENTS / THERAPEUTIC_ALLEVIATES / THERAPEUTIC_IMPROVES / THERAPEUTIC_INHIBITS / THERAPEUTIC_ENHANCES
+- **结构/组成**：STRUCTURAL_PART_OF / STRUCTURAL_CONTAINS / STRUCTURAL_CONSISTS_OF / STRUCTURAL_BELONGS_TO
+- **功能/参与**：FUNCTIONAL_REGULATES / FUNCTIONAL_MODULATES / FUNCTIONAL_PARTICIPATES_IN / FUNCTIONAL_INVOLVED_IN / FUNCTIONAL_PLAYS_ROLE_IN / FUNCTIONAL_MEDIATES / FUNCTIONAL_TRANSFORMS
+- **证据/研究**：EVIDENCE_SUPPORTS / EVIDENCE_PROVEN_BY / EVIDENCE_BASED_ON / EVIDENCE_CONTRADICTS / EVIDENCE_DEMONSTRATES
+- **时间/发展**：TEMPORAL_PRECEDES / TEMPORAL_FOLLOWS / TEMPORAL_DURING / TEMPORAL_DEVELOPS_INTO / DEVELOPMENTAL_EMERGES_AT / DEVELOPMENTAL_PREREQUISITE_FOR
+- **比较**：COMPARISON_SIMILAR_TO / COMPARISON_DIFFERENT_FROM / COMPARISON_ALTERNATIVE_TO
+- **属性/关联**：ATTRIBUTE_ASSOCIATED_WITH / ATTRIBUTE_HAS_PROPERTY / ATTRIBUTE_CHARACTERIZED_BY / ATTRIBUTE_MEASURED_BY
+- **评估/诊断**：ASSESSMENT_ASSESSES / ASSESSMENT_DIAGNOSES / ASSESSMENT_MEASURES
+- **空间/归属**：SPATIAL_LOCATED_IN / SPATIAL_CONNECTS_TO
+- **层级/分类**：HIERARCHICAL_SUBCLASS_OF / HIERARCHICAL_INSTANCE_OF
+- **发布/创作**：AUTHORSHIP_PUBLISHED_BY / AUTHORSHIP_CITED_BY
+- **兜底**：RELATES_TO（无法归入以上类别时使用，尽量少用）
 
 ### 覆盖度约束（硬性）
 - 关系数 >= 实体数 × 0.8（即孤立率 < 20%）
@@ -188,7 +241,17 @@ JOINT_EXTRACTION_PROMPT = """你是一位儿童发展领域知识提取专家。
 ```json
 {{
   "entities": [
-    {{"name": "实体名", "type": "BrainRegion", "description": "简要描述", "source_para_ids": [1, 3]}}
+    {{"name": "实体名", "type": "BrainRegion", "description": "简要描述", "source_para_ids": [1, 3]}},
+    {{"name": "研究者姓名", "type": "Person", "description": "身份/贡献", "source_para_ids": [2]}},
+    {{"name": "机构或地点名", "type": "Location", "description": "地点说明或关联事件", "source_para_ids": [5]}},
+    {{"name": "工具或物品名", "type": "Object", "description": "用途或在文中的角色", "source_para_ids": [3, 7]}},
+    {{"name": "评估量表名", "type": "AssessmentTool", "description": "评估内容与适用对象", "source_para_ids": [4]}},
+    {{"name": "具体症状", "type": "Symptom", "description": "症状表现描述", "source_para_ids": [3, 6]}},
+    {{"name": "临床诊断", "type": "Diagnosis", "description": "诊断标准与特征", "source_para_ids": [1, 2]}},
+    {{"name": "干预方案", "type": "Intervention", "description": "干预内容与目标", "source_para_ids": [8, 9]}},
+    {{"name": "神经递质/激素", "type": "Neurotransmitter", "description": "功能与相关机制", "source_para_ids": [5]}},
+    {{"name": "发展里程碑", "type": "Milestone", "description": "里程碑描述与年龄范围", "source_para_ids": [4]}},
+    {{"name": "环境/场景", "type": "Environment", "description": "场景特征与角色", "source_para_ids": [1, 7]}}
   ],
   "relations": [
     {{"source": "实体A", "target": "实体B", "relation_type": "CAUSAL_CAUSES", "evidence": "原文引用", "source_para_ids": [2]}}
@@ -216,13 +279,20 @@ COVERAGE_FIX_PROMPT = """你是知识关系补全专家。以下实体在上一�
 1. 原文中该实体与其他实体共现的段落
 2. 该实体在上下文中的因果、功能、或关联关系
 
-### 关系类型
-- CAUSAL_CAUSES / CAUSAL_LEADS_TO / CAUSAL_CONTRIBUTES_TO
-- THERAPEUTIC_TREATS / THERAPEUTIC_IMPROVES / THERAPEUTIC_ALLEVIATES
-- STRUCTURAL_PART_OF / STRUCTURAL_CONTAINS
-- FUNCTIONAL_REGULATES / FUNCTIONAL_INVOLVED_IN / FUNCTIONAL_MEDIATES
-- EVIDENCE_SUPPORTS / EVIDENCE_BASED_ON
-- ATTRIBUTE_ASSOCIATED_WITH / RELATES_TO
+### 关系类型（尽量用精确类型）
+- **因果**：CAUSAL_CAUSES / CAUSAL_LEADS_TO / CAUSAL_CONTRIBUTES_TO / CAUSAL_TRIGGERS / CAUSAL_RESULTS_IN
+- **治疗/干预**：THERAPEUTIC_TREATS / THERAPEUTIC_PREVENTS / THERAPEUTIC_ALLEVIATES / THERAPEUTIC_IMPROVES / THERAPEUTIC_INHIBITS / THERAPEUTIC_ENHANCES
+- **结构/组成**：STRUCTURAL_PART_OF / STRUCTURAL_CONTAINS / STRUCTURAL_CONSISTS_OF / STRUCTURAL_BELONGS_TO
+- **功能/参与**：FUNCTIONAL_REGULATES / FUNCTIONAL_MODULATES / FUNCTIONAL_PARTICIPATES_IN / FUNCTIONAL_INVOLVED_IN / FUNCTIONAL_PLAYS_ROLE_IN / FUNCTIONAL_MEDIATES / FUNCTIONAL_TRANSFORMS
+- **证据/研究**：EVIDENCE_SUPPORTS / EVIDENCE_PROVEN_BY / EVIDENCE_BASED_ON / EVIDENCE_CONTRADICTS / EVIDENCE_DEMONSTRATES
+- **时间/发展**：TEMPORAL_PRECEDES / TEMPORAL_FOLLOWS / TEMPORAL_DURING / TEMPORAL_DEVELOPS_INTO / DEVELOPMENTAL_EMERGES_AT / DEVELOPMENTAL_PREREQUISITE_FOR
+- **比较**：COMPARISON_SIMILAR_TO / COMPARISON_DIFFERENT_FROM / COMPARISON_ALTERNATIVE_TO
+- **属性/关联**：ATTRIBUTE_ASSOCIATED_WITH / ATTRIBUTE_HAS_PROPERTY / ATTRIBUTE_CHARACTERIZED_BY / ATTRIBUTE_MEASURED_BY
+- **评估/诊断**：ASSESSMENT_ASSESSES / ASSESSMENT_DIAGNOSES / ASSESSMENT_MEASURES
+- **空间/归属**：SPATIAL_LOCATED_IN / SPATIAL_CONNECTS_TO
+- **层级/分类**：HIERARCHICAL_SUBCLASS_OF / HIERARCHICAL_INSTANCE_OF
+- **发布/创作**：AUTHORSHIP_PUBLISHED_BY / AUTHORSHIP_CITED_BY
+- **兜底**：RELATES_TO
 
 ## 输出要求
 - 只输出 relations 数组，每个关系包含 source、target、relation_type、evidence
@@ -326,6 +396,110 @@ def _mark_relation_source(relations: list, source: str) -> None:
             r.relation_source = source
         elif isinstance(r, dict):
             r["relation_source"] = source
+
+
+
+# ──────────────────────────────────────────────────────────────
+# 噪声实体过滤（后处理）
+# ──────────────────────────────────────────────────────────────
+
+import re
+
+# 纯时间/日期模式
+_DATE_PATTERNS = re.compile(
+    r"^("
+    r"\d{4}年"                            # 2015年
+    r"|\d{4}[-/]\d{1,2}[-/]\d{1,2}"   # 2015-03-15
+    r"|\d{1,2}月\d{1,2}日"              # 3月15日
+    r"|\d{4}年代"                         # 1990年代
+    r"|\d{4}年?\s*[-—~]\s*\d{4}年?"   # 2010-2015 / 2010—2015
+    r"|第[一二三四五六七八九十百千\d]+[章节点节]"
+    r"|\d+分钟|\d+小时|\d+天|\d+周|\d+个月"
+    r"|每天|每周|每月|每年|每月|每年|每周一次"
+    r"|早上|中午|晚上|上午|下午|傍晚|深夜|凌晨"
+    r"|\d+岁|\d+个月大"
+    r")$"
+)
+
+# UUID / 乱码 / 截断片段
+_NOISE_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-"  # UUID
+    r"|^[a-z0-9]{20,}$"            # 长串无意义字符
+    r"|\.\.\.$"                   # 截断省略号
+    r"|^\.{3}"                      # 开头省略号
+)
+
+def _is_noise_entity(name: str, entity_type: str) -> bool:
+    """判断实体是否为噪声（应被过滤掉）。
+
+    Returns:
+        True 表示应过滤掉
+    """
+    n = name.strip()
+
+    # 空名称
+    if not n:
+        return True
+
+    # UUID / 乱码 / 截断片段
+    if _NOISE_PATTERN.search(n):
+        return True
+
+    # 纯时间/日期
+    if _DATE_PATTERNS.match(n):
+        return True
+
+    # 纯数字
+    if n.isdigit():
+        return True
+
+    return False
+
+
+def filter_noise_entities(
+    entities: list,
+    relations: list,
+) -> tuple[list, list]:
+    """过滤噪声实体及其关系。
+
+    对实体列表进行噪声检测，移除噪声实体和以它们为 source/target 的关系。
+
+    Args:
+        entities: 实体列表（ExtractedEntity 或 dict）
+        relations: 关系列表（ExtractedRelationship 或 dict）
+
+    Returns:
+        (filtered_entities, filtered_relations) 元组
+    """
+    noise_names: set[str] = set()
+
+    for e in entities:
+        name = e.name if hasattr(e, "name") else e.get("name", "")
+        etype = e.entity_type if hasattr(e, "entity_type") else e.get("entity_type", "AutoEntity")
+        if _is_noise_entity(name, etype):
+            noise_names.add(name)
+
+    if not noise_names:
+        return entities, relations
+
+    filtered_entities = [
+        e for e in entities
+        if (e.name if hasattr(e, "name") else e.get("name", "")) not in noise_names
+    ]
+    filtered_relations = [
+        r for r in relations
+        if (r.source if hasattr(r, "source") else r.get("source", "")) not in noise_names
+        and (r.target if hasattr(r, "target") else r.get("target", "")) not in noise_names
+    ]
+
+    logger.info(
+        "噪声过滤: 移除 %d 个噪声实体 (%s), %d 条关系",
+        len(noise_names),
+        ", ".join(sorted(noise_names)[:10]) + ("..." if len(noise_names) > 10 else ""),
+        len(relations) - len(filtered_relations),
+    )
+
+    return filtered_entities, filtered_relations
 
 
 # ──────────────────────────────────────────────────────────────
@@ -454,6 +628,10 @@ async def _extract_short_joint(
         ChapterDetails,
     )
 
+    # 噪声实体过滤
+    entities, relations = filter_noise_entities(entities, relations)
+
+    para_count = len(split_paragraphs(chapter.markdown))
     return ChapterExtraction(
         chapter_id=chapter.id,
         chapter_title=chapter.title,
@@ -464,6 +642,7 @@ async def _extract_short_joint(
         quotes=details.quotes if isinstance(details, ChapterDetails) else [],
         key_arguments=details.key_arguments if isinstance(details, ChapterDetails) else [],
         recommendations=details.recommendations if isinstance(details, ChapterDetails) else [],
+        para_count=para_count,
     )
 
 
@@ -575,6 +754,10 @@ async def _extract_long_joint(
     merged_details = merge_detail_results(seg_detail_results)
     logger.info("  [%s] 提取完成", chapter.id)
 
+    # 噪声实体过滤
+    entity_list, all_relationships = filter_noise_entities(entity_list, all_relationships)
+
+    para_count = len(split_paragraphs(chapter.markdown))
     return ChapterExtraction(
         chapter_id=chapter.id,
         chapter_title=chapter.title,
@@ -585,6 +768,7 @@ async def _extract_long_joint(
         quotes=merged_details.get("quotes", []),
         key_arguments=merged_details.get("key_arguments", []),
         recommendations=merged_details.get("recommendations", []),
+        para_count=para_count,
     )
 
 
@@ -644,6 +828,22 @@ BRIDGE_RELATION_PROMPT = """你是知识关系分析专家。以下是一个长�
 1. 在不同段落出现的同一实体，前后文是否有未被提取的关系
 2. 段 A 提到的实体与段 B 提到的实体之间的因果/影响关系
 3. 作者在某段提出的论点，在另一段给出的论据支撑
+4. 段 A 提到的研究者/机构与段 B 提到的理论/研究之间的关系
+5. 段 A 提到的评估工具/诊断标签与段 B 提到的症状/干预方案之间的关系
+
+### 关系类型（从以下大类中选择）
+- **因果**：CAUSAL_CAUSES / CAUSAL_LEADS_TO / CAUSAL_CONTRIBUTES_TO / CAUSAL_TRIGGERS / CAUSAL_RESULTS_IN
+- **治疗/干预**：THERAPEUTIC_TREATS / THERAPEUTIC_PREVENTS / THERAPEUTIC_ALLEVIATES / THERAPEUTIC_IMPROVES / THERAPEUTIC_INHIBITS / THERAPEUTIC_ENHANCES
+- **结构/组成**：STRUCTURAL_PART_OF / STRUCTURAL_CONTAINS / STRUCTURAL_CONSISTS_OF / STRUCTURAL_BELONGS_TO
+- **功能/参与**：FUNCTIONAL_REGULATES / FUNCTIONAL_MODULATES / FUNCTIONAL_PARTICIPATES_IN / FUNCTIONAL_INVOLVED_IN / FUNCTIONAL_PLAYS_ROLE_IN / FUNCTIONAL_MEDIATES / FUNCTIONAL_TRANSFORMS
+- **证据/研究**：EVIDENCE_SUPPORTS / EVIDENCE_PROVEN_BY / EVIDENCE_BASED_ON / EVIDENCE_CONTRADICTS / EVIDENCE_DEMONSTRATES
+- **时间/发展**：TEMPORAL_PRECEDES / TEMPORAL_FOLLOWS / TEMPORAL_DURING / TEMPORAL_DEVELOPS_INTO / DEVELOPMENTAL_EMERGES_AT / DEVELOPMENTAL_PREREQUISITE_FOR
+- **评估/诊断**：ASSESSMENT_ASSESSES / ASSESSMENT_DIAGNOSES / ASSESSMENT_MEASURES
+- **空间/归属**：SPATIAL_LOCATED_IN / SPATIAL_CONNECTS_TO
+- **层级/分类**：HIERARCHICAL_SUBCLASS_OF / HIERARCHICAL_INSTANCE_OF
+- **发布/创作**：AUTHORSHIP_PUBLISHED_BY / AUTHORSHIP_CITED_BY
+- **属性/关联**：ATTRIBUTE_ASSOCIATED_WITH / ATTRIBUTE_HAS_PROPERTY / ATTRIBUTE_CHARACTERIZED_BY / ATTRIBUTE_MEASURED_BY
+- **兜底**：RELATES_TO
 
 只输出确实跨段的关系，不要重复段内已有的关系。
 """

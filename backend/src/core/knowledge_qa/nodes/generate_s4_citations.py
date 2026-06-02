@@ -97,12 +97,29 @@ async def generate_s4_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
     if state.knowledge_context:
         search_parts.append(state.knowledge_context[:5000])
     try:
-        search_results = await _direct_search(search_terms, state.matched_book_ids)
-        if search_results:
-            search_parts.append(_format_search_context(search_results))
-        logger.info(
-            f"S4 引用: 预取 context={bool(state.knowledge_context)}, 补充搜索={len(search_results)} 条"
-        )
+        bundle = getattr(state, "knowledge_bundle", None)
+        if bundle is not None:
+            # Bundle 模式：从 Bundle 提取全文 passages
+            from src.core.knowledge_qa.bundle_consumer import (
+                extract_for_section, build_priority_context,
+            )
+            section_passages = extract_for_section(bundle, 4, search_terms)
+            search_context_part = build_priority_context(
+                bundle=bundle, section_passages=section_passages, section_index=4,
+            )
+            if search_context_part:
+                search_parts.append(search_context_part)
+            logger.info(
+                "S4 引用 Bundle 模式: context=%s, passages=%d",
+                bool(state.knowledge_context), len(section_passages),
+            )
+        else:
+            search_results = await _direct_search(search_terms, state.matched_book_ids)
+            if search_results:
+                search_parts.append(_format_search_context(search_results))
+            logger.info(
+                f"S4 引用: 预取 context={bool(state.knowledge_context)}, 补充搜索={len(search_results)} 条"
+            )
     except Exception as e:
         logger.warning(f"S4 引用搜索失败: {e}")
     search_context = "\n\n".join(search_parts) if search_parts else "（无可用上下文）"

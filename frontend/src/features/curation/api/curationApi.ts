@@ -166,4 +166,62 @@ export const curationApi = {
     const res = await apiClient.get('/api/v2/curation/pending', { params });
     return res.data;
   },
+
+  /* ===== 跨书融合 (Phase 5a/5b) ===== */
+
+  /** 获取跨书融合分析结果 */
+  getCrossBookRelations: async (bookId: string): Promise<any> => {
+    const res = await apiClient.get(`/api/v2/curation/cross-book/relations/${bookId}`);
+    return res.data;
+  },
+
+  /** 更新单条审核者决策 */
+  updateCrossBookDecision: async (
+    bookId: string,
+    decisionType: 'entity_match' | 'cross_relation',
+    index: number,
+    decision: string,
+    customType?: string,
+  ): Promise<void> => {
+    await apiClient.post('/api/v2/curation/cross-book/decision', {
+      book_id: bookId,
+      decision_type: decisionType,
+      index,
+      decision,
+      custom_type: customType,
+    });
+  },
+
+  /** 批量更新审核者决策 */
+  batchUpdateCrossBookDecisions: async (
+    bookId: string,
+    decisionType: 'entity_match' | 'cross_relation',
+    indices: number[],
+    decision: string,
+  ): Promise<void> => {
+    await apiClient.post('/api/v2/curation/cross-book/decision/batch', {
+      book_id: bookId,
+      decision_type: decisionType,
+      indices,
+      decision,
+    });
+  },
+
+  /* ===== 全局跨书分析（Phase 4 新增） ===== */
+
+  /** 对所有已入库书籍执行成对跨书分析 */
+  analyzeAllBooks: async (force?: boolean): Promise<any> => {
+    const res = await apiClient.post('/api/v2/curation/cross-book/analyze-all', null, {
+      params: force ? { force: true } : {},
+    });
+    return res.data;
+  },
+
+  /** 手动重试单书的跨书分析 */
+  retryCrossBookAnalysis: async (bookId: string): Promise<any> => {
+    const res = await apiClient.post(
+      `/api/v2/curation/books/${bookId}/cross-book/retry`,
+    );
+    return res.data;
+  },
 };

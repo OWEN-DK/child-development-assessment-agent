@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Button, App, Modal, Spin } from 'antd';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Button, App, Modal, Spin, Segmented, Tooltip, Popover } from 'antd';
 import {
   SaveOutlined,
   CheckOutlined,
@@ -11,25 +11,29 @@ import {
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useDraftEditor } from '../hooks/useDraftEditor';
+import rehypeRaw from 'rehype-raw';
+import { useDraftEditor, ENTITY_TYPE_LABELS } from '../hooks/useDraftEditor';
 import { EntityNav } from '../components/EntityNav';
 import { InfoPanel } from '../components/InfoPanel';
+import { RelationshipCards } from '../components/RelationshipCards';
+import { CrossBookPanel } from '../components/CrossBookPanel';
 import styles from './DraftEditorPage.module.scss';
+import { stripFrontmatter, preprocessCurationMarkdown } from '../../../lib/markdown';
 
-const ENTITY_TYPES = ['Problem', 'Solution', 'BrainRegion', 'Exercise', 'Prescription', 'RootCause'];
-const TYPE_LABELS: Record<string, string> = {
-  Problem: '📋 问题',
-  Solution: '✅ 方案',
-  BrainRegion: '🧠 脑区',
-  Exercise: '🏃 运动',
-  Prescription: '💉 处方',
-  RootCause: '⚠️ 根因',
-};
 
 export const DraftEditorPage: React.FC = () => {
   const { bookId } = useParams<{ bookId: string }>();
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'markdown' | 'relations' | 'crossbook'>('markdown');
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const sectionTargets = useMemo(() => [
+    { key: 'entities', label: '已有实体', textMatch: '已有实体' },
+    { key: 'relations', label: '主张', textMatch: '主张' },
+    { key: 'stories', label: '案例/故事', textMatch: '案例/故事' },
+    { key: 'coverage', label: '段落覆盖', textMatch: '段落覆盖' },
+  ], []);
+
   const { message } = App.useApp();
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +51,9 @@ export const DraftEditorPage: React.FC = () => {
     activeEntity,
     totalEntities,
     confirmedCount,
+    relations,
+    activeEntityRelations,
+    groupedRelations,
     crossBookRelations,
     crossBookLoading,
     setContent,
@@ -57,15 +64,23 @@ export const DraftEditorPage: React.FC = () => {
     toggleConfirm,
   } = useDraftEditor(bookId);
 
-  // Scroll to entity when activeEntity changes
+  const chapterTargets = useMemo(() => {
+    if (!content) return [];
+    const matches = content.match(/^# .+/gm) || [];
+    return matches.slice(0, 24).map((line, idx) => ({
+      key: `chapter-${idx}`,
+      label: line.replace(/^#\s*/, '').trim(),
+      textMatch: line.replace(/^#\s*/, '').trim(),
+    }));
+  }, [content]);
+
+  // Scroll to entity heading when activeEntity changes (markdown mode)
   useEffect(() => {
-    if (!activeEntity || !contentRef.current) return;
-    // Find the heading that matches the entity name
+    if (!activeEntity || !contentRef.current || viewMode !== 'markdown') return;
     const headings = contentRef.current.querySelectorAll('h3');
     for (const h of headings) {
       if (h.textContent?.includes(activeEntity)) {
         h.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Brief highlight
         h.style.background = 'rgba(79, 70, 229, 0.1)';
         h.style.borderRadius = '4px';
         h.style.transition = 'background 0.3s';
@@ -73,8 +88,28 @@ export const DraftEditorPage: React.FC = () => {
         break;
       }
     }
-  }, [activeEntity]);
+  }, [activeEntity, viewMode]);
 
+  const scrollToSection = (textMatch: string, key: string, heading: 'h1' | 'h2' = 'h2') => {
+    if (!contentRef.current) return;
+    const targets = contentRef.current.querySelectorAll(heading);
+    for (const el of targets) {
+      if (el.textContent?.includes(textMatch)) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setActiveSection(key);
+        return;
+      }
+    }
+  };
+
+  // 从关系卡片点击实体时切换到关系视图
+  const handleEntityClick = (name: string) => {
+    setActiveEntity(name);
+    // 如果当前是 Markdown 模式，自动切到关系视图
+    if (viewMode === 'markdown') {
+      setViewMode('relations');
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -119,11 +154,20 @@ export const DraftEditorPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const entityDistribution = ENTITY_TYPES.map((type) => ({
-    type,
-    label: TYPE_LABELS[type] || type,
-    count: entities.filter((e) => e.type === type).length,
-  }));
+  const entityDistribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entity of entities) {
+      const type = entity.type || 'AutoEntity';
+      counts[type] = (counts[type] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => ({
+        type,
+        label: `${ENTITY_TYPE_LABELS[type]?.icon ?? '🧩'} ${ENTITY_TYPE_LABELS[type]?.label ?? type}`.trim(),
+        count,
+      }));
+  }, [entities]);
 
   if (loading) {
     return (
@@ -155,26 +199,80 @@ export const DraftEditorPage: React.FC = () => {
             activeEntity={activeEntity}
             confirmedCount={confirmedCount}
             totalEntities={totalEntities}
-            onSelect={setActiveEntity}
+            onSelect={(name) => {
+              setActiveEntity(name);
+              // 在 markdown 模式下点击实体 → 滚动到对应标题
+              // 在关系模式下 → 自动过滤关系
+            }}
             onToggleConfirm={toggleConfirm}
           />
         </div>
 
-        {/* 中间：MD 正文 */}
+        {/* 中间：MD 正文 / 关系卡片 */}
         <div className={styles.content}>
-          {editMode ? (
-            <textarea
-              className={styles['edit-area']}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              style={{ width: '100%', maxWidth: 720 }}
-            />
+          {viewMode === 'markdown' ? (
+            editMode ? (
+              <textarea
+                className={styles['edit-area']}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                style={{ width: '100%', maxWidth: 720 }}
+              />
+            ) : (
+              <div className={styles['content-body']}>
+                <div className={styles['section-nav']}>
+                  {sectionTargets.map((s) => (
+                    <Tooltip key={s.key} title={`跳转到「${s.label}」`}>
+                      <Button
+                        size="small"
+                        type={activeSection === s.key ? 'primary' : 'default'}
+                        onClick={() => scrollToSection(s.textMatch, s.key)}
+                      >
+                        {s.label}
+                      </Button>
+                    </Tooltip>
+                  ))}
+
+                  {chapterTargets.length > 0 && (
+                    <Popover
+                      trigger="click"
+                      placement="bottom"
+                      content={
+                        <div style={{ display: 'grid', gap: 6, maxHeight: 320, overflow: 'auto', minWidth: 220 }}>
+                          {chapterTargets.map((c) => (
+                            <Button
+                              key={c.key}
+                              size="small"
+                              type={activeSection === c.key ? 'primary' : 'default'}
+                              onClick={() => scrollToSection(c.textMatch, c.key, 'h1')}
+                              style={{ justifyContent: 'flex-start' }}
+                            >
+                              {c.label}
+                            </Button>
+                          ))}
+                        </div>
+                      }
+                    >
+                      <Button size="small">章节目录</Button>
+                    </Popover>
+                  )}
+                </div>
+
+                <div className={styles['md-body']} ref={contentRef}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                    {preprocessCurationMarkdown(stripFrontmatter(content)) || '*暂无内容*'}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            )
           ) : (
-            <div className={styles['md-body']} ref={contentRef}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content || '*暂无内容*'}
-              </ReactMarkdown>
-            </div>
+            <RelationshipCards
+              allRelations={activeEntity ? activeEntityRelations : relations}
+              groupedRelations={groupedRelations}
+              activeEntity={activeEntity}
+              hasActiveEntity={!!activeEntity}
+              onEntityClick={handleEntityClick}
+            />
           )}
         </div>
 
@@ -193,10 +291,51 @@ export const DraftEditorPage: React.FC = () => {
             onViewGraph={() => navigate(`/curation/graph/${bookId}`)}
             onExportMD={handleExportMD}
           />
+          {/* 视图切换 */}
+          {!editMode && (
+            <div className={styles.panel__section} style={{
+              background: 'var(--surface-panel)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-4)',
+            }}>
+              <div className={styles.panel__sectionTitle} style={{
+                fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)',
+                marginBottom: 'var(--space-3)',
+              }}>
+                视图模式
+              </div>
+              <Segmented
+                block
+                value={viewMode}
+                onChange={(val) => setViewMode(val as 'markdown' | 'relations')}
+                options={[
+                  { label: '📝 原文', value: 'markdown' },
+                  { label: '🔗 关系', value: 'relations' },
+                  { label: '🌐 跨书', value: 'crossbook' },
+                ]}
+              />
+              {viewMode === 'relations' && activeEntity && (
+                <Button
+                  size="small"
+                  type="link"
+                  style={{ marginTop: 8, padding: 0 }}
+                  onClick={() => setActiveEntity(null)}
+                >
+                  清除筛选 · 显示全部关系
+                </Button>
+              )}
+              {viewMode === 'relations' && !activeEntity && relations.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  点击左侧实体可筛选关系
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 跨书关系对比区块 (compare mode) */}
+      {/* 跨书关系对比区块 */}
       {isCompareMode && (
         <div className={styles['cross-book-section']} style={{
           margin: '0 16px', padding: '16px', background: 'var(--surface-secondary)',
@@ -242,6 +381,13 @@ export const DraftEditorPage: React.FC = () => {
         </div>
       )}
 
+      {/* 跨书融合面板 */}
+      {viewMode === 'crossbook' && bookId && (
+        <div style={{ margin: '0 16px' }}>
+          <CrossBookPanel bookId={bookId} />
+        </div>
+      )}
+
       {/* 底部操作栏 */}
       <div className={styles.footer}>
         <div className={styles.footer__left}>
@@ -267,7 +413,7 @@ export const DraftEditorPage: React.FC = () => {
         </div>
         <div className={styles.footer__right}>
           <span className={styles.footer__status}>
-            {editMode ? '编辑模式' : '预览模式'} · v{draft.version}
+            {editMode ? '编辑模式' : viewMode === 'relations' ? '关系视图' : '预览模式'} · v{draft.version}
           </span>
           <Button icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
             保存草稿

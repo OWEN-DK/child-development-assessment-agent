@@ -360,7 +360,7 @@ CREATE TABLE IF NOT EXISTS `md_version` (
   `id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `book_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
   `version` int(11) NOT NULL,
-  `md_content` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `md_path` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MD 文件路径，内容存本地文件系统',
   `cypher_count` int(11) DEFAULT NULL,
   `diff_summary` json DEFAULT NULL,
   `status` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,

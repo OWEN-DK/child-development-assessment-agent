@@ -1,0 +1,105 @@
+{
+  "book_id": "92c50c6b-4506-4ec1-9ac6-d02f3384effd",
+  "generated_at": "2026-06-01T19:00:00Z",
+  "source_books": [
+    {"book_id": "book-a", "title": "儿童发展心理学"},
+    {"book_id": "book-b", "title": "运动改变大脑.epub"}
+  ],
+  "entity_matches": [
+    {
+      "index": 0,
+      "new_entity": "感觉统合",
+      "new_type": "Concept",
+      "new_desc": "感觉统合是指大脑将从各种感觉器官传来的感觉信息进行多次组合分析、综合处理，做出正确决策的神经心理过程",
+      "matched_entity": "感觉统合训练",
+      "matched_type": "Therapy",
+      "matched_desc": "通过特定的感觉刺激活动改善感觉统合功能的训练方法",
+      "matched_book_id": "book-a",
+      "matched_book_title": "儿童发展心理学",
+      "similarity": 0.87,
+      "llm_same": true,
+      "llm_reason": "两者描述的核心概念相同，只是表述角度不同",
+      "reviewer_decision": "pending"
+    },
+    {
+      "index": 1,
+      "new_entity": "前庭觉",
+      "new_type": "Concept",
+      "new_desc": "前庭觉是人体平衡系统的重要组成部分，负责感知头部位置和运动",
+      "matched_entity": "前庭系统",
+      "matched_type": "Anatomy",
+      "matched_desc": "位于内耳的平衡器官系统，包括半规管和耳石器",
+      "matched_book_id": "book-a",
+      "matched_book_title": "儿童发展心理学",
+      "similarity": 0.82,
+      "llm_same": false,
+      "llm_reason": "前者是感觉概念，后者是解剖结构，有关联但不是同一事物",
+      "reviewer_decision": "pending"
+    },
+    {
+      "index": 2,
+      "new_entity": "注意力缺陷",
+      "new_type": "Disorder",
+      "new_desc": "注意力缺陷多动障碍(ADHD)是一种常见的儿童神经发育障碍",
+      "matched_entity": "ADHD",
+      "matched_type": "Disorder",
+      "matched_desc": "注意缺陷多动障碍，表现为注意力不集中、多动和冲动",
+      "matched_book_id": "book-a",
+      "matched_book_title": "儿童发展心理学",
+      "similarity": 0.91,
+      "llm_same": true,
+      "llm_reason": "注意力缺陷是ADHD的中文表述，指同一障碍",
+      "reviewer_decision": "pending"
+    }
+  ],
+  "cross_relations": [
+    {
+      "index": 0,
+      "source_entity": "有氧运动",
+      "source_type": "Therapy",
+      "source_book": "book-b",
+      "target_entity": "注意力缺陷",
+      "target_type": "Disorder",
+      "target_book": "book-b",
+      "relation_type": "TREATS",
+      "confidence": 0.85,
+      "reason": "有氧运动可以改善ADHD症状，增加多巴胺和去甲肾上腺素水平",
+      "evidence_summary": "研究表明每周3次、每次30分钟的有氧运动可显著改善ADHD儿童的注意力和执行功能",
+      "reviewer_decision": "pending"
+    },
+    {
+      "index": 1,
+      "source_entity": "感觉统合训练",
+      "source_type": "Therapy",
+      "source_book": "book-a",
+      "target_entity": "前庭觉",
+      "target_type": "Concept",
+      "target_book": "book-b",
+      "relation_type": "TARGETS",
+      "confidence": 0.78,
+      "reason": "感觉统合训练中包含大量针对前庭觉的刺激活动",
+      "evidence_summary": "秋千、滑板、旋转等感觉统合活动主要刺激前庭系统",
+      "reviewer_decision": "pending"
+    },
+    {
+      "index": 2,
+      "source_entity": "脑源性神经营养因子",
+      "source_type": "Biochemical",
+      "source_book": "book-b",
+      "target_entity": "神经可塑性",
+      "target_type": "Concept",
+      "target_book": "book-a",
+      "relation_type": "PROMOTES",
+      "confidence": 0.92,
+      "reason": "BDNF是促进神经可塑性的关键分子",
+      "evidence_summary": "运动后BDNF水平升高，促进海马区神经发生和突触可塑性",
+      "reviewer_decision": "pending"
+    }
+  ],
+  "stats": {
+    "total_new_entities": 5,
+    "total_matched": 3,
+    "total_cross_relations": 3,
+    "pending_decisions": 6
+  }
+}

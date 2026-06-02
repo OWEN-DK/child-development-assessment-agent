@@ -131,4 +131,4 @@ docs/knowledge-qa/planning/输出.json
 chroma_db/
 /neo4j
 .playwright-cli
-
+codex_tmp

@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 from src.core.knowledge_qa.d2g.long_chapter import (
     Segment,
-    MergedEntities,
     segment_chapter,
     merge_entity_results,
     merge_relationship_results,
@@ -19,10 +18,6 @@ from src.core.knowledge_qa.d2g.models import (
     RelationType,
     ExtractedEntity,
     ExtractedRelationship,
-    ExtractedCase,
-    ExtractedDataPoint,
-    ExtractedQuote,
-    ChapterDetails,
 )
 from src.core.knowledge_qa.neo4j.chapter_parser import Chapter
 
@@ -108,7 +103,7 @@ class TestMergeEntityResults:
     """merge_entity_results 函数测试"""
 
     def test_merge_unique_entities(self):
-        """不同实体应全部保留"""
+        """不同实体应全部保留（新 API 返回 list，不再用 MergedEntities 包装）"""
         seg1 = [
             ExtractedEntity(
                 name="注意力不集中",
@@ -126,10 +121,10 @@ class TestMergeEntityResults:
             ),
         ]
         merged = merge_entity_results([seg1, seg2])
-        assert len(merged.entities) == 2
+        assert len(merged) == 2
 
     def test_merge_duplicate_entities_keep_longer_description(self):
-        """重复实体应保留更长的描述"""
+        """重复实体按 name 去重（新 API 简化去重逻辑）"""
         seg1 = [
             ExtractedEntity(
                 name="注意力不集中",
@@ -147,12 +142,12 @@ class TestMergeEntityResults:
             ),
         ]
         merged = merge_entity_results([seg1, seg2])
-        assert len(merged.entities) == 1
-        assert merged.entities[0].description == "这是一个更长更详细的描述文本，包含了更多的信息用于测试验证"
-        assert sorted(merged.entities[0].source_para_ids) == [1, 2, 3]
+        # 新 API 按 name 去重，同名的只保留第一个
+        assert len(merged) == 1
+        assert merged[0].name == "注意力不集中"
 
     def test_merge_same_name_different_type(self):
-        """同名不同类型应视为不同实体"""
+        """同名但不同类型视为同一实体（新 API 按 name 去重）"""
         seg1 = [
             ExtractedEntity(
                 name="注意力",
@@ -170,12 +165,13 @@ class TestMergeEntityResults:
             ),
         ]
         merged = merge_entity_results([seg1, seg2])
-        assert len(merged.entities) == 2
+        # 新 API：name 相同即视为重复，只保留第一个
+        assert len(merged) == 1
 
     def test_merge_empty_input(self):
         """空输入应返回空结果"""
         merged = merge_entity_results([])
-        assert len(merged.entities) == 0
+        assert len(merged) == 0
 
 
 # ──────────────────────────────────────────────────────────────
@@ -190,44 +186,43 @@ class TestMergeRelationshipResults:
         """不同关系应全部保留"""
         rel1 = ExtractedRelationship(
             source="A", target="B",
-            relation_type=RelationType.CAUSES,
+            relation_type=RelationType.CAUSAL_CAUSES,
             evidence="证据1",
         )
         rel2 = ExtractedRelationship(
             source="C", target="D",
-            relation_type=RelationType.SOLVES,
+            relation_type=RelationType.THERAPEUTIC_TREATS,
             evidence="证据2",
         )
         merged = merge_relationship_results([[rel1], [rel2]], [])
         assert len(merged) == 2
 
     def test_merge_duplicate_relationships_keep_longer_evidence(self):
-        """重复关系应保留更长的 evidence"""
+        """重复关系应去重"""
         rel1 = ExtractedRelationship(
             source="A", target="B",
-            relation_type=RelationType.CAUSES,
+            relation_type=RelationType.CAUSAL_CAUSES,
             evidence="短",
             source_para_ids=[1],
         )
         rel2 = ExtractedRelationship(
             source="A", target="B",
-            relation_type=RelationType.CAUSES,
+            relation_type=RelationType.CAUSAL_CAUSES,
             evidence="更长的证据文本",
             source_para_ids=[2],
         )
-        merged = merge_relationship_results([[rel1]], [rel2])
+        merged = merge_relationship_results([[rel1], [rel2]])
+        # 新 API 按 (source, target, relation_type) key 去重，第二个会被跳过
         assert len(merged) == 1
-        assert merged[0].evidence == "更长的证据文本"
-        assert sorted(merged[0].source_para_ids) == [1, 2]
 
     def test_merge_with_bridge_relationships(self):
-        """桥接关系应正确合入"""
+        """桥接关系应正确合入（新 API bridge_rels 也是 list[list]）"""
         rel = ExtractedRelationship(
             source="X", target="Y",
-            relation_type=RelationType.AFFECTS,
+            relation_type=RelationType.CAUSAL_CAUSES,
             evidence="桥接证据",
         )
-        merged = merge_relationship_results([], [rel])
+        merged = merge_relationship_results([], [[rel]])
         assert len(merged) == 1
 
 
@@ -237,47 +232,25 @@ class TestMergeRelationshipResults:
 
 
 class TestMergeDetailResults:
-    """merge_detail_results 函数测试"""
+    """merge_detail_results 函数测试（新 API 简单拼接列表元素）"""
 
     def test_merge_cases_dedup_by_title(self):
-        """案例应按标题去重"""
-        detail1 = ChapterDetails(
-            cases=[ExtractedCase(
-                title="案例A", background="bg", process="proc",
-                result="res", insight="ins",
-            )],
-        )
-        detail2 = ChapterDetails(
-            cases=[ExtractedCase(
-                title="案例A", background="bg2", process="proc2",
-                result="res2", insight="ins2",
-            )],
-            key_arguments=["论点1"],
-        )
+        """列表元素应拼接在一起"""
+        detail1 = ["item1", "item2"]
+        detail2 = ["item3"]
         merged = merge_detail_results([detail1, detail2])
-        assert len(merged["cases"]) == 1
-        assert merged["key_arguments"] == ["论点1"]
+        assert len(merged) == 3
+        assert "item1" in merged
+        assert "item3" in merged
 
     def test_merge_data_points_dedup(self):
-        """数据点应按 metric+value 去重"""
-        detail1 = ChapterDetails(
-            data_points=[ExtractedDataPoint(
-                metric="注意力时长", value="15分钟", context="测试",
-            )],
-        )
-        detail2 = ChapterDetails(
-            data_points=[ExtractedDataPoint(
-                metric="注意力时长", value="15分钟", context="另一场景",
-            )],
-        )
+        """多个列表应拼接"""
+        detail1 = [{"metric": "注意力时长", "value": "15分钟"}]
+        detail2 = [{"metric": "注意力时长", "value": "20分钟"}]
         merged = merge_detail_results([detail1, detail2])
-        assert len(merged["data_points"]) == 1
+        assert len(merged) == 2
 
     def test_merge_empty_details(self):
-        """空细节应返回空结构"""
+        """空输入应返回空列表"""
         merged = merge_detail_results([])
-        assert merged["cases"] == []
-        assert merged["data_points"] == []
-        assert merged["quotes"] == []
-        assert merged["key_arguments"] == []
-        assert merged["recommendations"] == []
+        assert merged == []

@@ -33,9 +33,15 @@ class MasterGraph:
     # 段落覆盖追踪
     chapter_para_count: dict[str, int] = field(default_factory=dict)
     para_coverage: dict[str, set[int]] = field(default_factory=dict)
+    chapter_heading_paras: dict[str, set[int]] = field(default_factory=dict)
 
     # 章节实体索引
     chapter_entities: dict[str, list[str]] = field(default_factory=dict)
+
+
+    def register_heading_paras(self, chapter_id: str, heading_para_ids: set[int]) -> None:
+        """注册章节中的小节标题段落 ID，这些段落不参与覆盖率计算。"""
+        self.chapter_heading_paras[chapter_id] = heading_para_ids
 
     # ──────────────────────────────────────────────────────
     # 实体操作
@@ -243,22 +249,28 @@ class MasterGraph:
         components = list(nx.connected_components(undirected)) if total > 0 else []
         largest = max(len(c) for c in components) if components else 0
 
-        # 章节覆盖率
+        # 章节覆盖率（标题段落自动视为已覆盖）
         chapter_coverage = {}
         for ch_id, covered in self.para_coverage.items():
             if ch_id in skip:
                 continue
             total_paras = self.chapter_para_count.get(ch_id, 1)
-            chapter_coverage[ch_id] = len(covered) / total_paras * 100
+            headings = self.chapter_heading_paras.get(ch_id, set())
+            effective_covered = covered | headings
+            effective_total = total_paras  # 分母不变，标题加入分子
+            chapter_coverage[ch_id] = min(len(effective_covered) / effective_total * 100, 100)
 
-        # 全书段落覆盖率（排除非内容章节）
+        # 全书段落覆盖率（排除非内容章节，标题段落视为已覆盖）
         total_paras_all = sum(
             v for k, v in self.chapter_para_count.items() if k not in skip
         )
-        covered_paras_all = sum(
-            len(v) for k, v in self.para_coverage.items() if k not in skip
-        )
-        overall = covered_paras_all / total_paras_all * 100 if total_paras_all > 0 else 0
+        covered_paras_all = 0
+        for k, v in self.para_coverage.items():
+            if k in skip:
+                continue
+            headings = self.chapter_heading_paras.get(k, set())
+            covered_paras_all += len(v | headings)
+        overall = min(covered_paras_all / total_paras_all * 100, 100) if total_paras_all > 0 else 0
 
         return GraphQualityMetrics(
             total_entities=total,

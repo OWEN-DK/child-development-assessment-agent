@@ -6,7 +6,7 @@ export interface CurationBook {
   book_id: string;
   book_title: string;
   author?: string;
-  status: 'draft' | 'reviewed' | 'published' | 'generating' | 'failed';
+  status: 'bound' | 'draft' | 'reviewed' | 'published' | 'generating' | 'failed';
   version: number;
   total_entities: number;
   total_claims: number;
@@ -149,6 +149,86 @@ export interface EntityItem {
   count?: number;
 }
 
+/* ===== 关系（从 MD 解析） ===== */
+export interface ExtractedRelation {
+  /** 关系唯一标识 */
+  id: string;
+  /** 起点实体名称 */
+  source: string;
+  /** 终点实体名称 */
+  target: string;
+  /** 关系类型，如 THERAPEUTIC_IMPROVES / CAUSAL_TRIGGERS */
+  relationType: string;
+  /** 关系类型的中文标签 */
+  relationLabel: string;
+  /** 支撑证据原文 */
+  evidence: string;
+  /** 来源段落，如 P5, P8 */
+  sourceParas: string;
+}
+
+
+/* ===== 跨书分析 ===== */
+export interface EntityMatch {
+  index: number;
+  new_entity: string;
+  new_type: string;
+  new_desc: string;
+  new_book_id?: string;
+  matched_entity: string;
+  matched_type: string;
+  matched_desc: string;
+  matched_book_id: string;
+  matched_book_title: string;
+  similarity: number;
+  llm_same: boolean | null;
+  llm_reason: string;
+  reviewer_decision: string;
+}
+
+export interface CrossRelation {
+  index: number;
+  source_entity: string;
+  source_type: string;
+  source_book: string;
+  target_entity: string;
+  target_type: string;
+  target_book: string;
+  relation_type: string;
+  confidence: number;
+  reason: string;
+  evidence_summary: string;
+  reviewer_decision: string;
+}
+
+export interface CrossBookData {
+  book_id: string;
+  generated_at: string;
+  source_books: { book_id: string; title: string }[];
+  entity_matches: EntityMatch[];
+  cross_relations: CrossRelation[];
+  stats: {
+    total_new_entities: number;
+    total_other_entities: number;
+    match_candidates: number;
+    relation_candidates: number;
+  };
+}
+
+export interface AnalyzeAllResult {
+  total_pairs: number;
+  analyzed: number;
+  skipped: number;
+  failed: number;
+  results: {
+    book_id: string;
+    target_book_id: string;
+    status: string;
+    entity_matches?: number;
+    cross_relations?: number;
+    error?: string;
+  }[];
+}
 
 /** 生成聚合摘要 */
 export interface GenerationSummary {

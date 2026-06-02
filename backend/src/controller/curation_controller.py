@@ -18,7 +18,9 @@
 """
 
 import logging
+import os as _os
 import uuid
+from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -27,7 +29,7 @@ from pydantic import BaseModel
 
 from src.schemas.common import APIResponse
 import asyncio as _asyncio
-import json as _json
+import json
 import traceback as _traceback
 import time as _time
 
@@ -43,6 +45,21 @@ class BindBookRequest(BaseModel):
     kb_book_id: str
     book_title: str
     author: Optional[str] = None
+
+
+class CrossBookDecisionRequest(BaseModel):
+    book_id: str
+    decision_type: str  # "entity_match" / "cross_relation"
+    index: int
+    decision: str  # merge / separate / auto / skip / confirm / ignore / modify
+    custom_type: Optional[str] = None
+
+
+class CrossBookBatchDecisionRequest(BaseModel):
+    book_id: str
+    decision_type: str  # "entity_match" / "cross_relation"
+    indices: list[int]
+    decision: str
 
 
 
@@ -127,6 +144,42 @@ def _generate_sample_md(book_title: str, chapters: list) -> str:
     return md
 
 
+def _write_md_file(book_id: str, version_id: str, content: str) -> str:
+    """将 MD 内容写入本地文件，返回相对于 curation_md_dir 的路径。"""
+    # 路径穿越防护：book_id / version_id 必须为安全 slug
+    for val, label in [(book_id, "book_id"), (version_id, "version_id")]:
+        if ".." in val or val.startswith("/") or val.startswith("\\"):
+            raise ValueError(f"非法的 {label}: {val}")
+    from src.config import settings
+    base = Path(settings.curation_md_dir).resolve()
+    fpath = (base / book_id / f"{version_id}.md").resolve()
+    if not str(fpath).startswith(str(base) + _os.sep):
+        raise ValueError(f"路径穿越检测: {book_id}/{version_id}")
+    fpath.parent.mkdir(parents=True, exist_ok=True)
+    fpath.write_text(content, encoding="utf-8")
+    return str(fpath.relative_to(base))
+
+
+def _read_md_file(md_path: str) -> str:
+    """从本地文件读取 MD 内容。"""
+    if not md_path:
+        return ""
+    # 路径穿越防护
+    if ".." in md_path:
+        logger.warning("拒绝路径穿越读取: %s", md_path)
+        return ""
+    from src.config import settings
+    base = Path(settings.curation_md_dir).resolve()
+    fpath = (base / md_path).resolve()
+    if not str(fpath).startswith(str(base) + _os.sep):
+        logger.warning("拒绝路径穿越读取: %s", md_path)
+        return ""
+    if fpath.exists():
+        return fpath.read_text(encoding="utf-8")
+    logger.warning("MD 文件不存在: %s", fpath)
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════
 # D2G 流水线独立任务（不依赖 SSE 连接）
 # ═══════════════════════════════════════════════════════════════
@@ -153,6 +206,103 @@ def _cleanup_task(book_id: str):
             pass  # 异常已被 _run_d2g_pipeline 的 except 分支消费
     if book_id in _progress_events:
         _progress_events[book_id].set()
+
+
+async def _cascade_cleanup_stale_cross_refs(
+    book_id: str, output_dir: str,
+) -> None:
+    """级联清理：删除 / 重生成某本书后，清理其他书 JSON 中的陈旧引用。
+
+    修复 P4 (删除不完整) 和 P10 (重生成后跨书关系过期)。
+    """
+    import json as _json
+    from src.models.md_metadata import MDMetadata
+    from src.core.database import async_session_factory
+    from sqlalchemy import select
+
+    try:
+        # 获取其他已入库书籍
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(MDMetadata).where(
+                    MDMetadata.status == "published",
+                    MDMetadata.book_id != book_id,
+                )
+            )
+            other_books = result.scalars().all()
+
+        redis_deleted = 0
+        json_cleaned = 0
+
+        for other in other_books:
+            # 清理 Redis 缓存
+            try:
+                import redis as _redis
+                r = _redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                for key in [
+                    f"d2g:cross_analysis:{other.book_id}",
+                    f"d2g:cross_decisions:{other.book_id}",
+                    f"d2g:cross_result:{other.book_id}",
+                ]:
+                    if r.delete(key):
+                        redis_deleted += 1
+            except Exception:
+                pass
+
+            # 清理 JSON 文件中引用已删除/重生成书的条目
+            json_path = Path(output_dir) / other.book_id / "cross_book_relations.json"
+            if not json_path.exists():
+                continue
+            try:
+                data = _json.loads(json_path.read_text("utf-8"))
+                dirty = False
+
+                # 过滤 entity_matches 中引用 book_id 的条目
+                em_before = len(data.get("entity_matches", []))
+                data["entity_matches"] = [
+                    m for m in data.get("entity_matches", [])
+                    if m.get("matched_book_id") != book_id
+                    and m.get("new_book_id") != book_id
+                ]
+                if len(data["entity_matches"]) < em_before:
+                    dirty = True
+
+                # 过滤 cross_relations 中引用 book_id 的条目
+                cr_before = len(data.get("cross_relations", []))
+                data["cross_relations"] = [
+                    r for r in data.get("cross_relations", [])
+                    if r.get("source_book") != book_id
+                    and r.get("target_book") != book_id
+                ]
+                if len(data["cross_relations"]) < cr_before:
+                    dirty = True
+
+                # 清理 source_books
+                sb_before = len(data.get("source_books", []))
+                data["source_books"] = [
+                    b for b in data.get("source_books", [])
+                    if b.get("book_id") != book_id
+                ]
+                if len(data["source_books"]) < sb_before:
+                    dirty = True
+
+                if dirty:
+                    json_path.write_text(_json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+                    json_cleaned += 1
+                    logger.info(
+                        "[级联清理] 已清理 %s 中引用 %s 的陈旧条目",
+                        other.book_id, book_id,
+                    )
+            except Exception:
+                pass
+
+        if redis_deleted or json_cleaned:
+            logger.info(
+                "[级联清理] 完成: %d Redis keys, %d JSON 文件",
+                redis_deleted, json_cleaned,
+            )
+    except Exception as e:
+        logger.warning("[级联清理] 执行异常（不阻塞主流程）: %s", e)
 
 
 async def _save_draft_from_result(book_id: str, book_title: str,
@@ -200,13 +350,15 @@ async def _save_draft_from_result(book_id: str, book_title: str,
                     )
                     version = ver_result.scalar_one_or_none()
                     if version:
-                        version.md_content = review_md
+                        # 已有版本：覆盖同文件路径
+                        _write_md_file(book_id, version.id, review_md)
                 else:
                     version_id = str(_uuid.uuid4())
+                    md_path = _write_md_file(book_id, version_id, review_md)
                     version = MDVersion(
                         id=version_id,
                         book_id=book_id,
-                        md_content=review_md,
+                        md_path=md_path,
                         version=1,
                         status="draft",
                     )
@@ -294,6 +446,16 @@ async def _run_d2g_pipeline(book_id: str, book_title: str):
         neo4j_session = neo4j_driver.session() if neo4j_driver else None
         logger.info("[生成流程] Neo4j 驱动就绪 book_id=%s", book_id)
 
+        # ── 重新生成前清理旧的 Neo4j 数据，避免节点重复 ──
+        if neo4j_driver:
+            try:
+                from src.core.knowledge_qa.neo4j.cross_book_cleanup import CrossBookCleanup
+                cleanup = CrossBookCleanup(neo4j_driver=neo4j_driver)
+                cleanup_result = await cleanup.cleanup_book(book_id)
+                logger.info("[生成流程] 旧 Neo4j 数据已清理: %s", cleanup_result)
+            except Exception as e:
+                logger.warning("[生成流程] 清理旧数据失败（不阻塞生成）: %s", e)
+
         import os
         from src.core.knowledge_qa.d2g.models import PipelineConfig, ModelConfig
         from src.core.knowledge_qa.d2g.models import QualityThresholds
@@ -308,8 +470,9 @@ async def _run_d2g_pipeline(book_id: str, book_title: str):
         )
 
         from src.core.knowledge_qa.d2g.book_pipeline import (
-            run_full_pipeline, finalize_and_commit, run_phase5_cross_book,
+            run_full_pipeline, finalize_and_commit,
         )
+        from src.core.knowledge_qa.neo4j.cross_book_phase5a import run_phase5a_cross_book_analysis
 
         phase_progress_map = {
             "phase0_reading": (5, 15),
@@ -328,7 +491,7 @@ async def _run_d2g_pipeline(book_id: str, book_title: str):
             "phase2_5_global_inference": "正在补全跨章关系...",
             "phase3_quality": "正在质量检查...",
             "phase4_commit": "正在入库 Neo4j...",
-            "phase5_cross_book": "正在跨书关联...",
+            "phase5_cross_book": "正在跨书分析...",
             "completed": "生成完成",
         }
 
@@ -398,32 +561,65 @@ async def _run_d2g_pipeline(book_id: str, book_title: str):
             llm_client=llm_adapter,
         )
 
-        if not success:
-            logger.warning("[生成流程] 质量检查未通过 book_id=%s\n%s", book_id, report)
-            _update_progress(book_id, status="failed",
-                             error=report,
-                             progress=90)
-            return
+        if report:
+            logger.info("[生成流程] 质量报告 book_id=%s\n%s", book_id, report)
 
-        _update_progress(book_id, phase="phase4_commit",
-                         phase_label="正在入库 Neo4j...", progress=95)
-        logger.info("[生成流程] Phase 4 入库完成 book_id=%s", book_id)
+        if not success:
+            logger.error("[生成流程] Neo4j 入库失败 book_id=%s", book_id)
+            _update_progress(book_id, status="failed",
+                             error="Neo4j 入库失败",
+                             progress=90)
+            return  # Neo4j 入库失败无法继续
 
         enable_phase5 = os.environ.get("D2G_ENABLE_PHASE5", "true").lower() == "true"
         if enable_phase5:
             _update_progress(book_id, phase="phase5_cross_book",
-                             phase_label="正在跨书关联...", progress=98)
-            try:
-                await run_phase5_cross_book(
-                    book_id=book_id,
-                    neo4j_driver=neo4j_driver,
-                    embedding_helper=emb_helper,
-                    llm_client=llm_adapter,
-                    enable_phase5=True,
-                )
-                logger.info("[生成流程] Phase 5 跨书消歧完成 book_id=%s", book_id)
-            except Exception as e:
-                logger.warning("[生成流程] Phase 5 失败（不阻塞）: %s", e)
+                             phase_label="正在跨书分析...", progress=98)
+            from src.config import settings as _cfg
+            _output_dir = str(Path(_cfg.data_dir))
+
+            # Phase 5a 带重试机制（最多 3 次，间隔递增）
+            MAX_PHASE5A_RETRIES = 3
+            _phase5a_result = None
+            _phase5a_failed = False
+            for _retry_attempt in range(MAX_PHASE5A_RETRIES):
+                try:
+                    _phase5a_result = await run_phase5a_cross_book_analysis(
+                        book_id=book_id,
+                        neo4j_driver=neo4j_driver,
+                        embedding_helper=emb_helper,
+                        llm_client=llm_adapter,
+                        output_dir=_output_dir,
+                    )
+                    logger.info(
+                        "[生成流程] Phase 5a 完成 book_id=%s, 匹配=%d, 关系=%d (attempt=%d)",
+                        book_id,
+                        len(_phase5a_result.entity_matches),
+                        len(_phase5a_result.cross_relations),
+                        _retry_attempt + 1,
+                    )
+                    _phase5a_failed = False
+                    break
+                except Exception as e:
+                    if _retry_attempt < MAX_PHASE5A_RETRIES - 1:
+                        delay = 30 * (2 ** _retry_attempt)
+                        logger.warning(
+                            "[生成流程] Phase 5a 失败 (attempt=%d/%d): %s，%ds 后重试",
+                            _retry_attempt + 1, MAX_PHASE5A_RETRIES, e, delay,
+                        )
+                        _update_progress(book_id, phase_label=f"跨书分析重试中 ({_retry_attempt + 1}/{MAX_PHASE5A_RETRIES})...")
+                        await _asyncio.sleep(delay)
+                    else:
+                        logger.error(
+                            "[生成流程] Phase 5a 最终失败 book_id=%s: %s", book_id, e,
+                        )
+                        _phase5a_failed = True
+                        _update_progress(book_id, phase5a_failed=True,
+                                         phase_label=f"跨书分析失败（已重试 {MAX_PHASE5A_RETRIES} 次）")
+
+            # Phase 5a 成功后：级联清理其他书 JSON 中引用本书的陈旧条目（修复 P10）
+            if _phase5a_result and not _phase5a_failed:
+                await _cascade_cleanup_stale_cross_refs(book_id, _output_dir)
 
         _update_progress(book_id, phase_label="正在保存草稿...", progress=99)
         await _save_draft_from_result(book_id, book_title, state)
@@ -560,6 +756,13 @@ class CurationController:
             methods=["GET"],
             summary="导出 Cypher 查询",
         )
+        # 清空图谱
+        router.add_api_route(
+            "/curation/graph/clear",
+            self.clear_graph,
+            methods=["POST"],
+            summary="清空知识图谱",
+        )
         # 跨书关系
         router.add_api_route(
             "/curation/cross-book/pairs",
@@ -573,6 +776,38 @@ class CurationController:
             self.get_pending_queue,
             methods=["GET"],
             summary="待提炼队列",
+        )
+        # 跨书融合 (Phase 5a/5b)
+        router.add_api_route(
+            "/curation/cross-book/relations/{book_id}",
+            self.get_cross_book_relations,
+            methods=["GET"],
+            summary="获取跨书融合分析结果",
+        )
+        router.add_api_route(
+            "/curation/cross-book/decision",
+            self.update_cross_book_decision,
+            methods=["POST"],
+            summary="更新审核者决策",
+        )
+        router.add_api_route(
+            "/curation/cross-book/decision/batch",
+            self.batch_update_cross_book_decisions,
+            methods=["POST"],
+            summary="批量更新审核者决策",
+        )
+        # 全局跨书分析 + 手动重试
+        router.add_api_route(
+            "/curation/cross-book/analyze-all",
+            self.analyze_all_books,
+            methods=["POST"],
+            summary="对所有已入库书籍执行成对跨书分析",
+        )
+        router.add_api_route(
+            "/curation/books/{book_id}/cross-book/retry",
+            self.retry_cross_book_analysis,
+            methods=["POST"],
+            summary="手动触发单书的 Phase 5a 跨书分析重试",
         )
 
     # ================================================================
@@ -637,25 +872,83 @@ class CurationController:
             raise HTTPException(status_code=500, detail=str(e))
 
     async def delete_book(self, book_id: str) -> APIResponse:
-        """删除策管书籍"""
+        """删除策管书籍 — 同时清理 MD 文件、Neo4j 节点、Redis 缓存和跨书文件"""
         try:
             from src.models.md_metadata import MDMetadata
             from src.models.md_version import MDVersion
             from src.core.database import async_session_factory
             from sqlalchemy import select, delete
 
+            # ── 1. 查询关联的版本，收集待删除的 MD 文件路径 ──
+            md_files_to_delete: list[str] = []
             async with async_session_factory() as session:
-                # 删除关联的版本
+                ver_result = await session.execute(
+                    select(MDVersion.md_path).where(MDVersion.book_id == book_id)
+                )
+                md_files_to_delete = [row[0] for row in ver_result.fetchall() if row[0]]
+
+            # ── 2. 清理 Neo4j 中该书的所有节点和关系 ──
+            try:
+                from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver, neo4j_available
+                if neo4j_available():
+                    driver = get_async_neo4j_driver()
+                    if driver:
+                        from src.core.knowledge_qa.neo4j.cross_book_cleanup import CrossBookCleanup
+                        cleanup = CrossBookCleanup(neo4j_driver=driver)
+                        cleanup_result = await cleanup.cleanup_book(book_id)
+                        logger.info("Neo4j 清理完成: %s", cleanup_result)
+            except Exception as e:
+                logger.warning("Neo4j 清理失败（不阻塞删除）: %s", e)
+
+            # ── 3. 清理 Redis 缓存 ──
+            try:
+                import redis as _redis_mod
+                r = _redis_mod.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                keys_to_delete = [
+                    f"d2g:cross_analysis:{book_id}",
+                    f"d2g:cross_decisions:{book_id}",
+                    f"d2g:cross_result:{book_id}",
+                    f"master_graph:{book_id}",
+                ]
+                for key in keys_to_delete:
+                    r.delete(key)
+            except Exception as e:
+                logger.warning("Redis 清理失败（不阻塞删除）: %s", e)
+
+            # ── 4. 清理磁盘文件 ──
+            try:
+                from src.config import settings
+                import shutil
+                # 4a. 删除 curation_md/{book_id}/ 整个目录
+                md_dir = Path(settings.curation_md_dir) / book_id
+                if md_dir.exists() and md_dir.is_dir():
+                    shutil.rmtree(md_dir)
+                    logger.info("已删除 MD 目录: %s", md_dir)
+                # 4b. 删除 data_dir/{book_id}/ 下的跨书关系 JSON
+                data_dir = Path(settings.data_dir) / book_id
+                if data_dir.exists() and data_dir.is_dir():
+                    shutil.rmtree(data_dir)
+                    logger.info("已删除数据目录: %s", data_dir)
+            except Exception as e:
+                logger.warning("磁盘文件清理失败（不阻塞删除）: %s", e)
+
+            # ── 5. 删除 MySQL 记录 ──
+            async with async_session_factory() as session:
                 await session.execute(
                     delete(MDVersion).where(MDVersion.book_id == book_id)
                 )
-                # 删除元数据
                 result = await session.execute(
                     delete(MDMetadata).where(MDMetadata.book_id == book_id)
                 )
                 if result.rowcount == 0:
                     raise HTTPException(status_code=404, detail="书籍不存在")
                 await session.commit()
+
+            # ── 6. 级联清理：清除其他书籍中引用本书的跨书条目 ──
+            from src.config import settings as _cfg
+            await _cascade_cleanup_stale_cross_refs(
+                book_id, str(Path(_cfg.data_dir)),
+            )
 
             return APIResponse.success(message="删除成功")
         except HTTPException:
@@ -764,12 +1057,12 @@ class CurationController:
                                     "[SSE] 检测到残留 generating 状态，已重置为 failed book_id=%s",
                                     book_id,
                                 )
-                                yield f"data: {_json.dumps({'status': 'failed', 'error': '生成任务已中断（可能因服务重启），请重试'}, ensure_ascii=False)}\n\n"
+                                yield f"data: {json.dumps({'status': 'failed', 'error': '生成任务已中断（可能因服务重启），请重试'}, ensure_ascii=False)}\n\n"
                                 return
                     except Exception as _db_exc:
                         logger.warning("[SSE] 检查 DB 状态失败: %s", _db_exc)
 
-                    yield f"data: {_json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'})}\n\n"
+                    yield f"data: {json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'})}\n\n"
                     return
 
                 if book_id not in _progress_events:
@@ -777,7 +1070,7 @@ class CurationController:
 
                 # 发送首条快照（当前状态）
                 state = _progress_states[book_id]
-                yield f"data: {_json.dumps(state, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(state, ensure_ascii=False)}\n\n"
 
                 # 轮询进度直到任务完成
                 while True:
@@ -792,7 +1085,7 @@ class CurationController:
                         pass  # 超时发送心跳
 
                     state = _progress_states.get(book_id, {})
-                    yield f"data: {_json.dumps(state, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps(state, ensure_ascii=False)}\n\n"
 
                     if state.get("status") in ("completed", "failed", "cancelled"):
                         break
@@ -804,12 +1097,12 @@ class CurationController:
                         if final.get("status") not in ("completed", "failed", "cancelled"):
                             final["status"] = "failed"
                             final["error"] = final.get("error") or "任务已结束"
-                        yield f"data: {_json.dumps(final, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps(final, ensure_ascii=False)}\n\n"
                         break
             except Exception as _sse_exc:
                 logger.warning("[SSE] event_stream 异常 book_id=%s: %s", book_id, _sse_exc)
                 try:
-                    yield f"data: {_json.dumps({'status': 'failed', 'error': f'SSE 异常: {str(_sse_exc)[:100]}'})}\n\n"
+                    yield f"data: {json.dumps({'status': 'failed', 'error': f'SSE 异常: {str(_sse_exc)[:100]}'})}\n\n"
                 except Exception:
                     pass
 
@@ -950,14 +1243,14 @@ class CurationController:
                 if existing.scalar_one_or_none():
                     raise HTTPException(status_code=409, detail="该书籍已绑定到策管")
 
-                # 创建策管元数据
+                # 创建策管元数据（状态为 bound，等待 AI 生成）
                 meta_id = str(uuid.uuid4())
                 meta = MDMetadata(
                     id=meta_id,
                     book_id=req.kb_book_id,
                     book_title=req.book_title,
                     author=req.author,
-                    status="draft",
+                    status="bound",
                     bind_source="kb_bind",
                     file_hash=kb_book.file_hash,
                     total_entities=0,
@@ -966,67 +1259,11 @@ class CurationController:
                     neo4j_synced=0,
                 )
                 session.add(meta)
-                await session.flush()  # flush to get meta_id available
-
-                # 创建初始 MD 版本（示例内容，后续 AI 生成可覆盖）
-                from src.models.md_version import MDVersion
-                version_id = str(uuid.uuid4())
-                sample_content = f"""# {req.book_title}
-
-> 本文档由知识审核系统自动生成，请审核后入库。
-
-## 概要
-
-本书正在等待 AI 生成结构化知识内容。请在绑定后启动 AI 生成流程。
-
-## 问题 (Problem)
-
-### 待生成
-
-AI 生成后将自动填充问题列表。
-
-## 方案 (Solution)
-
-### 待生成
-
-AI 生成后将自动填充解决方案。
-
-## 脑区 (BrainRegion)
-
-### 待生成
-
-AI 生成后将自动填充相关脑区。
-
-## 运动 (Exercise)
-
-### 待生成
-
-AI 生成后将自动填充运动处方。
-
-## 处方 (Prescription)
-
-### 待生成
-
-AI 生成后将自动填充处方信息。
-
-## 根因 (RootCause)
-
-### 待生成
-
-AI 生成后将自动填充根因分析。
-"""
-                version = MDVersion(
-                    id=version_id,
-                    book_id=req.kb_book_id,
-                    md_content=sample_content,
-                    version=1,
-                    status="draft",
-                )
-                session.add(version)
-                meta.current_version_id = version_id
+                # 不再创建示例草稿，等待用户触发 AI 生成
                 await session.commit()
 
             logger.info("绑定书籍成功: %s -> %s", req.kb_book_id, meta_id)
+            # 跨书分析由 AI 生成流程统一处理（Phase 5a），不在绑定时触发
             return APIResponse.success(data={"book_id": req.kb_book_id, "meta_id": meta_id})
         except HTTPException:
             raise
@@ -1107,7 +1344,7 @@ AI 生成后将自动填充根因分析。
                     )
                     version = ver_result.scalar_one_or_none()
                     if version:
-                        content = version.md_content or ""
+                        content = _read_md_file(version.md_path or "")
 
             return APIResponse.success(data={
                 "id": draft.id,
@@ -1150,14 +1387,19 @@ AI 生成后将自动填充根因分析。
                     )
                     version = ver_result.scalar_one_or_none()
                     if version:
-                        version.md_content = content
+                        # 已有文件路径则覆盖写入，否则新创建
+                        if version.md_path:
+                            _write_md_file(draft.book_id, version.id, content)
+                        else:
+                            version.md_path = _write_md_file(draft.book_id, version.id, content)
                 else:
                     # 创建新版本
                     version_id = str(uuid.uuid4())
+                    md_path = _write_md_file(draft.book_id, version_id, content)
                     version = MDVersion(
                         id=version_id,
                         book_id=draft.book_id,
-                        md_content=content,
+                        md_path=md_path,
                         version=1,
                     )
                     session.add(version)
@@ -1232,7 +1474,10 @@ AI 生成后将自动填充根因分析。
 
             from src.core.knowledge_qa.neo4j.md_parser import parse_md_to_cypher
             driver = get_neo4j_driver()
-            parse_result = parse_md_to_cypher(version.md_content, draft.book_id)
+            md_content = _read_md_file(version.md_path or "")
+            if not md_content:
+                raise HTTPException(status_code=400, detail="MD 草稿内容为空，无法入库")
+            parse_result = parse_md_to_cypher(md_content, draft.book_id)
 
             with driver.session() as session:
                 for stmt in parse_result.cypher_statements:
@@ -1247,6 +1492,27 @@ AI 生成后将自动填充根因分析。
                 if draft:
                     draft.status = "published"
                     await session.commit()
+
+            # Phase 5b: 执行审核者跨书决策（实体合并 + 跨书关系建边）
+            try:
+                from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver
+                from src.core.knowledge_qa.neo4j.cross_book_phase5b import run_phase5b_execute_decisions
+
+                async_driver = get_async_neo4j_driver()
+                if async_driver:
+                    phase5b_result = await run_phase5b_execute_decisions(
+                        book_id=draft.book_id,
+                        neo4j_driver=async_driver,
+                    )
+                    logger.info(
+                        "Phase 5b 完成: book_id=%s, 合并=%d, SAME_AS=%d, 关系=%d",
+                        draft.book_id,
+                        phase5b_result.merged_count,
+                        phase5b_result.same_as_count,
+                        phase5b_result.relations_created,
+                    )
+            except Exception as e:
+                logger.warning("Phase 5b 执行失败（不阻塞入库）: %s", e)
 
             return APIResponse.success(message="入库成功")
         except HTTPException:
@@ -1424,6 +1690,46 @@ AI 生成后将自动填充根因分析。
             raise HTTPException(status_code=500, detail=str(e))
 
 
+    async def clear_graph(
+        self,
+        book_id: Optional[str] = Query(None, description="仅清空指定书籍，留空清空全部"),
+    ) -> APIResponse:
+        """清空 Neo4j 知识图谱（全部或单书）"""
+        try:
+            from src.core.knowledge_qa.neo4j.driver import get_neo4j_driver, neo4j_available
+            if not neo4j_available():
+                raise HTTPException(status_code=503, detail="Neo4j 未启用")
+
+            driver = get_neo4j_driver()
+            with driver.session() as session:
+                if book_id:
+                    result = session.run(
+                        "MATCH (n {book_id: $book_id}) "
+                        "WITH count(n) AS cnt "
+                        "MATCH (n {book_id: $book_id}) DETACH DELETE n "
+                        "RETURN cnt",
+                        book_id=book_id,
+                    )
+                    deleted = result.single()["cnt"]
+                    return APIResponse.success(data={
+                        "message": f"已清空书籍 {book_id} 的知识图谱",
+                        "deleted_nodes": deleted,
+                    })
+                else:
+                    result = session.run("MATCH (n) RETURN count(n) AS cnt")
+                    total = result.single()["cnt"]
+                    session.run("MATCH (n) DETACH DELETE n")
+                    return APIResponse.success(data={
+                        "message": "已清空全部知识图谱",
+                        "deleted_nodes": total,
+                    })
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("清空图谱失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+
     async def cross_book_pairs(
         self,
         book_ids: Optional[str] = Query(None, description="comma separated book_id list"),
@@ -1508,4 +1814,305 @@ AI 生成后将自动填充根因分析。
         except Exception as e:
             logger.error("获取待提炼队列失败: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
-            "phase2_5_global_inference": "正在补全跨章关系与桥接分量...",
+
+
+    # ── 跨书融合审核者决策 API ──────────────────────────────────
+
+    async def get_cross_book_relations(
+        self,
+        book_id: str,
+    ) -> APIResponse:
+        """获取跨书融合分析结果（Phase 5a 输出）。"""
+        try:
+            # 从 JSON 文件读取（主要存储方式）
+            from src.config import settings
+            json_path = Path(settings.data_dir) / book_id / "cross_book_relations.json"
+            if json_path.exists():
+                with open(json_path, "r", encoding="utf-8") as f:
+                    return APIResponse.success(data=json.load(f))
+
+            # 尝试从 Redis 读取（备选）
+            try:
+                import redis
+                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                key = f"d2g:cross_analysis:{book_id}"
+                data = r.get(key)
+                if data:
+                    return APIResponse.success(data=json.loads(data))
+            except Exception:
+                pass
+
+            return APIResponse.success(data=None, message="未找到跨书分析结果")
+        except Exception as e:
+            logger.error("获取跨书关系失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def update_cross_book_decision(
+        self,
+        request: CrossBookDecisionRequest,
+    ) -> APIResponse:
+        """更新审核者对某个跨书匹配/关系的决策。"""
+        book_id = request.book_id
+        decision_type = request.decision_type
+        index = request.index
+        decision = request.decision
+        custom_type = request.custom_type
+        try:
+            from src.config import settings
+            json_path = Path(settings.data_dir) / book_id / "cross_book_relations.json"
+
+            # 优先从 JSON 文件读取
+            if not json_path.exists():
+                raise HTTPException(status_code=404, detail="未找到跨书分析结果")
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                result = json.load(f)
+
+            # 更新决策
+            if decision_type == "entity_match":
+                matches = result.get("entity_matches", [])
+                if 0 <= index < len(matches):
+                    matches[index]["reviewer_decision"] = decision
+                else:
+                    raise HTTPException(status_code=400, detail="索引超出范围")
+            elif decision_type == "cross_relation":
+                relations = result.get("cross_relations", [])
+                if 0 <= index < len(relations):
+                    relations[index]["reviewer_decision"] = decision
+                    if custom_type:
+                        relations[index]["relation_type"] = custom_type
+                else:
+                    raise HTTPException(status_code=400, detail="索引超出范围")
+            else:
+                raise HTTPException(status_code=400, detail="无效的 decision_type")
+
+            # 保存回 JSON 文件（原子写入，修复 RACE-2）
+            import os as _os
+            tmp_path = json_path.with_suffix(".json.tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            _os.replace(str(tmp_path), str(json_path))
+
+            # 可选：同步到 Redis 缓存
+            try:
+                import redis
+                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                key = f"d2g:cross_analysis:{book_id}"
+                r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
+            except Exception:
+                pass  # Redis 不可用不影响主流程
+
+            return APIResponse.success(message="决策已更新")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("更新跨书决策失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def batch_update_cross_book_decisions(
+        self,
+        request: CrossBookBatchDecisionRequest,
+    ) -> APIResponse:
+        """批量更新审核者决策。"""
+        book_id = request.book_id
+        decision_type = request.decision_type
+        indices = request.indices
+        decision = request.decision
+        try:
+            from src.config import settings
+            json_path = Path(settings.data_dir) / book_id / "cross_book_relations.json"
+
+            # 优先从 JSON 文件读取
+            if not json_path.exists():
+                raise HTTPException(status_code=404, detail="未找到跨书分析结果")
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                result = json.load(f)
+
+            # 批量更新
+            if decision_type == "entity_match":
+                matches = result.get("entity_matches", [])
+                for idx in indices:
+                    if 0 <= idx < len(matches):
+                        matches[idx]["reviewer_decision"] = decision
+            elif decision_type == "cross_relation":
+                relations = result.get("cross_relations", [])
+                for idx in indices:
+                    if 0 <= idx < len(relations):
+                        relations[idx]["reviewer_decision"] = decision
+            else:
+                raise HTTPException(status_code=400, detail="无效的 decision_type")
+
+            # 保存回 JSON 文件（原子写入，修复 RACE-2）
+            import os as _os
+            tmp_path = json_path.with_suffix(".json.tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            _os.replace(str(tmp_path), str(json_path))
+
+            # 可选：同步到 Redis 缓存
+            try:
+                import redis
+                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                key = f"d2g:cross_analysis:{book_id}"
+                r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
+            except Exception:
+                pass  # Redis 不可用不影响主流程
+
+            return APIResponse.success(message=f"已批量更新 {len(indices)} 条决策")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("批量更新跨书决策失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ── 全局跨书分析 + 手动重试（Phase 4） ──────────────────
+
+    async def analyze_all_books(
+        self,
+        force: bool = Query(False, description="是否全量重分析（忽略已有 JSON 文件）"),
+    ) -> APIResponse:
+        """对所有 status=published 的书籍执行成对跨书分析。
+
+        增量策略：已有有效 JSON 文件的书籍对跳过，除非传入 force=true。
+        """
+        try:
+            from src.models.md_metadata import MDMetadata
+            from src.core.database import async_session_factory
+            from sqlalchemy import select
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(MDMetadata).where(MDMetadata.status == "published")
+                )
+                books = result.scalars().all()
+
+            if len(books) < 2:
+                return APIResponse.success(data={
+                    "message": "需要至少 2 本已入库的书籍",
+                    "total_pairs": 0,
+                })
+
+            from src.config import settings as _cfg
+            from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver
+            from src.core.knowledge_qa.neo4j.cross_book_phase5a import (
+                run_phase5a_cross_book_analysis,
+            )
+            from src.utils.di import get_embedding_helper
+            from src.core.llm.factory import LLMServiceFactoryCompat
+
+            neo4j_driver = get_async_neo4j_driver()
+            emb_helper = get_embedding_helper()
+            llm_factory = LLMServiceFactoryCompat()
+            llm_adapter = llm_factory.create(
+                model_name=_cfg.d2g_model, max_tokens=_cfg.d2g_max_tokens,
+            )
+            _output_dir = str(Path(_cfg.data_dir))
+
+            pairs = []
+            for i, book_i in enumerate(books):
+                for book_j in books[i + 1:]:
+                    json_path = Path(_output_dir) / book_i.book_id / "cross_book_relations.json"
+                    if not force and json_path.exists():
+                        pairs.append({
+                            "book_id": book_i.book_id,
+                            "target_book_id": book_j.book_id,
+                            "status": "skipped",
+                        })
+                        continue
+                    pairs.append({
+                        "book_id": book_i.book_id,
+                        "target_book_id": book_j.book_id,
+                        "status": "pending",
+                    })
+
+            # 并行分析（semaphore 控流）
+            sem = _asyncio.Semaphore(2)
+
+            async def analyze_pair(pair):
+                if pair["status"] == "skipped":
+                    return pair
+                async with sem:
+                    try:
+                        analysis = await run_phase5a_cross_book_analysis(
+                            book_id=pair["book_id"],
+                            neo4j_driver=neo4j_driver,
+                            embedding_helper=emb_helper,
+                            llm_client=llm_adapter,
+                            output_dir=_output_dir,
+                        )
+                        pair["status"] = "completed"
+                        pair["entity_matches"] = analysis.match_candidates_count
+                        pair["cross_relations"] = analysis.relation_candidates_count
+                    except Exception as e:
+                        pair["status"] = "failed"
+                        pair["error"] = str(e)[:200]
+                return pair
+
+            results = await _asyncio.gather(*[analyze_pair(p) for p in pairs])
+            completed = sum(1 for r in results if r["status"] == "completed")
+            skipped = sum(1 for r in results if r["status"] == "skipped")
+            failed = sum(1 for r in results if r["status"] == "failed")
+
+            return APIResponse.success(data={
+                "total_pairs": len(results),
+                "analyzed": completed,
+                "skipped": skipped,
+                "failed": failed,
+                "results": results,
+            })
+        except Exception as e:
+            logger.error("全局跨书分析失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def retry_cross_book_analysis(self, book_id: str) -> APIResponse:
+        """手动触发单书的 Phase 5a 跨书分析重试。"""
+        try:
+            from src.models.md_metadata import MDMetadata
+            from src.core.database import async_session_factory
+            from sqlalchemy import select
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(MDMetadata).where(MDMetadata.book_id == book_id)
+                )
+                meta = result.scalar_one_or_none()
+                if not meta:
+                    raise HTTPException(status_code=404, detail="书籍不存在")
+                if meta.status != "published":
+                    raise HTTPException(status_code=400, detail="仅已入库书籍可重试跨书分析")
+
+            from src.config import settings as _cfg
+            from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver
+            from src.core.knowledge_qa.neo4j.cross_book_phase5a import (
+                run_phase5a_cross_book_analysis,
+            )
+            from src.utils.di import get_embedding_helper
+            from src.core.llm.factory import LLMServiceFactoryCompat
+
+            neo4j_driver = get_async_neo4j_driver()
+            emb_helper = get_embedding_helper()
+            llm_factory = LLMServiceFactoryCompat()
+            llm_adapter = llm_factory.create(
+                model_name=_cfg.d2g_model, max_tokens=_cfg.d2g_max_tokens,
+            )
+            _output_dir = str(Path(_cfg.data_dir))
+
+            analysis = await run_phase5a_cross_book_analysis(
+                book_id=book_id,
+                neo4j_driver=neo4j_driver,
+                embedding_helper=emb_helper,
+                llm_client=llm_adapter,
+                output_dir=_output_dir,
+            )
+
+            return APIResponse.success(data={
+                "book_id": book_id,
+                "entity_matches": analysis.match_candidates_count,
+                "cross_relations": analysis.relation_candidates_count,
+            })
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("跨书分析重试失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))

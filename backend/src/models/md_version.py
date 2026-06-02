@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, Text, JSON
+from sqlalchemy import Column, String, Integer, DateTime, JSON
 
 from src.core.database import Base
 
@@ -15,13 +15,15 @@ class MDVersion(Base):
     """MD 版本历史 — 支持回溯和增量更新。
 
     对标: PromptVersion (backend/src/models/prompt_version.py)
+
+    md_content 改存本地文件，数据库仅存路径，避免 MySQL TEXT 列 64KB 上限问题。
     """
     __tablename__ = "md_version"
 
     id = Column(String(36), primary_key=True)
     book_id = Column(String(64), nullable=False, index=True)
     version = Column(Integer, nullable=False)
-    md_content = Column(Text, nullable=False)        # 完整 MD 内容
+    md_path = Column(String(512), nullable=False)        # MD 文件路径（相对于 data_dir）
     cypher_count = Column(Integer, default=0)         # 生成的 Cypher 语句数
     diff_summary = Column(JSON, nullable=True)        # {added: N, modified: N, deleted: N}
     status = Column(String(16), default="draft")      # draft / reviewed / published

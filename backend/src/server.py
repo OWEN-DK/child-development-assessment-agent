@@ -109,9 +109,9 @@ async def lifespan(app: FastAPI):
 
     # 关闭磁盘缓存（释放持久化线程）
     try:
-        from src.service.cache.facade import cache_facade
-        if hasattr(cache_facade, 'shutdown'):
-            cache_facade.shutdown()
+        from src.service.cache.facade import cache_service
+        if hasattr(cache_service, 'disk_cache'):
+            cache_service.disk_cache.shutdown()
             logger.info("[6/6] DiskCache shut down")
     except Exception as e:
         logger.warning(f"DiskCache 关闭异常: {e}")

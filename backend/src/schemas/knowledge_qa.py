@@ -567,6 +567,15 @@ class GenerationMetadata(BaseModel):
         default_factory=dict,
         description="每本书的搜索命中条数，如 {'运动改变大脑': 12, '儿童发展心理学': 5}",
     )
+    retrieval_stats: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Bundle 模式下的检索质量统计（仅当 Bundle 启用时有值）。"
+            "含 neo4j_entity_count, neo4j_relation_count, chroma_passage_count, "
+            "lazy_graph_hit_count, total_passage_chars, retrieval_duration_ms, "
+            "pruned_book_ids, seed_source"
+        ),
+    )
 
 
 class KnowledgeQAResponse(BaseModel):
@@ -709,6 +718,11 @@ class KnowledgeQAState(BaseModel):
         description="Neo4j 知识图谱查询结果 (query_neo4j_graph_node 写入)。keys: exercises, cross_book_relations, problem_context, source_coverage",
     )
 
+    # ===== KnowledgeBundle (一站式检索结果，替代分散搜索) =====
+    knowledge_bundle: Optional[Any] = Field(
+        default=None,
+        description="KnowledgeBundle 不可变知识产物（build_bundle_node 写入）。非 None 时 S3-S5 走 Bundle 消费路径",
+    )
 
     # ===== 自定义知识（最高优先级，引导下游搜索） =====
     custom_knowledge_context: str = Field(

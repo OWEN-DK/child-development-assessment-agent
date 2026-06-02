@@ -67,10 +67,15 @@ export const BookListPage: React.FC = () => {
     const items: any[] = [];
 
     switch (book.status) {
+      case 'bound':
+        items.push(
+          { key: 'generate', icon: <ExperimentOutlined />, label: '开始生成', onClick: () => navigate(`/curation/generate/${book.book_id}?autoStart=true`) },
+        );
+        break;
       case 'draft':
         items.push(
           { key: 'editor', icon: <EditOutlined />, label: '继续审核', onClick: () => navigate(`/curation/editor/${book.book_id}`) },
-          { key: 'generate', icon: <ExperimentOutlined />, label: '重新生成', onClick: () => navigate(`/curation/generate/${book.book_id}`) },
+          { key: 'generate', icon: <ExperimentOutlined />, label: '重新生成', onClick: () => navigate(`/curation/generate/${book.book_id}?autoStart=true`) },
         );
         break;
       case 'reviewed':
@@ -84,7 +89,7 @@ export const BookListPage: React.FC = () => {
         items.push(
           { key: 'graph', icon: <ApartmentOutlined />, label: '查看 KG', onClick: () => navigate(`/curation/graph/${book.book_id}`) },
           { key: 'editor', icon: <EyeOutlined />, label: '查看 MD', onClick: () => navigate(`/curation/editor/${book.book_id}`) },
-          { key: 'generate', icon: <ExperimentOutlined />, label: '重新生成', onClick: () => navigate(`/curation/generate/${book.book_id}`) },
+          { key: 'generate', icon: <ExperimentOutlined />, label: '重新生成', onClick: () => navigate(`/curation/generate/${book.book_id}?autoStart=true`) },
         );
         break;
       case 'generating':
@@ -94,7 +99,7 @@ export const BookListPage: React.FC = () => {
         break;
       case 'failed':
         items.push(
-          { key: 'retry', icon: <RedoOutlined />, label: '重试', onClick: () => navigate(`/curation/generate/${book.book_id}`) },
+          { key: 'retry', icon: <RedoOutlined />, label: '重试', onClick: () => navigate(`/curation/generate/${book.book_id}?autoStart=true`) },
           { key: 'editor', icon: <EyeOutlined />, label: '查看日志', onClick: () => navigate(`/curation/editor/${book.book_id}`) },
         );
         break;
@@ -134,6 +139,12 @@ export const BookListPage: React.FC = () => {
           </Button>
           {books.length >= 2 && (
             <>
+              <Button
+                icon={<ApartmentOutlined />}
+                onClick={() => navigate('/curation/cross-book')}
+              >
+                跨书关系管理
+              </Button>
               <Button
                 icon={<ApartmentOutlined />}
                 onClick={() => {
@@ -177,6 +188,7 @@ export const BookListPage: React.FC = () => {
         ) : (
           books.map((book) => {
             const isGenerating = book.status === 'generating';
+            const isBound = book.status === 'bound';
             const isFailed = book.status === 'failed';
             const sourceLabel = book.bind_source === 'direct'
               ? '直接上传'
@@ -186,7 +198,7 @@ export const BookListPage: React.FC = () => {
               <div
                 key={book.book_id}
                 className={`${styles['book-card']} ${isGenerating ? styles['book-card--generating'] : ''} ${isFailed ? styles['book-card--failed'] : ''}`}
-                onClick={() => !isGenerating && navigate(`/curation/editor/${book.book_id}`)}
+                onClick={() => { if (isGenerating) return; if (book.status === 'bound') navigate(`/curation/generate/${book.book_id}?autoStart=true`); else navigate(`/curation/editor/${book.book_id}`); }}
               >
                 <div className={styles['book-card__header']}>
                   <div>

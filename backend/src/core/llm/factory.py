@@ -639,6 +639,7 @@ class LLMServiceFactoryCompat:
             streaming=True,
             api_key=settings.deepseek_api_key,
             base_url="https://api.deepseek.com",
+            max_retries=1,
             extra_body={
                 "thinking": {"type": "disabled"},
                 "max_tokens": max_tokens,

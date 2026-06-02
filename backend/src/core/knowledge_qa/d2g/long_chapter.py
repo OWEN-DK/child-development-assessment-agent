@@ -6,11 +6,28 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from src.core.knowledge_qa.neo4j.chapter_parser import Chapter, _estimate_tokens
 
 logger = logging.getLogger(__name__)
+
+
+def split_paragraphs(text: str) -> list[str]:
+    """将 Markdown 文本按段落边界稳健分割。
+
+    归一化处理：
+    - \\r\\n\\r\\n (Windows 双换行)
+    - \\n\\n (Unix 双换行)
+    - \\n    \\n (空行含空白字符)
+    - 连续多个空行等同单个分隔
+
+    返回非空段落列表（已 strip 首尾空白）。
+    """
+    normalized = re.sub(r'\r\n', '\n', text)
+    parts = re.split(r'\n\s*\n', normalized)
+    return [p.strip() for p in parts if p.strip()]
 
 LONG_CHAPTER_THRESHOLD = 20_000
 SEGMENT_TARGET_SIZE = 12_000
@@ -37,7 +54,7 @@ def segment_chapter(
 
     短章节（< threshold）返回单元素列表。
     """
-    paragraphs = [p for p in chapter.markdown.split("\n\n") if p.strip()]
+    paragraphs = split_paragraphs(chapter.markdown)
     para_tokens = [_estimate_tokens(p) for p in paragraphs]
     total_tokens = sum(para_tokens)
 

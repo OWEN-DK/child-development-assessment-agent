@@ -1,4 +1,8 @@
-"""跨书关系检测 — Neo4j 查询已有实体 → 相似度粗筛 → LLM 精判。
+"""⚠️ DEPRECATED (2026-06): 已被 cross_book_phase5a.py 替代。
+新路径使用 schema.py CROSS_BOOK_RELATION_TYPES（23 种）+ CROSS_RELATION_TYPE_COMBOS（类型感知）。
+旧路径仅 3 种类型（CONSENSUS/COMPLEMENTS/CONFLICTS），保留仅供向后兼容和测试。
+
+跨书关系检测 — Neo4j 查询已有实体 → 相似度粗筛 → LLM 精判。
 
 放置位置: backend/src/core/knowledge_qa/neo4j/cross_relation.py
 """

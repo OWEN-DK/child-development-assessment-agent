@@ -1,24 +1,28 @@
-"""引用核验节点 — 规则校验 + 降级信号检测 + 运动清单约束验证
+"""引用核验节点 — 规则校验 + 降级信号检测 + 运动清单约束验证 + Bundle 增强
 
-检查每条 citation 的结构完整性：
+原有校验层:
 1. excerpt 非空且长度 >= 10 字符
 2. chapter 非空
 3. citation_id 格式正确（C + 数字）
+4. S4 structured_data 为空检测
+5. 任意节有正文但 citations 为空检测
+6. S3 运动名称在权威清单中
+7. S4 运动名称在权威清单中
 
-降级信号检测：
-4. S4 structured_data 为空
-5. 任意节有正文但 citations 为空
-
-运动清单约束 (FR-12)：
-6. S3 exercise_types[].name 必须在权威运动清单中
-7. S4 phases→weeks→days→main_exercises[].name 必须在权威运动清单中
+Bundle 模式新增校验层 (Phase 3):
+L2: book_title 白名单校验（必须在 bundle.book_index 中）
+L3: excerpt 溯源校验（必须在 bundle.passage_index 原文中找到匹配）
+L4: 图谱验证（excerpt 中的实体在 Neo4j 中存在？）
+L5: 语义一致性校验（excerpt 与正文引用位置语义匹配——仅标记不剔除）
 """
 
+import difflib
 import json
 import logging
 import re
 from typing import Any, Dict, Optional, Set
 
+from src.core.knowledge_qa.bundle import CitationVerdict, KnowledgeBundle, normalize_book_title
 from src.core.knowledge_qa.nodes.base import fuzzy_match_exercise, get_exercise_json_path
 from src.schemas.knowledge_qa import KnowledgeQAState, SectionOutput, push_progress
 
@@ -109,9 +113,21 @@ def _fuzzy_match_exercise(name: str, valid_set: set[str]) -> Optional[str]:
 
 
 async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
-    """引用核验 — 规则校验 + 降级信号检测。"""
+    """引用核验 — 规则校验 + 降级信号检测 + Bundle 增强。"""
     await push_progress("verify_citations", "正在核验引用依据…")
 
+    # ── Bundle 模式: 四层校验 ──
+    bundle = _get_bundle_from_state(state)
+    if bundle is not None:
+        logger.info("引用校验: Bundle 模式（四层校验）")
+        return await _verify_citations_with_bundle(state, bundle)
+
+    # ── 旧版校验 ──
+    return await _verify_citations_legacy(state)
+
+
+async def _verify_citations_legacy(state: KnowledgeQAState) -> Dict[str, Any]:
+    """旧版引用校验逻辑（不动现有实现）。"""
     removed_ids: Set[str] = set()
     auto_fixed_ids: dict[str, str] = {}
     sections = dict(state.sections)
@@ -284,3 +300,252 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
         "current_step": ["verify_citations_done"],
         "partial": partial,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3: Bundle-enhanced citation verification
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _get_bundle_from_state(state: KnowledgeQAState) -> KnowledgeBundle | None:
+    """从 state 中提取 KnowledgeBundle（如果可用）。"""
+    return getattr(state, "knowledge_bundle", None)
+
+
+async def _verify_citations_with_bundle(
+    state: KnowledgeQAState,
+    bundle: KnowledgeBundle,
+) -> Dict[str, Any]:
+    """四层引用校验: 结构 → 白名单 → 溯源 → 图谱验证 → 语义一致性（仅标记）。
+
+    先执行旧版结构校验，再叠加三层新增校验。
+    """
+    # ── 先执行 Legacy 校验（结构 + 降级信号 + 运动清单）──
+    legacy_result = await _verify_citations_legacy(state)
+    sections = legacy_result["sections"]
+    errors = legacy_result["errors"]
+    partial = legacy_result["partial"]
+
+    # ── 叠加 Bundle 校验（L2-L5）──
+    total_verified = 0
+    total_corrected = 0
+    total_rejected = 0
+    total_semantic_mismatch = 0
+
+    for i in range(1, 6):
+        sec = sections.get(i)
+        if not sec:
+            continue
+
+        verified_citations = []
+        for citation in sec.citations:
+            verdict = _check_citation_enhanced(citation, bundle, sec.content)
+
+            if verdict.passed:
+                # 标记校验元数据（前端展示用）
+                if verdict.corrected_book_title:
+                    citation["_book_title_corrected"] = True
+                    citation["_original_book_title"] = citation.get("book_title", "")
+                if verdict.source_passage_id:
+                    citation["_source_passage_id"] = verdict.source_passage_id
+                if verdict.neo4j_verified_entities:
+                    citation["_neo4j_verified_entities"] = verdict.neo4j_verified_entities
+                if verdict.semantic_mismatch:
+                    citation["_semantic_mismatch"] = True
+                    total_semantic_mismatch += 1
+                citation["_trust_level"] = verdict.trust_level
+                verified_citations.append(citation)
+                total_verified += 1
+                if verdict.corrected_book_title:
+                    total_corrected += 1
+            else:
+                errors.append(
+                    f"section_{i}_citation_{citation.get('citation_id', '?')}: "
+                    f"{verdict.reason}"
+                )
+                total_rejected += 1
+
+        # 重建 SectionOutput（剔除不合格引用）
+        if len(verified_citations) < len(sec.citations):
+            sections[i] = SectionOutput(
+                index=sec.index, title=sec.title,
+                content=sec.content,
+                citations=verified_citations,
+                structured_data=sec.structured_data,
+            )
+
+    logger.info(
+        "Bundle 引用校验完成: %d 通过, %d 修正, %d 剔除, %d 语义存疑",
+        total_verified, total_corrected, total_rejected, total_semantic_mismatch,
+    )
+
+    return {
+        "sections": sections,
+        "errors": errors,
+        "current_step": ["verify_citations_done"],
+        "partial": partial,
+    }
+
+
+def _check_citation_enhanced(
+    citation: dict,
+    bundle: KnowledgeBundle,
+    sec_content: str = "",
+) -> CitationVerdict:
+    """单条引用五层校验: 结构 → 白名单 → 溯源 → 图谱验证 → 语义一致性。"""
+
+    # ── L1: 结构完整性（已在 legacy 中过筛，此处兜底）──
+    if not citation.get("excerpt") or len(citation["excerpt"].strip()) < 10:
+        return CitationVerdict(False, "excerpt 过短或为空")
+    if not citation.get("chapter") or not citation["chapter"].strip():
+        return CitationVerdict(False, "chapter 为空")
+
+    # ── L2: 白名单校验 ──
+    book_title = citation.get("book_title", "")
+    norm_title = normalize_book_title(book_title)
+    valid_titles = {
+        meta.normalized_title for meta in bundle.book_index.values()
+    }
+    valid_titles.update(m.title for m in bundle.book_index.values())
+
+    corrected_title = ""
+    if norm_title not in valid_titles:
+        # 模糊匹配修正
+        matched = _fuzzy_match_book(norm_title, bundle.book_index)
+        if matched:
+            citation["book_title"] = matched.title
+            corrected_title = matched.title
+        else:
+            return CitationVerdict(False, f"book_title '{book_title}' 不在白名单中")
+
+    # ── L3: 溯源校验 ──
+    excerpt = citation["excerpt"].strip()
+    source_verified = False
+    source_passage_id = ""
+
+    for pid, passage in bundle.passage_index.items():
+        if excerpt in passage.content:
+            source_verified = True
+            source_passage_id = pid
+            break
+
+    if not source_verified:
+        # 模糊匹配（substring similarity）
+        for pid, passage in bundle.passage_index.items():
+            if _fuzzy_excerpt_match(excerpt, passage.content) >= 0.85:
+                source_verified = True
+                source_passage_id = pid
+                break
+
+    if not source_verified:
+        return CitationVerdict(
+            False, f"excerpt 在原文中未找到匹配（可能被 LLM 改写）",
+        )
+
+    # ── L4: 图谱验证 ──
+    neo4j_entities = _extract_entity_names_from_bundle(excerpt, bundle)
+
+    # ── L5: 语义一致性校验（仅标记不剔除）──
+    semantic_mismatch = False
+    citation_id = citation.get("citation_id", "")
+    if citation_id and sec_content:
+        marker_pattern = re.compile(rf"\[?{re.escape(citation_id)}\]?")
+        marker_match = marker_pattern.search(sec_content)
+        if marker_match:
+            start = max(0, marker_match.start() - 80)
+            end = min(len(sec_content), marker_match.end() + 80)
+            nearby_text = sec_content[start:end]
+            # 简单 token overlap 判定（低阈值只过滤明显错配）
+            overlap = _token_overlap(excerpt, nearby_text)
+            if overlap < 0.25:
+                semantic_mismatch = True
+
+    return CitationVerdict(
+        passed=True,
+        corrected_book_title=corrected_title,
+        source_passage_id=source_passage_id,
+        neo4j_verified_entities=neo4j_entities,
+        semantic_mismatch=semantic_mismatch,
+    )
+
+
+# ── L2-L5 helpers ──
+
+
+def _fuzzy_match_book(
+    normalized: str,
+    book_index: dict,
+) -> Any | None:
+    """模糊匹配书名——从白名单中找最佳匹配。"""
+    if not normalized or normalized == "未知":
+        return None
+
+    valid_entries: list[tuple[str, Any]] = []
+    for bid, meta in book_index.items():
+        valid_entries.append((meta.normalized_title, meta))
+        if meta.title != meta.normalized_title:
+            valid_entries.append((meta.title, meta))
+
+    # 精确匹配
+    for name, meta in valid_entries:
+        if normalized == name:
+            return meta
+
+    # 子串匹配
+    for name, meta in valid_entries:
+        if normalized in name or name in normalized:
+            return meta
+
+    # 编辑距离匹配
+    names = [v[0] for v in valid_entries]
+    matches = difflib.get_close_matches(normalized, names, n=1, cutoff=0.7)
+    if matches:
+        for name, meta in valid_entries:
+            if name == matches[0]:
+                return meta
+
+    return None
+
+
+def _fuzzy_excerpt_match(excerpt: str, passage_content: str) -> float:
+    """计算 excerpt 与 passage 内容的模糊匹配度。
+
+    使用最长公共子串比例 + token overlap 的组合。
+    """
+    if not excerpt or not passage_content:
+        return 0.0
+
+    # 最长公共子串
+    seq = difflib.SequenceMatcher(None, excerpt, passage_content)
+    lcs_ratio = seq.ratio()
+
+    # token overlap
+    tok_overlap = _token_overlap(excerpt, passage_content)
+
+    return max(lcs_ratio, tok_overlap)
+
+
+def _token_overlap(text1: str, text2: str) -> float:
+    """计算两个文本的 token 重叠比例。"""
+    tokens1 = set(text1)
+    tokens2 = set(text2)
+    if not tokens1 or not tokens2:
+        return 0.0
+    intersection = tokens1 & tokens2
+    return len(intersection) / min(len(tokens1), len(tokens2))
+
+
+def _extract_entity_names_from_bundle(
+    text: str,
+    bundle: KnowledgeBundle,
+) -> list[str]:
+    """从文本中提取在 Neo4j 中存在的实体名。"""
+    found: list[str] = []
+    text_lower = text.lower()
+
+    for etype, entities in bundle.neo4j_entities.items():
+        for entity in entities:
+            if entity.name and entity.name.lower() in text_lower:
+                found.append(entity.name)
+
+    return list(set(found))

@@ -694,11 +694,23 @@ async def _run_section_node(
     build_user_message: Callable[[KnowledgeQAState, Dict[str, str]], str],
     step_label: str,
 ) -> Dict[str, Any]:
-    """通用节生成节点：直接搜索 + 27B 单次 structured_output 调用。
+    """通用节生成节点：Bundle 可用时消费 Bundle，否则直接搜索 + 27B 单次调用。
 
     注意：S3（section_index=3）已自管理，不再通过此函数调用。
     如需修改 S3 的生成逻辑，请直接编辑 recommend_types.py。
     """
+    # ── Bundle 模式：消费不可变知识产物，零 HTTP 搜索 ──
+    bundle = getattr(state, "knowledge_bundle", None)
+    if bundle is not None and section_index >= 3:
+        from src.core.knowledge_qa.bundle_consumer import run_section_from_bundle
+        return await run_section_from_bundle(
+            state=state, bundle=bundle,
+            section_index=section_index, section_label=section_label,
+            prompt_key=prompt_key, response_format=response_format,
+            build_user_message_fn=build_user_message, step_label=step_label,
+        )
+
+    # ── 旧版模式: 直接搜索 + LLM ──
     from src.core.llm.factory import LLMServiceFactoryCompat
 
     await push_progress(

@@ -1,4 +1,8 @@
-"""跨书实体消歧引擎（Phase 5）— 跨书 embedding 粗筛 + LLM 精判 + 合并/SAME_AS 执行。
+"""⚠️ DEPRECATED (2026-06): 已被 cross_book_phase5a.py + cross_book_phase5b.py 替代。
+新路径: Phase 5a 做跨书匹配+关系发现, Phase 5b 执行审核者决策。
+旧路径仅支持 3 种跨书关系类型，保留仅供向后兼容和测试。
+
+跨书实体消歧引擎（Phase 5）— 跨书 embedding 粗筛 + LLM 精判 + 合并/SAME_AS 执行。
 
 放置位置: backend/src/core/knowledge_qa/neo4j/cross_book_resolver.py
 依赖:
@@ -308,6 +312,10 @@ class CrossBookResolver:
                 emb = await self._emb.embed_text(f"{e.name} {e.description[:200]}")
                 if emb:
                     new_embs[key] = emb
+        # 批量获取已有实体 Embeddings
+        all_embs = await self._emb.embed_batch([
+            f"{e.name} {e.description[:200]}" for e in other_entities
+        ])
 
         # 预计算已有实体 embedding（按 name_normalized 去重）
         other_embs: dict[str, list[float]] = {}
@@ -403,7 +411,7 @@ class CrossBookResolver:
 
     # ── 合并执行 ─────────────────────────────────────────────
 
-    def _execute_merge(
+    async def _execute_merge(
         self, new_entity: EntityCandidate, existing_entity: EntityCandidate,
     ) -> bool:
         """在 Neo4j 事务内执行实体合并（§08-2.3）。
@@ -411,7 +419,7 @@ class CrossBookResolver:
         将 new_entity 合并到 existing_entity 中，迁移所有关系。
         """
         try:
-            with self._neo4j.session() as session:
+            async with self._neo4j.session() as session:
                 session.execute_write(
                     self._merge_tx, new_entity, existing_entity,
                 )
@@ -427,7 +435,13 @@ class CrossBookResolver:
 
     @staticmethod
     def _merge_tx(tx, new_entity: EntityCandidate, existing_entity: EntityCandidate):
-        """Neo4j 事务函数：执行合并的全部 Cypher 操作。"""
+        """Neo4j 事务函数：执行合并的全部 Cypher 操作。
+
+        Step 1-2 为本引擎特有（MergeLog + 属性合并），
+        Step 3-7 委托给 relation_migration 共享模块。
+        """
+        from .relation_migration import build_migration_cypher
+
         merge_id = str(uuid.uuid4())
 
         # Step 1: 创建 MergeLog 节点
@@ -475,96 +489,19 @@ class CrossBookResolver:
             new_book_id=new_entity.book_id,
         )
 
-        # Step 3: 迁移普通关系（入边）
-        tx.run(
-            """
-            MATCH (old {name: $old_name})
-            WHERE $old_book_id IN coalesce(old.book_ids, [old.book_id])
-            MATCH (new {name: $new_name})
-            WHERE $new_book_id IN coalesce(new.book_ids, [new.book_id])
-            MATCH (src)-[r]->(new)
-            WHERE src <> old AND type(r) <> 'SAME_AS'
-            CREATE (src)-[r2]->(old)
-            SET r2 = properties(r)
-            DELETE r
-            """,
-            old_name=existing_entity.name,
-            old_book_id=existing_entity.book_id,
+        # Step 3-7: 关系迁移 + 删除（共用模块）
+        stmts = build_migration_cypher(
             new_name=new_entity.name,
             new_book_id=new_entity.book_id,
+            existing_name=existing_entity.name,
+            existing_book_id=existing_entity.book_id,
         )
-
-        # Step 4: 迁移普通关系（出边）
-        tx.run(
-            """
-            MATCH (old {name: $old_name})
-            WHERE $old_book_id IN coalesce(old.book_ids, [old.book_id])
-            MATCH (new {name: $new_name})
-            WHERE $new_book_id IN coalesce(new.book_ids, [new.book_id])
-            MATCH (new)-[r]->(dst)
-            WHERE dst <> old AND type(r) <> 'SAME_AS'
-            CREATE (old)-[r2]->(dst)
-            SET r2 = properties(r)
-            DELETE r
-            """,
-            old_name=existing_entity.name,
-            old_book_id=existing_entity.book_id,
-            new_name=new_entity.name,
-            new_book_id=new_entity.book_id,
-        )
-
-        # Step 5: 迁移 SAME_AS 边（入边）
-        tx.run(
-            """
-            MATCH (old {name: $old_name})
-            WHERE $old_book_id IN coalesce(old.book_ids, [old.book_id])
-            MATCH (new {name: $new_name})
-            WHERE $new_book_id IN coalesce(new.book_ids, [new.book_id])
-            MATCH (src)-[r:SAME_AS]->(new)
-            WHERE src <> old
-            CREATE (src)-[r2:SAME_AS]->(old)
-            SET r2 = properties(r)
-            DELETE r
-            """,
-            old_name=existing_entity.name,
-            old_book_id=existing_entity.book_id,
-            new_name=new_entity.name,
-            new_book_id=new_entity.book_id,
-        )
-
-        # Step 6: 迁移 SAME_AS 边（出边）
-        tx.run(
-            """
-            MATCH (old {name: $old_name})
-            WHERE $old_book_id IN coalesce(old.book_ids, [old.book_id])
-            MATCH (new {name: $new_name})
-            WHERE $new_book_id IN coalesce(new.book_ids, [new.book_id])
-            MATCH (new)-[r:SAME_AS]->(dst)
-            WHERE dst <> old
-            CREATE (old)-[r2:SAME_AS]->(dst)
-            SET r2 = properties(r)
-            DELETE r
-            """,
-            old_name=existing_entity.name,
-            old_book_id=existing_entity.book_id,
-            new_name=new_entity.name,
-            new_book_id=new_entity.book_id,
-        )
-
-        # Step 7: 删除新节点
-        tx.run(
-            """
-            MATCH (new {name: $new_name})
-            WHERE $new_book_id IN coalesce(new.book_ids, [new.book_id])
-            DETACH DELETE new
-            """,
-            new_name=new_entity.name,
-            new_book_id=new_entity.book_id,
-        )
+        for cypher, params in stmts:
+            tx.run(cypher, **params)
 
     # ── SAME_AS 建边 ─────────────────────────────────────────
 
-    def _execute_same_as(
+    async def _execute_same_as(
         self,
         new_entity: EntityCandidate,
         existing_entity: EntityCandidate,
@@ -573,7 +510,7 @@ class CrossBookResolver:
         """创建 SAME_AS 边（§08-2.4）。"""
         merge_id = str(uuid.uuid4())
         try:
-            with self._neo4j.session() as session:
+            async with self._neo4j.session() as session:
                 session.run(
                     """
                     MATCH (a {name: $name_a})
@@ -628,9 +565,9 @@ class CrossBookResolver:
 
     # ── SAME_AS 生命周期 API ─────────────────────────────────
 
-    def revoke_same_as(self, merge_id: str, reason: str) -> None:
+    async def revoke_same_as(self, merge_id: str, reason: str) -> None:
         """撤销指定的 SAME_AS 边（软删除，§08-2.7.1）。"""
-        with self._neo4j.session() as session:
+        async with self._neo4j.session() as session:
             session.run(
                 """
                 MATCH ()-[r:SAME_AS {merge_id: $merge_id}]->()
@@ -640,9 +577,9 @@ class CrossBookResolver:
             )
         logger.info("SAME_AS 已撤销: merge_id=%s, reason=%s", merge_id, reason)
 
-    def list_active_same_as(self, entity_name: str) -> list[dict]:
+    async def list_active_same_as(self, entity_name: str) -> list[dict]:
         """查询某实体的所有活跃 SAME_AS 关联（过滤已撤销）。"""
-        with self._neo4j.session() as session:
+        async with self._neo4j.session() as session:
             return session.run(
                 """
                 MATCH (n {name: $name})-[r:SAME_AS]-(related)
@@ -653,7 +590,7 @@ class CrossBookResolver:
                 name=entity_name,
             ).data()
 
-    def upgrade_same_as_to_merge(self, name_a: str, book_a: str, name_b: str, book_b: str) -> bool:
+    async def upgrade_same_as_to_merge(self, name_a: str, book_a: str, name_b: str, book_b: str) -> bool:
         """将 SAME_AS 对升级为合并（§08-2.7.1）。"""
         new = EntityCandidate(
             name=name_b, name_normalized=name_b.strip().lower(),
@@ -664,7 +601,7 @@ class CrossBookResolver:
             entity_type="", description="", book_id=book_a,
         )
         # 先删除 SAME_AS 边
-        with self._neo4j.session() as session:
+        async with self._neo4j.session() as session:
             session.run(
                 """
                 MATCH (a {name: $name_a})-[r:SAME_AS]-(b {name: $name_b})

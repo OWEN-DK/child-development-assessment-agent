@@ -109,12 +109,9 @@ def execute_cypher(result: MDParseResult, neo4j_session, dry_run: bool = False) 
 
 
 # 已知实体类型（全部映射为 Neo4j label）
-KNOWN_ENTITY_TYPES = {
-    "Problem", "Solution", "BrainRegion", "Risk",
-    "CognitiveProcess", "Theory", "Mechanism",
-    "DevelopmentalStage", "Strategy", "KeyInsight", "ResearchFinding",
-    "Exercise", "RootCause",
-}
+# 与 schema.py D2G_ENTITY_TYPES 保持一致（27 种），单一真相源
+from src.core.knowledge_qa.neo4j.schema import D2G_ENTITY_TYPES as _D2G_ENTITY_TYPES
+KNOWN_ENTITY_TYPES = set(_D2G_ENTITY_TYPES)
 
 
 def _parse_concepts(section: str, result: MDParseResult):

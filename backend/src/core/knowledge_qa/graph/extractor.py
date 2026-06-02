@@ -13,6 +13,11 @@ from src.core.llm.factory import LLMServiceFactoryCompat
 logger = logging.getLogger(__name__)
 
 # 领域实体类型（7 类）
+# ⚠️ 旧版 LazyGraphRAG chunk 图谱使用的简化类型体系。
+# 与 schema.py D2G_ENTITY_TYPES（27 种）是两套独立体系，服务不同目的：
+#   - 本模块: chunk 级实体 → LazyGraphRAG 社区树 → prefetch_context 遍历
+#   - schema.py: 段落级实体 → Neo4j → structured knowledge query
+# 两者共存，不需要统一。
 ENTITY_TYPES = [
     "development_concept",    # 发展概念
     "symptom_behavior",       # 症状/行为

@@ -1,0 +1,198 @@
+.container {
+  padding: var(--space-4);
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+/* ===== 头部 ===== */
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+
+  &__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  &__count {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-left: auto;
+  }
+}
+
+/* ===== 大类分组 ===== */
+.group {
+  margin-bottom: var(--space-5);
+
+  &__header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  &__count {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    margin-left: auto;
+    background: var(--gray-200);
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+}
+
+/* ===== 关系卡片 ===== */
+.card {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+
+  &:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.card--active {
+  border-color: var(--indigo-400);
+}
+
+/* 关系头部行 */
+.card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.card__entity {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--indigo-600);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: background 100ms;
+
+  &:hover {
+    background: var(--indigo-50);
+    text-decoration: underline;
+  }
+}
+
+.card__tag {
+  margin: 0 !important;
+  font-size: 11px !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* 箭头 */
+.card__arrow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.card__arrow-reverse {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.card__arrow-line {
+  width: 24px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.card__arrow-head {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid;
+}
+
+/* 证据区域 */
+.card__evidence {
+  margin-top: var(--space-2);
+}
+
+.card__evidence-preview {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.card__evidence-toggle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: color 100ms, background 100ms;
+
+  &:hover {
+    color: var(--text-secondary);
+    background: var(--surface-hover);
+  }
+}
+
+.card__evidence-text {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--amber-50);
+  border-left: 3px solid var(--amber-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* 来源段落 */
+.card__source {
+  margin-top: var(--space-2);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

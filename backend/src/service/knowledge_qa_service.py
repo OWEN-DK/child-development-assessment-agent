@@ -614,6 +614,32 @@ class KnowledgeQAService:
             ),
         )
 
+    @staticmethod
+    def _extract_retrieval_stats(state: KnowledgeQAState) -> dict[str, Any] | None:
+        """从 Bundle 提取检索质量统计，用于 API metadata。
+
+        仅当 Bundle 模式启用且有 bundle 数据时返回非空。
+        """
+        bundle = getattr(state, "knowledge_bundle", None)
+        if bundle is None:
+            return None
+        try:
+            stats = bundle.retrieval_stats
+            if stats is None:
+                return None
+            return {
+                "neo4j_entity_count": stats.neo4j_entity_count,
+                "neo4j_relation_count": stats.neo4j_relation_count,
+                "chroma_passage_count": stats.chroma_passage_count,
+                "lazy_graph_hit_count": stats.lazy_graph_hit_count,
+                "total_passage_chars": stats.total_passage_chars,
+                "retrieval_duration_ms": stats.retrieval_duration_ms,
+                "pruned_book_ids": stats.pruned_book_ids,
+                "seed_source": stats.seed_source,
+            }
+        except Exception:
+            return None
+
     def _build_response(
         self, state: KnowledgeQAState, elapsed_ms: float
     ) -> KnowledgeQAResponse:
@@ -648,6 +674,7 @@ class KnowledgeQAService:
                 retries=state.retry_counts,
                 partial=state.partial,
                 search_coverage=search_coverage,
+                retrieval_stats=self._extract_retrieval_stats(state),
             ),
         )
 

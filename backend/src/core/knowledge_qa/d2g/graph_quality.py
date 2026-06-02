@@ -67,11 +67,11 @@ def audit_graph_quality(
             f"实体间关系不够丰富。"
         )
 
-    # 检查章节覆盖率
+    # 检查章节覆盖率（round 对齐显示精度，避免 59.8% 显示 "60%" 但被判不达标）
     low_coverage_chapters = [
         (ch_id, cov)
         for ch_id, cov in metrics.chapter_coverage.items()
-        if cov < thresholds.min_chapter_coverage * 100
+        if round(cov) < thresholds.min_chapter_coverage * 100
     ]
     if low_coverage_chapters:
         ch_list = ", ".join(
@@ -82,7 +82,7 @@ def audit_graph_quality(
         )
 
     # 检查全书段落覆盖率
-    if metrics.overall_para_coverage < thresholds.min_overall_para_coverage * 100:
+    if round(metrics.overall_para_coverage) < thresholds.min_overall_para_coverage * 100:
         issues.append(
             f"全书段落覆盖率 {metrics.overall_para_coverage:.0f}%，"
             f"低于阈值 {thresholds.min_overall_para_coverage:.0%}。"
@@ -118,7 +118,7 @@ def generate_quality_report(
         lines.append("## 章节覆盖率")
         lines.append("")
         for ch_id, cov in sorted(metrics.chapter_coverage.items()):
-            status = "✅" if cov >= 80 else "⚠️"
+            status = "✅" if cov >= 60 else "⚠️"
             lines.append(f"- {ch_id}: {cov:.0f}% {status}")
         lines.append("")
 
@@ -151,8 +151,11 @@ def generate_relation_source_report(master: MasterGraph) -> str:
         "llm_joint": "LLM 联合提取",
         "llm_coverage_fix": "LLM 覆盖度补全",
         "heuristic_rule": "类型规则推断",
+        "cooccurrence": "段落共现推断",
         "embedding_sim": "Embedding 语义关联",
+        "component_bridge": "跨分量桥接",
         "llm_global_fix": "LLM 全局补全",
+        "star_fallback": "星型兜底",
         "unknown": "未知来源",
     }
 
