@@ -86,6 +86,14 @@ class GraphEntityRepository(BaseRepository[GraphEntity]):
             await session.commit()
         return len(entities)
 
+    async def count_by_book(self, book_id: str) -> int:
+        from sqlalchemy import func
+        async with self.db_session_factory() as session:
+            result = await session.execute(
+                select(func.count()).select_from(GraphEntity).where(GraphEntity.book_id == book_id)
+            )
+            return result.scalar() or 0
+
 
 class GraphRelationRepository(BaseRepository[GraphRelation]):
     """知识图谱关系仓库"""
@@ -133,6 +141,14 @@ class GraphRelationRepository(BaseRepository[GraphRelation]):
                 await session.delete(rel)
             await session.commit()
         return len(relations)
+
+    async def count_by_book(self, book_id: str) -> int:
+        from sqlalchemy import func
+        async with self.db_session_factory() as session:
+            result = await session.execute(
+                select(func.count()).select_from(GraphRelation).where(GraphRelation.book_id == book_id)
+            )
+            return result.scalar() or 0
 
 
 class GraphCommunityRepository(BaseRepository[GraphCommunityNode]):
@@ -242,3 +258,12 @@ class GraphCommunityRepository(BaseRepository[GraphCommunityNode]):
                 await session.delete(node)
             await session.commit()
             return len(nodes)
+
+    async def count_by_book(self, book_id: str) -> int:
+        """统计指定书籍的社区节点数量"""
+        from sqlalchemy import func
+        async with self.db_session_factory() as session:
+            result = await session.execute(
+                select(func.count()).select_from(GraphCommunityNode).where(GraphCommunityNode.book_id == book_id)
+            )
+            return result.scalar() or 0

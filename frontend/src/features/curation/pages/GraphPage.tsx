@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Select, Tooltip, Spin, Empty, Input, Modal, message } from 'antd';
+import { Button, Select, Tooltip, Spin, Empty, Input, InputNumber, Modal, message } from 'antd';
 import {
   ReloadOutlined,
   SearchOutlined,
@@ -34,6 +34,22 @@ const NODE_LABELS: Record<string, string> = {
   Book: '书籍',
   AutoEntity: '自动实体',
   AutoCommunity: '社区',
+  Risk: '风险',
+  ChildProfile: '儿童档案',
+  Chapter: '章节',
+  Person: '人物',
+  Location: '地点',
+  Object: '物品',
+  AssessmentTool: '评估工具',
+  Symptom: '症状',
+  Intervention: '干预',
+  Diagnosis: '诊断',
+  Organization: '机构',
+  Study: '研究',
+  Neurotransmitter: '神经递质',
+  Milestone: '里程碑',
+  Environment: '环境',
+  CustomRule: '自定义规则',
 };
 
 export const GraphPage: React.FC = () => {
@@ -103,6 +119,8 @@ export const GraphPage: React.FC = () => {
     handleCyInit,
     exportPNG,
     refresh,
+    nodeLimit,
+    setNodeLimit,
     NODE_COLORS,
   } = useGraphData(bookId);
 
@@ -133,6 +151,18 @@ export const GraphPage: React.FC = () => {
             size="small"
             options={nodeTypes.map((t) => ({ label: t, value: t }))}
           />
+          <Tooltip title="节点数量上限">
+            <InputNumber
+              min={50}
+              max={5000}
+              step={50}
+              value={nodeLimit}
+              onChange={(v) => v && setNodeLimit(v)}
+              style={{ width: 90 }}
+              size="small"
+              addonAfter="节点"
+            />
+          </Tooltip>
         </div>
         <div className={styles.toolbar__right}>
           {isCompareMode && compareBookIds.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Button, App, Modal, Spin, Segmented, Tooltip, Popover } from 'antd';
 import {
   SaveOutlined,
@@ -36,6 +36,42 @@ export const DraftEditorPage: React.FC = () => {
 
   const { message } = App.useApp();
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // ── 左侧面板拖拽调整宽度 ──
+  const [leftPanelWidth, setLeftPanelWidth] = useState(280);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = leftPanelWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [leftPanelWidth]);
+
+  useEffect(() => {
+    const handleDragMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = e.clientX - startX.current;
+      const newWidth = Math.min(Math.max(startWidth.current + delta, 200), 500);
+      setLeftPanelWidth(newWidth);
+    };
+    const handleDragEnd = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('mouseup', handleDragEnd);
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+    };
+  }, []);
 
   const location = useLocation();
   const isCompareMode = location.pathname.endsWith('/compare');
@@ -189,7 +225,7 @@ export const DraftEditorPage: React.FC = () => {
 
   return (
     <>
-      <div className={styles['draft-editor']}>
+      <div className={styles['draft-editor']} style={{ gridTemplateColumns: `${leftPanelWidth}px 5px 1fr 320px` }}>
         {/* 左侧：实体导航 */}
         <div className={styles.nav}>
           <EntityNav
@@ -207,6 +243,12 @@ export const DraftEditorPage: React.FC = () => {
             onToggleConfirm={toggleConfirm}
           />
         </div>
+
+        {/* 拖拽调整宽度手柄 */}
+        <div
+          className={styles['resize-handle']}
+          onMouseDown={handleDragStart}
+        />
 
         {/* 中间：MD 正文 / 关系卡片 */}
         <div className={styles.content}>

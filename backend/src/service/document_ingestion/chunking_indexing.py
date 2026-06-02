@@ -63,7 +63,9 @@ class ChunkingAndIndexing:
         file_hash: str,
         task_id: str,
         progress_callback: Callable[[str, float, str], None] = None,
+        cancel_signal: asyncio.Event = None,
     ):
+        from src.utils.exceptions import TaskCancelledException
         task_state_service = get_task_state_service()
         is_epub = file_path.lower().endswith(".epub")
         is_pdf_with_bookmarks = file_path.lower().endswith(".pdf") and "toc_level" in documents[0].metadata
@@ -193,6 +195,9 @@ class ChunkingAndIndexing:
 
         def wrapped_progress(stage: str, progress: float, message: str):
             nonlocal pending_doc
+            # 直接检查取消信号（asyncio.Event.is_set() 线程安全）
+            if cancel_signal and cancel_signal.is_set():
+                raise TaskCancelledException("任务已取消")
             if progress_callback:
                 overall_progress = 50.0 + (progress * 0.4)
                 pending_doc["progress"] = overall_progress
@@ -319,17 +324,22 @@ class ChunkingAndIndexing:
 
             def check_cancellation():
                 nonlocal cancelled
-                if progress_callback:
+                # 直接检查取消信号（asyncio.Event.is_set() 线程安全）
+                if cancel_signal and cancel_signal.is_set():
+                    cancelled = True
+                # 同时通过 progress_callback 检查（兼容无 cancel_signal 的调用方式）
+                if not cancelled and progress_callback:
                     try:
                         res = progress_callback("indexing", 95.0, "正在插入到索引中")
                         if asyncio.iscoroutine(res):
-                            asyncio.run_coroutine_threadsafe(res, loop)
+                            future = asyncio.run_coroutine_threadsafe(res, loop)
+                            future.result(timeout=2.0)
                     except Exception:
                         cancelled = True
                 return cancelled
             
             def wrapped_insert():
-                nonlocal indexing_completed
+                nonlocal indexing_completed, cancelled
                 batch_size = settings.rag_index_insert_batch_size
                 total_nodes = len(unique_nodes)
                 
@@ -354,9 +364,14 @@ class ChunkingAndIndexing:
                     # 每批次更新进度
                     if progress_callback:
                         progress = 90.0 + ((i + len(batch)) / total_nodes) * 9.0
-                        res = progress_callback("indexing", progress, f"正在插入批次 {batch_num}/{total_batches}")
-                        if asyncio.iscoroutine(res):
-                            asyncio.run_coroutine_threadsafe(res, loop)
+                        try:
+                            res = progress_callback("indexing", progress, f"正在插入批次 {batch_num}/{total_batches}")
+                            if asyncio.iscoroutine(res):
+                                future = asyncio.run_coroutine_threadsafe(res, loop)
+                                future.result(timeout=2.0)
+                        except Exception:
+                            cancelled = True
+                            break
                 
                 indexing_completed = True
             

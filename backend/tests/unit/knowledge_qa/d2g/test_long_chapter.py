@@ -232,25 +232,23 @@ class TestMergeRelationshipResults:
 
 
 class TestMergeDetailResults:
-    """merge_detail_results 函数测试（新 API 简单拼接列表元素）"""
+    """merge_detail_results 函数测试（接收 Pydantic/dict，返回合并 dict）"""
 
     def test_merge_cases_dedup_by_title(self):
-        """列表元素应拼接在一起"""
-        detail1 = ["item1", "item2"]
-        detail2 = ["item3"]
+        """相同 title 的 case 应去重"""
+        detail1 = {"cases": [{"title": "案例A"}, {"title": "案例B"}], "data_points": [], "quotes": [], "key_arguments": [], "recommendations": []}
+        detail2 = {"cases": [{"title": "案例A"}], "data_points": [], "quotes": [], "key_arguments": [], "recommendations": []}
         merged = merge_detail_results([detail1, detail2])
-        assert len(merged) == 3
-        assert "item1" in merged
-        assert "item3" in merged
+        assert len(merged["cases"]) == 2  # 案例A 去重
 
     def test_merge_data_points_dedup(self):
-        """多个列表应拼接"""
-        detail1 = [{"metric": "注意力时长", "value": "15分钟"}]
-        detail2 = [{"metric": "注意力时长", "value": "20分钟"}]
+        """相同 metric::value 的 data_point 应去重"""
+        detail1 = {"cases": [], "data_points": [{"metric": "注意力时长", "value": "15分钟"}], "quotes": [], "key_arguments": [], "recommendations": []}
+        detail2 = {"cases": [], "data_points": [{"metric": "注意力时长", "value": "20分钟"}], "quotes": [], "key_arguments": [], "recommendations": []}
         merged = merge_detail_results([detail1, detail2])
-        assert len(merged) == 2
+        assert len(merged["data_points"]) == 2
 
     def test_merge_empty_details(self):
-        """空输入应返回空列表"""
+        """空输入应返回空 dict 结构"""
         merged = merge_detail_results([])
-        assert merged == []
+        assert merged == {"cases": [], "data_points": [], "quotes": [], "key_arguments": [], "recommendations": []}

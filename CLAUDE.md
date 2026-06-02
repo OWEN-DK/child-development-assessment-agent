@@ -25,12 +25,12 @@
 |-------------|----------------|----------------|
 | **快速逻辑定位** | `.ai/business_logic_map.md` | 各大业务模块（Agent/RAG/基建/测试）的核心逻辑概述与具体代码文件入口。 |
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
-| **知识问答模块** | `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含知识图谱（graph/）、13个业务节点、子 Agent、工具集 |
-| **知识问答架构重设计** | `docs/architecture/00-审查报告与方案概述.md` | 🟡 设计提案（0% 已实施）— Neo4j 知识图谱 + Agent 三层改造方案。**非权威现状**，实施后应迁移至 `.ai/`。 |
+| **知识问答模块** | `.ai/agents_workflow.md` + `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含 v1(13节点)/v2(16节点+Neo4j三层架构) 双版本、KnowledgeBundle 统一检索、自定义知识三通道匹配、D2G 书→图谱流水线 |
+| **知识问答架构（Neo4j 三层）** | `.ai/agents_workflow.md` + `.ai/rag_pipeline.md` | ✅ 已实施 — Neo4j 知识图谱(27种实体+30+种关系) + Bundle 统一检索 + 三层优先级模型(L0 自定义规则 > L1 图谱 > L2 原文)。 特性开关控制，支持灰度发布 |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
 | **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |
-| **RAG 知识库检索** | `.ai/rag_pipeline.md` | RAG 核心模块、双流水线解析、向量库(Chroma)检索策略、API端点 |
+| **RAG 知识库检索** | `.ai/rag_pipeline.md` | RAG 核心模块、双流水线解析、向量库(Chroma)检索策略、Bundle 三层检索、自定义知识、D2G 流水线、Neo4j Schema、API端点 |
 | **协同开发规范**   | `.ai/sdd_tdd_workflow.md`| SDD+TDD 工作流 SOP、红绿重构规则、用于生成的 Prompt 模板 |
 | **SDD+TDD实践指南**| `.ai/sdd_tdd_practice_guide.md` | 深入解析 SDD+TDD 融合实践的核心概念、全流程落地标准及避坑指南 |
 | **RAG 完整技术文档**| `.ai/rag_pipeline.md` | RAG 系统完整的技术细节、双流水线架构与 API 规范 |
@@ -40,13 +40,13 @@
 
 # 📌 项目宏观概览与技术栈
 
-**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（13节点 + 知识图谱）、RAG 知识检索（双流水线混合检索）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
+**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（v1: 13节点纯 Chroma / v2: 16节点 Neo4j 三层架构 + Bundle 统一检索）、RAG 知识检索（双流水线混合检索）、自定义知识三通道匹配系统、D2G 文档→知识图谱流水线（27种实体+30+种关系）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
 
 ## 技术栈
 - **语言**: Python 3.13, TypeScript 5.3
 - **核心编排**: LangGraph 1.1.0, LangChain 1.2.11, LlamaIndex 0.14.16
 - **大模型支持**: DashScope, OpenAI, Anthropic, DeepSeek, Ollama
-- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), SSE 推送, Prometheus 指标收集
+- **后端基建**: FastAPI 0.135.1, SQLAlchemy 2.0 (MySQL 5.7), Redis 7.0, Chroma (本地向量库), Neo4j (知识图谱, 27种实体类型), SSE 推送, Prometheus 指标收集
 - **ML/评分**: XGBoost, SHAP, scikit-learn (AHP+ML 融合评分)
 - **NLP**: jieba (中文分词), datasketch (MinHash 去重)
 - **文档解析**: PyMuPDF, EbookLib, BeautifulSoup, WeasyPrint (PDF 报告生成)
@@ -76,19 +76,28 @@ backend/src/
 │   ├── config_health_controller.py
 │   ├── config_management_controller.py
 │   ├── health_controller.py
+│   ├── custom_knowledge_controller.py  # 自定义知识管理（三通道匹配+上传+CRUD）
 │   ├── knowledge_qa_controller.py
 │   ├── monitoring_controller.py
 │   ├── prompt_management_controller.py
 │   ├── rag_controller.py
 │   └── task_controller.py
 ├── core/                   # 核心业务逻辑
-│   ├── knowledge_qa/       # 知识问答模块（独立 LangGraph 编排）
-│   │   ├── graph/          # 知识图谱（构建/社区/抽取/遍历/重建/管道）
-│   │   ├── nodes/          # 13个业务节点（分析/识别/匹配/推荐/生成/校验等）
+│   ├── knowledge_qa/       # 知识问答模块（v1/v2 双版本 LangGraph）
+│   │   ├── graph/          # LazyGraphRAG（实体提取/图构建/社区检测/遍历/全局重建）
+│   │   ├── neo4j/          # Neo4j 层（driver/schema/enhanced_query/query_dispatcher/跨书消歧）
+│   │   ├── d2g/            # D2G 文档→图谱流水线（book_pipeline/实体消歧/关系推理/图谱写入）
+│   │   ├── nodes/          # v1 节点（13个: match_books/analyze_child/identify_problems/...）
+│   │   ├── nodes_v2/       # v2 节点（8个: fast_km/analyze_child_v2/build_bundle/synthesis_v2/...）
 │   │   ├── prompts/        # 提示词模板
-│   │   ├── _assembly.py    # 组装逻辑
-│   │   ├── sub_agents.py   # 子 Agent 定义
-│   │   └── tools.py        # Agent 工具集
+│   │   ├── bundle.py       # KnowledgeBundle 不可变知识产物数据模型
+│   │   ├── bundle_builder.py # Bundle Phase 1 构建器（Neo4j+Chroma+LazyGraphRAG）
+│   │   ├── bundle_consumer.py # Bundle Phase 2 消费器（按节提取+优先级上下文）
+│   │   ├── bundle_config.py  # Bundle 灰度开关配置
+│   │   ├── _assembly.py    # v1 图组装（13节点）
+│   │   ├── _assembly_v2.py # v2 图组装（16节点+Bundle+三层综合）
+│   │   ├── tools.py        # Agent 工具集
+│   │   └── __init__.py     # 模块导出
 │   ├── llm/                # LLM 工厂与适配器
 │   │   ├── adapters/       # 框架适配器（LangChain/LlamaIndex/DashScope/多模态）
 │   │   ├── factory.py      # LLM 服务工厂
@@ -144,10 +153,11 @@ backend/src/
 │   │   ├── run/            # 运行服务（batch_runner + executor + result_processor + snapshot_manager）
 │   │   ├── tuning/         # 调优服务（advisor + config_changer + conflict_detector）
 │   │   └── orchestrator.py # RAG 评估编排器
-│   ├── retrieval/          # 检索服务
+│   ├── retrieval/          # 检索服务（facade + knowledge_retriever + query_rewriter + result_processor）
 │   ├── document_ingestion/ # 文档导入服务
 │   ├── cache/              # 缓存服务
 │   ├── index_manager/      # 索引管理服务
+│   ├── custom_knowledge_service.py  # 自定义知识服务（三通道匹配+上传+LLM关键词生成）
 │   ├── knowledge_qa_service.py  # 知识问答服务
 │   └── [其他独立服务]      # alert/audit/config_health/content_audit/document_manager/monitoring/rag/trace 等
 ├── templates/              # 模板文件
@@ -191,14 +201,28 @@ frontend/src/
 │   ├── config/             # 系统配置特性（hooks/, services/, stores/）
 │   ├── documents/          # 知识库特性（hooks/, pages/）
 │   ├── knowledge/          # 搜索特性（hooks/, pages/）
-│   ├── knowledge-qa/       # 知识问答特性（components/, hooks/, pages/, stores/, types/）
-│   ├── monitoring/         # LLM 监控特性
+│   ├── curation/           # 知识管理特性（书籍绑定/草稿编辑/图谱可视化/自定义知识/跨书管理）
+│   │   ├── api/            # curationApi（书籍/草稿/图谱/自定义知识/跨书 API）
+│   │   ├── components/     # 16个组件（ChapterRow/GraphCanvas/NodeDetail/CrossBookPanel/EntityNav等）
+│   │   ├── hooks/          # useDraftEditor / useGraphData / useSSEGeneration
+│   │   ├── pages/          # 8个页面（BookList/BindBook/Generate/DraftEditor/Graph/PendingQueue/CustomKnowledge/CrossBook）
+│   │   ├── stores/         # curationStore
+│   │   └── types/          # 类型定义
+│   ├── knowledge-qa/       # 知识问答特性
+│   │   ├── api/            # knowledgeQAApi（历史记录 CRUD）
+│   │   ├── components/     # 8个组件（QuestionInput/ProgressPanel/ReportViewer/SectionRenderer/BookInfoCard/CitationsList/HistorySidebar/BookSelector）
+│   │   ├── hooks/          # useKnowledgeQA / useHistory / useReportDownload
+│   │   ├── pages/          # KnowledgeQAPage（主页面，含侧边栏历史+实时进度+报告查看）
+│   │   ├── stores/         # knowledgeQAStore（Zustand，SSE 生命周期管理+localStorage 恢复）
+│   │   ├── types/          # 类型定义（MatchedBook/Citation/ExerciseTypeItem/SectionOutput/ProgressState等）
+│   │   └── utils/          # renderMarkdown（S3/S4 结构化数据→Markdown 渲染）
+│   ├── monitoring/         # LLM 监控特性（LLMMonitoringDashboard）
 │   └── rag-eval/           # RAG 评估特性
 │       ├── pages/          # 12个页面（Draft/PromptList/PromptEdit/PromptSandbox/PromptComparison/Run/TestCase/TestSet/Report/ReportDetail/Tuning/Main）
-│       ├── components/     # 业务组件（common/diagnosis/draft/metrics/report/test-set/tuning）
-│       ├── hooks/          # 13个业务 Hooks
-│       ├── stores/         # 3个 Zustand Store
-│       └── utils/          # 工具函数
+│       ├── components/     # 16个业务组件（common: LayerStatusBadge/MetricScoreCard/StatusBadge, diagnosis: DiagnosisPanel/IssueList/LayerResultCard, draft: DraftGenerationForm/DraftTable, metrics: LayerScoreCard/ScoringDashboard, report: BadCaseTable/ReportHeader/TrendChart, test-set: CaseTransferModal, tuning: ConflictAlert/SuggestionPanel）
+│       ├── hooks/          # 13个业务 Hooks（useDrafts/useDraftGenerationProgress/useMetrics/usePrompts/useReports/useSSEProgress/useSnapshots/useTestCases/useTestRuns/useTestSets/useTuning + index + ragEvalHooks.test）
+│       ├── stores/         # 3个 Zustand Store（draftGenerationStore/reportProgressStore/runProgressStore）
+│       └── utils/          # 工具函数（export.ts/sse.ts + 测试）
 ├── lib/                    # 全局库（queryClient - TanStack Query 配置）
 ├── pages/                  # 独立页面（BookChunksPage, SystemConfigPage）
 ├── router/                 # 路由配置

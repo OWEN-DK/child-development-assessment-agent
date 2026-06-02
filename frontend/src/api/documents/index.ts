@@ -34,8 +34,27 @@ export const getDocuments = async (): Promise<{ documents: DocumentRecord[] }> =
   return response.data;
 };
 
-export const deleteDocument = async (filename: string): Promise<{ status: string; message: string }> => {
-  const response = await apiClient.delete(`/rag/documents/${encodeURIComponent(filename)}`);
+export interface DocumentBindings {
+  book_id: string;
+  graph_ready: boolean;
+  bindings: {
+    entities: number;
+    relations: number;
+    communities: number;
+    total: number;
+  };
+  has_bindings: boolean;
+}
+
+export const getDocumentBindings = async (filename: string): Promise<DocumentBindings> => {
+  const response = await apiClient.get(`/rag/documents/${encodeURIComponent(filename)}/bindings`);
+  return response.data;
+};
+
+export const deleteDocument = async (filename: string, cascade: boolean = false): Promise<{ status: string; message: string }> => {
+  const response = await apiClient.delete(`/rag/documents/${encodeURIComponent(filename)}`, {
+    params: cascade ? { cascade: true } : undefined,
+  });
   return response.data;
 };
 

@@ -238,7 +238,7 @@ async def _cascade_cleanup_stale_cross_refs(
             # 清理 Redis 缓存
             try:
                 import redis as _redis
-                r = _redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                r = _get_sync_redis()
                 for key in [
                     f"d2g:cross_analysis:{other.book_id}",
                     f"d2g:cross_decisions:{other.book_id}",
@@ -571,6 +571,31 @@ async def _run_d2g_pipeline(book_id: str, book_title: str):
                              progress=90)
             return  # Neo4j 入库失败无法继续
 
+        # ── 回写实体/主张/处方计数到 MDMetadata ──
+        try:
+            mg = state.master_graph.graph
+            _total_entities = len(mg.nodes)
+            _total_claims = len(mg.edges)
+            _total_prescriptions = sum(
+                1 for _, ndata in mg.nodes(data=True)
+                if ndata.get("entity_type") == "Prescription"
+            )
+            async with async_session_factory() as _ses:
+                _r = await _ses.execute(
+                    select(MDMetadata).where(MDMetadata.book_id == book_id))
+                _m = _r.scalar_one_or_none()
+                if _m:
+                    _m.total_entities = _total_entities
+                    _m.total_claims = _total_claims
+                    _m.total_prescriptions = _total_prescriptions
+                    await _ses.commit()
+            logger.info(
+                "[生成流程] 计数已回写 book_id=%s: entities=%d, claims=%d, prescriptions=%d",
+                book_id, _total_entities, _total_claims, _total_prescriptions,
+            )
+        except Exception as e:
+            logger.warning("[生成流程] 计数回写失败（不阻塞主流程）: %s", e)
+
         enable_phase5 = os.environ.get("D2G_ENABLE_PHASE5", "true").lower() == "true"
         if enable_phase5:
             _update_progress(book_id, phase="phase5_cross_book",
@@ -693,10 +718,22 @@ class CurationController:
             summary="生成进度 SSE",
         )
         router.add_api_route(
+            "/curation/books/{book_id}/generate/cancel",
+            self.cancel_generation,
+            methods=["POST"],
+            summary="取消生成任务",
+        )
+        router.add_api_route(
             "/curation/books/{book_id}/chapters",
             self.get_chapters,
             methods=["GET"],
             summary="获取章节列表",
+        )
+        router.add_api_route(
+            "/curation/books/{book_id}/refresh-counts",
+            self.refresh_counts,
+            methods=["POST"],
+            summary="从 Neo4j 刷新实体/主张/处方计数",
         )
         # 绑定
         router.add_api_route(
@@ -871,6 +908,74 @@ class CurationController:
             logger.error("获取策管书籍列表失败: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
 
+    async def refresh_counts(self, book_id: str) -> APIResponse:
+        """从 Neo4j 刷新该书的实体/主张/处方计数"""
+        try:
+            from src.core.knowledge_qa.neo4j.driver import get_neo4j_driver, neo4j_available
+            if not neo4j_available():
+                raise HTTPException(status_code=503, detail="Neo4j 不可用")
+
+            # 查找 Neo4j 中实际使用的 book_id（可能是 SourceDocument.id）
+            neo4j_book_id = book_id
+            from src.models.md_metadata import MDMetadata
+            from src.core.database import async_session_factory
+            from sqlalchemy import select
+
+            async with async_session_factory() as session:
+                meta_res = await session.execute(
+                    select(MDMetadata).where(MDMetadata.book_id == book_id))
+                meta = meta_res.scalar_one_or_none()
+                if not meta:
+                    raise HTTPException(status_code=404, detail="书籍不存在")
+
+                # 通过 file_hash 查找 SourceDocument.id（D2G 流水线用它作为 Neo4j book_id）
+                if meta.file_hash:
+                    from src.models.document import SourceDocument
+                    doc_res = await session.execute(
+                        select(SourceDocument).where(SourceDocument.file_hash == meta.file_hash))
+                    doc = doc_res.scalar_one_or_none()
+                    if doc and doc.id:
+                        neo4j_book_id = doc.id
+
+            driver = get_neo4j_driver()
+            with driver.session() as session:
+                ent_res = session.run(
+                    "MATCH (ae) WHERE ae.book_id = $bid "
+                    "RETURN count(ae) AS cnt", bid=neo4j_book_id)
+                ent_cnt = ent_res.single()["cnt"]
+
+                rel_res = session.run(
+                    "MATCH (ae1)-[r]->(ae2) "
+                    "WHERE ae1.book_id = $bid AND ae2.book_id = $bid "
+                    "RETURN count(r) AS cnt", bid=neo4j_book_id)
+                rel_cnt = rel_res.single()["cnt"]
+
+                rx_res = session.run(
+                    "MATCH (p:Prescription) WHERE p.book_id = $bid "
+                    "RETURN count(p) AS cnt", bid=neo4j_book_id)
+                rx_cnt = rx_res.single()["cnt"]
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(MDMetadata).where(MDMetadata.book_id == book_id))
+                meta = result.scalar_one_or_none()
+                if meta:
+                    meta.total_entities = ent_cnt
+                    meta.total_claims = rel_cnt
+                    meta.total_prescriptions = rx_cnt
+                    await session.commit()
+
+            return APIResponse.success(data={
+                "total_entities": ent_cnt,
+                "total_claims": rel_cnt,
+                "total_prescriptions": rx_cnt,
+            })
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("刷新计数失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
+
     async def delete_book(self, book_id: str) -> APIResponse:
         """删除策管书籍 — 同时清理 MD 文件、Neo4j 节点、Redis 缓存和跨书文件"""
         try:
@@ -902,8 +1007,8 @@ class CurationController:
 
             # ── 3. 清理 Redis 缓存 ──
             try:
-                import redis as _redis_mod
-                r = _redis_mod.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                from src.config.modules.redis import get_sync_redis as _get_sync
+                r = _get_sync()
                 keys_to_delete = [
                     f"d2g:cross_analysis:{book_id}",
                     f"d2g:cross_decisions:{book_id}",
@@ -1021,6 +1126,16 @@ class CurationController:
             logger.error("启动生成失败: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
 
+    async def cancel_generation(self, book_id: str) -> APIResponse:
+        """取消正在进行的生成任务。"""
+        task = _running_tasks.get(book_id)
+        if not task or task.done():
+            _update_progress(book_id, status="cancelled", phase_label="任务已取消")
+            return APIResponse.success(message="任务已结束", data={"book_id": book_id, "status": "cancelled"})
+        task.cancel()
+        logger.info("[生成流程] 收到取消请求 book_id=%s", book_id)
+        return APIResponse.success(message="取消请求已发送", data={"book_id": book_id, "status": "cancelling"})
+
     async def generation_progress(self, book_id: str):
         """生成进度 SSE — 纯只读订阅，不驱动任何任务逻辑。
 
@@ -1067,6 +1182,17 @@ class CurationController:
 
                 if book_id not in _progress_events:
                     _progress_events[book_id] = _asyncio.Event()
+
+                # 如果进度是终态且无运行中任务，说明是旧残留，返回 not_found
+                _state = _progress_states.get(book_id, {})
+                _task = _running_tasks.get(book_id)
+                if _state.get("status") in ("completed", "failed", "cancelled") and (
+                    _task is None or _task.done()
+                ):
+                    _progress_states.pop(book_id, None)
+                    _progress_events.pop(book_id, None)
+                    yield f"data: {json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'}, ensure_ascii=False)}\n\n"
+                    return
 
                 # 发送首条快照（当前状态）
                 state = _progress_states[book_id]
@@ -1493,6 +1619,56 @@ class CurationController:
                     draft.status = "published"
                     await session.commit()
 
+            # ── 回写实体/主张/处方计数到 MDMetadata ──
+            try:
+                # D2G 流水线用 SourceDocument.id 作为 Neo4j book_id，需要解析
+                _neo4j_bid = draft.book_id
+                if draft.file_hash:
+                    from src.models.document import SourceDocument as _SD
+                    async with async_session_factory() as _ses2:
+                        _dr = await _ses2.execute(
+                            select(_SD).where(_SD.file_hash == draft.file_hash))
+                        _doc = _dr.scalar_one_or_none()
+                        if _doc and _doc.id:
+                            _neo4j_bid = _doc.id
+
+                with driver.session() as _count_sess:
+                    _ent_result = _count_sess.run(
+                        "MATCH (ae) WHERE ae.book_id = $bid "
+                        "RETURN count(ae) AS cnt",
+                        bid=_neo4j_bid,
+                    )
+                    _ent_cnt = _ent_result.single()["cnt"]
+
+                    _rel_result = _count_sess.run(
+                        "MATCH (ae1)-[r]->(ae2) WHERE ae1.book_id = $bid AND ae2.book_id = $bid RETURN count(r) AS cnt",
+                        bid=_neo4j_bid,
+                    )
+                    _rel_cnt = _rel_result.single()["cnt"]
+
+                    _rx_result = _count_sess.run(
+                        "MATCH (p:Prescription) WHERE p.book_id = $bid "
+                        "RETURN count(p) AS cnt",
+                        bid=_neo4j_bid,
+                    )
+                    _rx_cnt = _rx_result.single()["cnt"]
+
+                async with async_session_factory() as _ses:
+                    _r = await _ses.execute(
+                        select(MDMetadata).where(MDMetadata.book_id == draft.book_id))
+                    _m = _r.scalar_one_or_none()
+                    if _m:
+                        _m.total_entities = _ent_cnt
+                        _m.total_claims = _rel_cnt
+                        _m.total_prescriptions = _rx_cnt
+                        await _ses.commit()
+                logger.info(
+                    "publish 计数已回写 book_id=%s (neo4j=%s): entities=%d, claims=%d, prescriptions=%d",
+                    draft.book_id, _neo4j_bid, _ent_cnt, _rel_cnt, _rx_cnt,
+                )
+            except Exception as e:
+                logger.warning("publish 计数回写失败（不阻塞主流程）: %s", e)
+
             # Phase 5b: 执行审核者跨书决策（实体合并 + 跨书关系建边）
             try:
                 from src.core.knowledge_qa.neo4j.driver import get_async_neo4j_driver
@@ -1524,6 +1700,7 @@ class CurationController:
     async def get_graph(
         self,
         book_id: Optional[str] = Query(None, description="单书 KG，不传则返回全景 KG"),
+        limit: int = Query(500, ge=50, le=5000, description="返回节点数量上限"),
     ) -> APIResponse:
         """获取知识图谱可视化数据"""
         try:
@@ -1534,12 +1711,13 @@ class CurationController:
             driver = get_neo4j_driver()
             nodes = []
             edges = []
+            edge_limit = int(limit * 2.5)
 
             with driver.session() as session:
                 # 查询节点
                 if book_id:
                     node_query = """
-                    MATCH (b:Book {book_id: $book_id})-[:CONTAINS_ENTITY]->(ae)
+                    MATCH (ae) WHERE ae.book_id = $book_id
                     RETURN ae.name AS id, ae.name AS label, labels(ae)[0] AS type,
                            COALESCE(ae.description, '') AS description,
                            COALESCE(ae.severity, '') AS severity,
@@ -1550,11 +1728,11 @@ class CurationController:
                            COALESCE(ae.mechanism_detail, '') AS mechanism_detail
                     UNION
                     MATCH (b:Book {book_id: $book_id})
-                    RETURN b.book_id AS id, b.title AS label, 'Book' AS type, '' AS description,
+                    RETURN b.book_id AS id, COALESCE(b.title, b.book_id) AS label, 'Book' AS type, '' AS description,
                            '' AS severity, '' AS category, '' AS brain_regions,
                            '' AS evidence, '' AS key_figures, '' AS mechanism_detail
                     """
-                    node_result = session.run(node_query, book_id=book_id)
+                    node_result = session.run(node_query + " LIMIT $lim", book_id=book_id, lim=limit)
                 else:
                     node_query = """
                     MATCH (n) WHERE n:Book OR n:Problem OR n:Solution OR n:BrainRegion
@@ -1562,6 +1740,11 @@ class CurationController:
                         OR n:AutoCommunity OR n:CognitiveProcess OR n:Theory
                         OR n:Mechanism OR n:DevelopmentalStage OR n:Strategy
                         OR n:KeyInsight OR n:ResearchFinding
+                        OR n:Risk OR n:ChildProfile OR n:Chapter
+                        OR n:Person OR n:Location OR n:Object
+                        OR n:AssessmentTool OR n:Symptom OR n:Intervention OR n:Diagnosis
+                        OR n:Organization OR n:Study OR n:Neurotransmitter
+                        OR n:Milestone OR n:Environment OR n:CustomRule
                     RETURN COALESCE(n.name, n.book_id, n.node_id) AS id,
                            COALESCE(n.name, n.title, n.label) AS label,
                            labels(n)[0] AS type,
@@ -1572,9 +1755,9 @@ class CurationController:
                            COALESCE(n.evidence, '') AS evidence,
                            COALESCE(n.key_figures, '') AS key_figures,
                            COALESCE(n.mechanism_detail, '') AS mechanism_detail
-                    LIMIT 500
+                    LIMIT $lim
                     """
-                    node_result = session.run(node_query)
+                    node_result = session.run(node_query, lim=limit)
 
                 for record in node_result:
                     node_data = {
@@ -1594,8 +1777,8 @@ class CurationController:
                 # 查询关系
                 if book_id:
                     edge_query = """
-                    MATCH (b:Book {book_id: $book_id})-[:CONTAINS_ENTITY]->(ae1)
-                          -[r]->(ae2)
+                    MATCH (ae1)-[r]->(ae2)
+                    WHERE ae1.book_id = $book_id AND ae2.book_id = $book_id
                     RETURN ae1.name AS source, ae2.name AS target,
                            COALESCE(r.relationship_type, type(r)) AS type,
                            COALESCE(r.weight, 1) AS weight,
@@ -1603,7 +1786,7 @@ class CurationController:
                            COALESCE(r.evidence, '') AS evidence,
                            COALESCE(r.confidence, '') AS confidence
                     """
-                    edge_result = session.run(edge_query, book_id=book_id)
+                    edge_result = session.run(edge_query + " LIMIT $lim", book_id=book_id, lim=edge_limit)
                 else:
                     edge_query = """
                     MATCH (a)-[r]->(b)
@@ -1613,9 +1796,9 @@ class CurationController:
                            COALESCE(r.label, r.relationship_type, type(r)) AS label,
                            COALESCE(r.evidence, '') AS evidence,
                            COALESCE(r.confidence, '') AS confidence
-                    LIMIT 1000
+                    LIMIT $lim
                     """
-                    edge_result = session.run(edge_query)
+                    edge_result = session.run(edge_query, lim=edge_limit)
 
                 for record in edge_result:
                     edge_data = {
@@ -1654,9 +1837,9 @@ class CurationController:
             with driver.session() as session:
                 if book_id:
                     query = """
-                    MATCH (b:Book {book_id: $book_id})-[:CONTAINS_ENTITY]->(ae)
+                    MATCH (ae) WHERE ae.book_id = $book_id
                     OPTIONAL MATCH (ae)-[r]->(ae2)
-                    RETURN ae, r, ae2, b
+                    RETURN ae, r, ae2
                     """
                     result = session.run(query, book_id=book_id)
                 else:
@@ -1749,8 +1932,8 @@ class CurationController:
             with driver.session() as session:
                 if len(ids) >= 2:
                     query = (
-                        "MATCH (b1:Book {book_id: $id1})-[:CONTAINS_ENTITY]->(e1:AutoEntity)"
-                        "-[r:RELATES_TO]->(e2:AutoEntity)<-[:CONTAINS_ENTITY]-(b2:Book {book_id: $id2}) "
+                        "MATCH (e1:AutoEntity)-[r:RELATES_TO]->(e2:AutoEntity) "
+                        "WHERE e1.book_id = $id1 AND e2.book_id = $id2 "
                         "RETURN e1.name AS source, e2.name AS target, "
                         "r.relationship_type AS type, r.weight AS weight, "
                         "b1.book_id AS book1, b2.book_id AS book2"
@@ -1767,8 +1950,8 @@ class CurationController:
                         })
 
                     summary_query = (
-                        "MATCH (b1:Book {book_id: $id1})-[:CONTAINS_ENTITY]->(e1:AutoEntity)"
-                        "-[r:RELATES_TO]->(e2:AutoEntity)<-[:CONTAINS_ENTITY]-(b2:Book {book_id: $id2}) "
+                        "MATCH (e1:AutoEntity)-[r:RELATES_TO]->(e2:AutoEntity) "
+                        "WHERE e1.book_id = $id1 AND e2.book_id = $id2 "
                         "RETURN r.relationship_type AS type, count(r) AS cnt"
                     )
                     summary_result = session.run(summary_query, id1=ids[0], id2=ids[1])
@@ -1776,8 +1959,8 @@ class CurationController:
                         pairs.append({"type": record["type"], "count": record["cnt"]})
                 else:
                     query = (
-                        "MATCH (b1:Book)-[:CONTAINS_ENTITY]->(e1:AutoEntity)"
-                        "-[r:RELATES_TO]->(e2:AutoEntity)<-[:CONTAINS_ENTITY]-(b2:Book) "
+                        "MATCH (e1:AutoEntity)-[r:RELATES_TO]->(e2:AutoEntity) "
+                        "WHERE e1.book_id <> e2.book_id "
                         "WHERE b1 <> b2 "
                         "RETURN e1.name AS source, e2.name AS target, "
                         "r.relationship_type AS type, r.weight AS weight, "
@@ -1834,7 +2017,7 @@ class CurationController:
             # 尝试从 Redis 读取（备选）
             try:
                 import redis
-                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 data = r.get(key)
                 if data:
@@ -1896,7 +2079,7 @@ class CurationController:
             # 可选：同步到 Redis 缓存
             try:
                 import redis
-                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
             except Exception:
@@ -1953,7 +2136,7 @@ class CurationController:
             # 可选：同步到 Redis 缓存
             try:
                 import redis
-                r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+                r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
             except Exception:

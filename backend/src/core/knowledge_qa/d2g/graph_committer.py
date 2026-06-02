@@ -205,10 +205,10 @@ async def _promote_staging(book_id: str, tx) -> None:
       2. 将 Staging 节点的 :D2G_Staging label 移除
       3. 清理 extraction_version 属性
     """
-    # Step 1: 删除同书旧节点及其关系（不包括 Staging 节点）
+    # Step 1: 删除同书旧节点及其关系（不包括 Staging 节点和 Book 节点）
     await tx.run("""
         MATCH (n {book_id: $book_id})
-        WHERE NOT n:D2G_Staging
+        WHERE NOT n:D2G_Staging AND NOT n:Book
         DETACH DELETE n
     """, book_id=book_id)
     logger.info("已删除 book_id=%s 的旧节点", book_id)

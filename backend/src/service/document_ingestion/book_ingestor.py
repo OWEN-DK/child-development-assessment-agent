@@ -132,6 +132,14 @@ class BookIngestor:
             )
 
             loop = asyncio.get_running_loop()
+            # 获取取消信号，供各阶段直接检查（asyncio.Event.is_set() 线程安全）
+            cancel_signal = task_state_service.get_cancellation_signal(task_id, TASK_TYPE)
+
+            def _check_cancelled():
+                """检查取消信号，如已取消则抛出异常"""
+                if cancel_signal.is_set():
+                    raise TaskCancelledException()
+
             def page_progress_callback(current_page: int, total_pages: int):
                 if progress_callback and actual_total_pages:
                     parse_progress = 10.0 + (current_page / actual_total_pages) * 20.0
@@ -139,17 +147,21 @@ class BookIngestor:
                     if asyncio.iscoroutine(res):
                         asyncio.run_coroutine_threadsafe(res, loop)
 
+            # ── 解析阶段 ──────────────────────────────────────
+            _check_cancelled()
             t_start = time.monotonic()
             documents, parser_cls = await asyncio.to_thread(
                 self.parser.parse_document, file_path, page_progress_callback
             )
             logger.info(f"[PERF] parse_document: {time.monotonic() - t_start:.2f}s, got {len(documents)} chunks")
+            _check_cancelled()
             # 使用线程池执行同步的 VL 解析检查，避免阻塞事件循环
             t_start = time.monotonic()
             documents = await asyncio.to_thread(
                 self.parser.check_vl_parsing, file_path, documents, parser_cls
             )
             logger.info(f"[PERF] check_vl_parsing: {time.monotonic() - t_start:.2f}s")
+            _check_cancelled()
             if not documents:
                 raise ValueError("无法从文件中提取文本。该文件可能是扫描版PDF或空文件，且无法使用VL模型识别。")
             logger.info(f"Parsed {len(documents)} document chunks/pages.")
@@ -160,17 +172,19 @@ class BookIngestor:
                 self.parser.calculate_chapter_count, file_path, documents
             )
             logger.info(f"[PERF] calculate_chapter_count: {time.monotonic() - t_start:.2f}s")
+            _check_cancelled()
             t_start = time.monotonic()
             documents = await asyncio.to_thread(
                 self.parser.clean_documents, documents, file_name
             )
             logger.info(f"[PERF] clean_documents: {time.monotonic() - t_start:.2f}s")
+            _check_cancelled()
             if not documents:
                 logger.error(f"No valid content found in {file_name} after cleaning")
                 raise ValueError(f"文件 {file_name} 中未找到有效内容，请检查文件内容是否正常")
 
             pending_doc, doc_count = await self.chunking_indexing.process_chunks_and_index(
-                documents, file_path, file_name, file_hash, task_id, progress_callback
+                documents, file_path, file_name, file_hash, task_id, progress_callback, cancel_signal
             )
 
             if progress_callback:

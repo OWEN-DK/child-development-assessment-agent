@@ -236,6 +236,9 @@ def merge_detail_results(seg_details: list) -> dict:
     seen_quotes: set[str] = set()
 
     for detail in seg_details:
+        # 跳过纯列表（旧版 API 兼容，不应出现但防御性处理）
+        if isinstance(detail, list):
+            continue
         # 兼容 Pydantic 对象和 dict
         cases = detail.cases if hasattr(detail, "cases") else detail.get("cases", [])
         data_points = (
@@ -306,15 +309,4 @@ def merge_relationship_results(seg_results: list[list], bridge_rels: list | None
                 seen.add(key)
                 merged.append(r)
     return merged
-
-
-def merge_detail_results(seg_results: list) -> list:
-    """合并各段的细节提取结果。"""
-    # 简单拼接所有细节
-    merged = []
-    for detail_list in seg_results:
-        if isinstance(detail_list, list):
-            merged.extend(detail_list)
-    return merged
-
 

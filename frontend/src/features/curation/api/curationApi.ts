@@ -87,12 +87,20 @@ export const curationApi = {
     await apiClient.post(`/api/v2/curation/drafts/${draftId}/publish`);
   },
 
+  /* ===== 计数刷新 ===== */
+
+  /** 从 Neo4j 刷新实体/主张/处方计数 */
+  refreshCounts: async (bookId: string): Promise<{ total_entities: number; total_claims: number; total_prescriptions: number }> => {
+    const res = await apiClient.post(`/api/v2/curation/books/${bookId}/refresh-counts`);
+    return res.data;
+  },
+
   /* ===== 知识图谱 ===== */
 
   /** 获取 KG 可视化数据 */
-  getGraph: async (bookId?: string): Promise<KGData> => {
+  getGraph: async (bookId?: string, limit?: number): Promise<KGData> => {
     const res = await apiClient.get('/api/v2/curation/graph', {
-      params: bookId ? { book_id: bookId } : {},
+      params: { ...(bookId ? { book_id: bookId } : {}), ...(limit ? { limit } : {}) },
     });
     return res.data as KGData;
   },

@@ -13,6 +13,7 @@ import {
   RedoOutlined,
   BookOutlined,
   StopOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useCurationStore } from '../stores/curationStore';
@@ -62,6 +63,16 @@ export const BookListPage: React.FC = () => {
     });
   };
 
+  const handleRefreshCounts = async (book: CurationBook) => {
+    try {
+      const res = await curationApi.refreshCounts(book.book_id);
+      message.success(`已刷新: ${res.total_entities} 实体, ${res.total_claims} 关系`);
+      loadBooks();
+    } catch {
+      message.error('刷新失败');
+    }
+  };
+
   /** 根据状态返回可用操作 */
   const getActions = (book: CurationBook) => {
     const items: any[] = [];
@@ -108,6 +119,12 @@ export const BookListPage: React.FC = () => {
     // Delete is always available
     if (true) {
       items.push({ type: 'divider' as const });
+      items.push({
+        key: 'refresh-counts',
+        icon: <SyncOutlined />,
+        label: '刷新计数',
+        onClick: () => handleRefreshCounts(book),
+      });
       items.push({
         key: 'delete',
         icon: <DeleteOutlined />,
@@ -170,7 +187,7 @@ export const BookListPage: React.FC = () => {
         items={[
           { value: books.length, label: '书籍总数' },
           { value: totalEntities, label: '实体总数' },
-          { value: totalClaims, label: '主张总数' },
+          { value: totalClaims, label: '关系总数' },
           { value: `${publishedCount}/${books.length}`, label: '已入库' },
         ]}
       />
@@ -198,7 +215,7 @@ export const BookListPage: React.FC = () => {
               <div
                 key={book.book_id}
                 className={`${styles['book-card']} ${isGenerating ? styles['book-card--generating'] : ''} ${isFailed ? styles['book-card--failed'] : ''}`}
-                onClick={() => { if (isGenerating) return; if (book.status === 'bound') navigate(`/curation/generate/${book.book_id}?autoStart=true`); else navigate(`/curation/editor/${book.book_id}`); }}
+                onClick={() => { if (isGenerating) return; if (isBound) navigate(`/curation/generate/${book.book_id}?autoStart=true`); else navigate(`/curation/editor/${book.book_id}`); }}
               >
                 <div className={styles['book-card__header']}>
                   <div>
@@ -208,7 +225,7 @@ export const BookListPage: React.FC = () => {
                     </h3>
                     <div className={styles['book-card__subtitle']}>
                       {book.author && <span>{book.author} · </span>}
-                      <span>{book.total_entities || 0} 节点 · {book.total_claims || 0} 主张</span>
+                      <span>{book.total_entities || 0} 实体 · {book.total_claims || 0} 关系</span>
                     </div>
                     <div className={styles['book-card__source']}>
                       来源: {sourceLabel}
@@ -237,12 +254,9 @@ export const BookListPage: React.FC = () => {
                   </div>
                   <div className={styles['book-card__stat']}>
                     <div className={styles['book-card__stat-value']}>{book.total_claims || 0}</div>
-                    <div className={styles['book-card__stat-label']}>主张</div>
+                    <div className={styles['book-card__stat-label']}>关系</div>
                   </div>
-                  <div className={styles['book-card__stat']}>
-                    <div className={styles['book-card__stat-value']}>{book.total_prescriptions || 0}</div>
-                    <div className={styles['book-card__stat-label']}>处方</div>
-                  </div>
+
                   <div className={styles['book-card__stat']}>
                     <div className={styles['book-card__stat-value']}>
                       {book.updated_at ? new Date(book.updated_at).toLocaleDateString('zh-CN') : '-'}

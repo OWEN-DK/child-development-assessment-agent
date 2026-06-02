@@ -216,7 +216,7 @@ class CrossBookPhase5b:
         使用 relation_migration 模块的关系迁移逻辑（修复 BUG-2），
         包含幂等检查（修复 PHASE5b-IDEMPOTENCY）。
         """
-        from .relation_migration import build_migration_cypher
+        from .relation_migration import build_migration_cypher_async
 
         try:
             async with self._neo4j.session() as session:
@@ -237,7 +237,8 @@ class CrossBookPhase5b:
                     return True  # 幂等：前一次执行已成功合并
 
                 # ── 执行关系迁移 + 合并（6 步事务） ──
-                stmts = build_migration_cypher(
+                stmts = await build_migration_cypher_async(
+                    session,
                     new_name=decision.new_entity,
                     new_book_id=decision.new_book_id,
                     existing_name=decision.matched_entity,
@@ -341,9 +342,9 @@ class CrossBookPhase5b:
             async with self._neo4j.session() as session:
                 await session.run(
                     """
-                    MATCH (source {name: $source_name})
+                    MATCH (source {{name: $source_name}})
                     WHERE $source_book IN coalesce(source.book_ids, [source.book_id])
-                    MATCH (target {name: $target_name})
+                    MATCH (target {{name: $target_name}})
                     WHERE $target_book IN coalesce(target.book_ids, [target.book_id])
                     MERGE (source)-[r:{relation_type}]->(target)
                     SET r.confidence = $confidence,
@@ -366,7 +367,7 @@ class CrossBookPhase5b:
                 return True
 
         except Exception as e:
-            logger.warning("跨书关系创建失败: %s", e)
+            logger.warning("跨书关系创建失败: %r", e)
 
         return False
 
@@ -376,7 +377,7 @@ class CrossBookPhase5b:
         """从 Redis 加载 Phase 5a 分析结果。"""
         try:
             import redis
-            r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            r = get_sync_redis()
             key = f"d2g:cross_analysis:{book_id}"
             data = r.get(key)
             if data:
@@ -410,7 +411,7 @@ class CrossBookPhase5b:
         """清理 Redis 缓存。"""
         try:
             import redis
-            r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            r = get_sync_redis()
             r.delete(f"d2g:cross_analysis:{book_id}")
             r.delete(f"d2g:cross_decisions:{book_id}")
             logger.info("Redis 缓存已清理: %s", book_id)

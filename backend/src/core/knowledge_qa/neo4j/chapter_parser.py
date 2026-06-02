@@ -37,6 +37,9 @@ class ChapterParseResult:
 def parse_epub(file_path: str, book_id: str) -> ChapterParseResult:
     """解析 EPUB 文件，返回按章节组织的结构化结果。
 
+    对于整本书内容打包在单个 HTML 文档中的 EPUB（如"学习如何学习"），
+    会按内部的 <h1>/<h2> 标题自动拆分为多个章节。
+
     Args:
         file_path: EPUB 文件路径
         book_id: 书籍唯一标识
@@ -55,6 +58,20 @@ def parse_epub(file_path: str, book_id: str) -> ChapterParseResult:
         html = item.get_content().decode("utf-8", errors="replace")
         soup = BeautifulSoup(html, "html.parser")
 
+        # 检测 item 内是否有多个 h1 标题，需要按标题拆分
+        sub_chapters = _split_by_headings(soup, html, book_id, chapter_idx)
+        if sub_chapters is not None:
+            for ch in sub_chapters:
+                if not ch.markdown.strip():
+                    continue
+                ch.order = chapter_idx
+                ch.token_count = _estimate_tokens(ch.markdown)
+                result.chapters.append(ch)
+                result.total_tokens += ch.token_count
+                chapter_idx += 1
+            continue
+
+        # 常规逻辑：一个 item = 一个章节
         heading = soup.find(["h1", "h2", "h3"])
         title = heading.get_text(strip=True) if heading else f"Chapter {chapter_idx + 1}"
 
@@ -76,10 +93,78 @@ def parse_epub(file_path: str, book_id: str) -> ChapterParseResult:
         result.total_tokens += token_count
         chapter_idx += 1
 
-    # 超长章节拆分
-    # 不再拆分超长章节——qwen3.7-max 上下文 128K，完整章节直接传入效果更好
-
     return result
+
+
+def _split_by_headings(
+    soup: BeautifulSoup, raw_html: str, book_id: str, start_idx: int
+) -> list[Chapter] | None:
+    """当单个 HTML 文档内包含多个 h1 标题时，按标题拆分为子章节。
+
+    Returns:
+        拆分后的 Chapter 列表，如果不需拆分则返回 None。
+    """
+    h1_tags = soup.find_all("h1")
+    if len(h1_tags) <= 1:
+        return None
+
+    chapters: list[Chapter] = []
+    for i, h1 in enumerate(h1_tags):
+        # 收集该标题之后、下一个 h1 之前的所有兄弟元素内容
+        elems = _collect_until_next_heading(h1)
+        markdown = _elems_to_markdown(elems)
+        title = h1.get_text(strip=True)
+        # 前置标题内容（如"名言"等）归入第一个章节
+        if i == 0 and not markdown.strip():
+            continue
+
+        chapters.append(Chapter(
+            id=f"{book_id}_ch{(start_idx + len(chapters)):03d}",
+            title=title,
+            raw_html=raw_html,
+            markdown=markdown,
+        ))
+
+    return chapters if chapters else None
+
+
+def _collect_until_next_heading(h1_tag) -> list:
+    """从 h1 标签开始，收集其后的兄弟元素直到下一个 h1 为止。"""
+    elems = []
+    for sibling in h1_tag.next_siblings:
+        if sibling.name == "h1":
+            break
+        if hasattr(sibling, "name") and sibling.name in (
+            "h1", "h2", "h3", "h4", "p", "li", "blockquote",
+        ):
+            elems.append(sibling)
+        elif hasattr(sibling, "find_all"):
+            # 嵌套容器（如 <div>），提取内部内容元素
+            for child in sibling.find_all(
+                ["h2", "h3", "h4", "p", "li", "blockquote"]
+            ):
+                elems.append(child)
+    return elems
+
+
+def _elems_to_markdown(elems: list) -> str:
+    """将一组 HTML 元素转换为简化 Markdown。"""
+    lines = []
+    for elem in elems:
+        tag = elem.name
+        text = elem.get_text(strip=True)
+        if not text:
+            continue
+        if tag.startswith("h"):
+            level = int(tag[1])
+            lines.append(f"{'#' * level} {text}")
+        elif tag == "li":
+            lines.append(f"- {text}")
+        elif tag == "blockquote":
+            lines.append(f"> {text}")
+        else:
+            lines.append(text)
+    return "\n\n".join(lines)
 
 
 def _html_to_markdown(soup: BeautifulSoup) -> str:

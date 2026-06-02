@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 import time
 from dataclasses import asdict, dataclass, field
@@ -21,6 +22,7 @@ from neo4j import NotificationClassification
 from .schema import (
     CROSS_BOOK_RELATION_TYPES,
     CROSS_RELATION_TYPE_COMBOS,
+    VALID_CROSS_RELATION_COMBOS,
 )
 
 logger = logging.getLogger(__name__)
@@ -214,6 +216,7 @@ class CrossBookPhase5a:
             cross_pairs = self._find_cross_relation_candidates(
                 new_entities, other_entities,
                 matched_community_pairs,
+                entity_match_pairs=entity_pairs_to_judge or None,
             )
             logger.info("Phase 5a: 跨书关系候选 %d 对", len(cross_pairs))
 
@@ -239,6 +242,10 @@ class CrossBookPhase5a:
 
         except Exception as e:
             logger.error("Phase 5a 执行失败: %s", e, exc_info=True)
+            raise
+
+        except asyncio.CancelledError:
+            logger.info("Phase 5a: 任务被取消")
             raise
 
         return result
@@ -658,7 +665,8 @@ class CrossBookPhase5a:
             tasks.append(embed_one_batch(batch_texts, batch_entities))
 
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            async with asyncio.TaskGroup() as tg:
+                _embed_tg_tasks = [tg.create_task(t) for t in tasks]
 
         # 将新计算的 embedding 持久化回 Neo4j
         embed_success = [e for e in need_embed if e.embedding]
@@ -813,11 +821,29 @@ class CrossBookPhase5a:
         new_entities: list[EntityCandidate],
         other_entities: list[EntityCandidate],
         matched_pairs: list[tuple[CommunityInfo, CommunityInfo, float]],
+        entity_match_pairs: list[tuple[EntityCandidate, EntityCandidate, float]] | None = None,
     ) -> list[tuple[EntityCandidate, EntityCandidate, float]]:
-        """找跨书语义关系候选。优先在匹配社区间找，fallback 到全局。"""
-        candidates = []
+        """找跨书语义关系候选。
 
-        # 策略 1: 匹配社区间的跨类型实体对
+        优化策略:
+        1. 类型矩阵预筛 — 只保留 VALID_CROSS_RELATION_COMBOS 中合法的 (src_type, tgt_type) 对
+        2. 去重 — 排除已进入实体消歧的同类型对
+        3. 仅在匹配社区内搜索 — 去掉全局 O(N×M) 暴力扫描
+        """
+        # 预构建：消歧已有的实体对（同类型、已判断过），避免重复送 LLM
+        entity_match_keys: set[tuple[str, str]] = set()
+        if entity_match_pairs:
+            for ne, oe, _ in entity_match_pairs:
+                entity_match_keys.add((ne.name, oe.name))
+                entity_match_keys.add((oe.name, ne.name))
+
+        # 预构建：其他书实体按类型分组，加速查找
+        other_by_type: dict[str, list[EntityCandidate]] = {}
+        for e in other_entities:
+            if e.embedding:
+                other_by_type.setdefault(e.entity_type, []).append(e)
+
+        # 收集匹配社区覆盖的实体名
         new_comm_entities: dict[str, set[str]] = {}
         other_comm_entities: dict[str, set[str]] = {}
         for nc, oc, _ in matched_pairs:
@@ -825,9 +851,11 @@ class CrossBookPhase5a:
             other_comm_entities.setdefault(oc.community_id, set(oc.entity_names))
 
         entity_by_name = {e.name: e for e in new_entities + other_entities}
-        seen = set()
+        seen: set[tuple[str, str]] = set()
+        candidates: list[tuple[EntityCandidate, EntityCandidate, float]] = []
 
-        for nc, oc, comm_sim in matched_pairs:
+        # 策略 1: 匹配社区间 + 类型矩阵预筛
+        for nc, oc, _ in matched_pairs:
             new_names = new_comm_entities.get(nc.community_id, set())
             other_names = other_comm_entities.get(oc.community_id, set())
 
@@ -843,25 +871,42 @@ class CrossBookPhase5a:
                     if key in seen:
                         continue
                     seen.add(key)
+                    # 类型矩阵预筛：跳过不合法的类型组合
+                    if (ne.entity_type, oe.entity_type) not in VALID_CROSS_RELATION_COMBOS:
+                        continue
+                    # 去重：已在消歧中判断过的同类型对
+                    if key in entity_match_keys:
+                        continue
                     sim = self._emb.cosine_similarity(ne.embedding, oe.embedding)
                     if sim >= self._cross_rel_th:
                         candidates.append((ne, oe, sim))
 
-        # 策略 2: 全局高相似度对（不在同一社区但 embedding 相似）
-        all_names = set(e.name for e in new_entities) | set(e.name for e in other_entities)
+        # 策略 2: 全局兜底 — 仅对匹配社区外的实体，按类型矩阵 + 高阈值
+        comm_entity_names = set()
+        for names in new_comm_entities.values():
+            comm_entity_names.update(names)
+        for names in other_comm_entities.values():
+            comm_entity_names.update(names)
+
         for ne in new_entities:
-            if not ne.embedding:
+            if not ne.embedding or ne.name in comm_entity_names:
                 continue
-            for oe in other_entities:
-                if not oe.embedding or oe.name in seen:
+            # 只看合法目标类型
+            for (src_t, tgt_t) in VALID_CROSS_RELATION_COMBOS:
+                if src_t != ne.entity_type:
                     continue
-                key = (ne.name, oe.name)
-                if key in seen:
-                    continue
-                sim = self._emb.cosine_similarity(ne.embedding, oe.embedding)
-                if sim >= 0.6:  # 全局用稍高阈值
+                for oe in other_by_type.get(tgt_t, []):
+                    if not oe.embedding or oe.name in comm_entity_names:
+                        continue
+                    key = (ne.name, oe.name)
+                    if key in seen:
+                        continue
                     seen.add(key)
-                    candidates.append((ne, oe, sim))
+                    if key in entity_match_keys:
+                        continue
+                    sim = self._emb.cosine_similarity(ne.embedding, oe.embedding)
+                    if sim >= 0.6:
+                        candidates.append((ne, oe, sim))
 
         return candidates
 
@@ -870,7 +915,7 @@ class CrossBookPhase5a:
     async def _batch_judge_entity_matches(
         self,
         pairs: list[tuple[EntityCandidate, EntityCandidate, float]],
-        batch_size: int = 8,
+        batch_size: int = 50,
     ) -> list[EntityMatchCandidate]:
         """批量判断实体消歧。一次 LLM 调用判断多对，batch 间并发。"""
         import asyncio
@@ -880,23 +925,25 @@ class CrossBookPhase5a:
 
         async def _judge_batch(batch):
             async with sem:
-                return await self._llm_judge_entity_batch(batch)
+                try:
+                    return await self._llm_judge_entity_batch(batch)
+                except Exception as e:
+                    logger.warning("实体消歧 batch 调用失败: %s", e)
+                    return []
 
         batches = [
             pairs[i:i + batch_size]
             for i in range(0, len(pairs), batch_size)
         ]
-        batch_results_list = await asyncio.gather(
-            *[_judge_batch(b) for b in batches],
-            return_exceptions=True,
-        )
 
         results = []
-        for br in batch_results_list:
-            if isinstance(br, Exception):
-                logger.warning("实体消歧并发 batch 异常: %s", br)
-                continue
-            results.extend(br)
+        async with asyncio.TaskGroup() as tg:
+            judge_tasks = [tg.create_task(_judge_batch(b)) for b in batches]
+        for t in judge_tasks:
+            try:
+                results.extend(t.result())
+            except Exception as e:
+                logger.warning("实体消歧并发 batch 异常: %s", e)
 
         for idx, r in enumerate(results):
             r.index = idx
@@ -976,7 +1023,7 @@ class CrossBookPhase5a:
     async def _batch_judge_cross_relations(
         self,
         pairs: list[tuple[EntityCandidate, EntityCandidate, float]],
-        batch_size: int = 5,
+        batch_size: int = 50,
     ) -> list[CrossRelationCandidate]:
         """批量判断跨书关系。一次 LLM 调用判断多对，batch 间并发。"""
         import asyncio
@@ -986,23 +1033,25 @@ class CrossBookPhase5a:
 
         async def _judge_batch(batch):
             async with sem:
-                return await self._llm_judge_cross_relation_batch(batch)
+                try:
+                    return await self._llm_judge_cross_relation_batch(batch)
+                except Exception as e:
+                    logger.warning("跨书关系 batch 调用失败: %s", e)
+                    return []
 
         batches = [
             pairs[i:i + batch_size]
             for i in range(0, len(pairs), batch_size)
         ]
-        batch_results_list = await asyncio.gather(
-            *[_judge_batch(b) for b in batches],
-            return_exceptions=True,
-        )
 
         results = []
-        for br in batch_results_list:
-            if isinstance(br, Exception):
-                logger.warning("跨书关系并发 batch 异常: %s", br)
-                continue
-            results.extend(br)
+        async with asyncio.TaskGroup() as tg:
+            judge_tasks = [tg.create_task(_judge_batch(b)) for b in batches]
+        for t in judge_tasks:
+            try:
+                results.extend(t.result())
+            except Exception as e:
+                logger.warning("跨书关系并发 batch 异常: %s", e)
 
         for idx, r in enumerate(results):
             r.index = idx
@@ -1203,7 +1252,7 @@ class CrossBookPhase5a:
     def _save_to_redis(self, result: CrossBookAnalysisResult) -> None:
         try:
             import redis
-            r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            r = get_sync_redis()
             key = f"d2g:cross_analysis:{result.book_id}"
             data = {
                 "book_id": result.book_id,

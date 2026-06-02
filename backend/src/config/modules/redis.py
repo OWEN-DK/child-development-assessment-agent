@@ -55,3 +55,23 @@ class RedisSettings(BaseSettings):
 
 
 redis_settings = RedisSettings()
+
+
+def get_sync_redis():
+    """从配置创建同步 Redis 客户端（用于非 async 上下文）。"""
+    import redis as _redis
+    from urllib.parse import urlparse
+
+    parsed = urlparse(redis_settings.redis_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 6379
+    db = int(parsed.path.lstrip("/") or "0")
+    password = redis_settings.redis_password or None
+
+    return _redis.Redis(
+        host=host, port=port, db=db,
+        password=password,
+        decode_responses=True,
+        socket_timeout=redis_settings.redis_socket_timeout,
+        socket_connect_timeout=redis_settings.redis_socket_connect_timeout,
+    )

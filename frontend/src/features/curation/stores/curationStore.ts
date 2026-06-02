@@ -36,7 +36,7 @@ interface CurationState {
   kgData: KGData | null;
   kgLoading: boolean;
   kgError: string;
-  loadGraph: (bookId?: string) => Promise<void>;
+  loadGraph: (bookId?: string, limit?: number) => Promise<void>;
 
   /* ===== 队列 ===== */
   pendingItems: PendingItem[];
@@ -139,10 +139,10 @@ export const useCurationStore = create<CurationState>((set, get) => ({
   kgData: null,
   kgLoading: false,
   kgError: '',
-  loadGraph: async (bookId?: string) => {
+  loadGraph: async (bookId?: string, limit?: number) => {
     set({ kgLoading: true, kgError: '' });
     try {
-      const data = await curationApi.getGraph(bookId);
+      const data = await curationApi.getGraph(bookId, limit);
       set({ kgData: data, kgError: '' });
     } catch (e: any) {
       const msg = e?.response?.data?.detail || e?.message || '加载图谱数据失败';
@@ -231,6 +231,8 @@ export const useCurationStore = create<CurationState>((set, get) => ({
 
   /** 页面挂载时恢复已有任务的 SSE 连接（不清空已有进度） */
   resumeGeneration: (bookId: string) => {
+    // 先重置状态，避免残留旧书的 completed/failed 状态
+    set({ generating: false, generateStatus: 'idle', generateProgress: 0, generateError: '', generateBookTitle: '', generateChapters: [], generatePhase: '', generatePhaseLabel: '' });
     get()._connectSSE(bookId, () => {
       // SSE 返回 not_found，说明没有运行中的任务，重置为 idle
       set({ generating: false, generateStatus: 'idle' });

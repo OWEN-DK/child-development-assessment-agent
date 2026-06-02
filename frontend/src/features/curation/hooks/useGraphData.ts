@@ -20,6 +20,22 @@ const NODE_COLORS: Record<string, string> = {
   Strategy: '#84CC16',
   KeyInsight: '#EAB308',
   ResearchFinding: '#64748B',
+  Risk: '#F43F5E',
+  ChildProfile: '#D946EF',
+  Chapter: '#78716C',
+  Person: '#FB923C',
+  Location: '#22D3EE',
+  Object: '#A3E635',
+  AssessmentTool: '#38BDF8',
+  Symptom: '#FB7185',
+  Intervention: '#34D399',
+  Diagnosis: '#FBBF24',
+  Organization: '#94A3B8',
+  Study: '#A78BFA',
+  Neurotransmitter: '#C084FC',
+  Milestone: '#2DD4BF',
+  Environment: '#86EFAC',
+  CustomRule: '#F472B6',
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -49,10 +65,11 @@ export function useGraphData(bookId?: string) {
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [selectedNode, setSelectedNode] = useState<KGNode | null>(null);
   const [conflictFocus, setConflictFocus] = useState(false);
+  const [nodeLimit, setNodeLimit] = useState(500);
 
   useEffect(() => {
-    loadGraph(bookId);
-  }, [bookId, loadGraph]);
+    loadGraph(bookId, nodeLimit);
+  }, [bookId, loadGraph, nodeLimit]);
 
   const nodeTypes = useMemo(
     () => (kgData ? [...new Set(kgData.nodes.map((n) => n.type))] : []),
@@ -174,6 +191,8 @@ export function useGraphData(bookId?: string) {
     handleCyInit,
     exportPNG,
     refresh: () => loadGraph(bookId),
+    nodeLimit,
+    setNodeLimit,
     NODE_COLORS,
     EDGE_COLORS,
   };

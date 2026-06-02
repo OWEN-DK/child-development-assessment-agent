@@ -440,7 +440,7 @@ class CrossBookResolver:
         Step 1-2 为本引擎特有（MergeLog + 属性合并），
         Step 3-7 委托给 relation_migration 共享模块。
         """
-        from .relation_migration import build_migration_cypher
+        from .relation_migration import build_migration_cypher_sync
 
         merge_id = str(uuid.uuid4())
 
@@ -490,7 +490,8 @@ class CrossBookResolver:
         )
 
         # Step 3-7: 关系迁移 + 删除（共用模块）
-        stmts = build_migration_cypher(
+        stmts = build_migration_cypher_sync(
+            tx,
             new_name=new_entity.name,
             new_book_id=new_entity.book_id,
             existing_name=existing_entity.name,
@@ -548,7 +549,7 @@ class CrossBookResolver:
         """将消歧结果持久化到 Redis（支持审计）。"""
         try:
             import redis
-            r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            r = get_sync_redis()
             key = f"d2g:cross_disambig:{outcome.book_id}"
             r.setex(key, 86400 * 7, json.dumps({
                 "book_id": outcome.book_id,

@@ -1,12 +1,37 @@
 .draft-editor {
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 280px 1fr 320px; /* overridden inline by React state */
   height: calc(100vh - 160px);
   overflow: hidden;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   margin: -12px -24px;
+}
+
+/* ===== 拖拽调整宽度手柄 ===== */
+.resize-handle {
+  cursor: col-resize;
+  background: var(--border-default);
+  transition: background 150ms ease-out;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+
+  &:hover,
+  &:active {
+    background: var(--color-primary, #4F46E5);
+  }
+
+  /* 扩大点击区域 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    right: -3px;
+  }
 }
 
 /* ===== 左侧：实体导航 ===== */

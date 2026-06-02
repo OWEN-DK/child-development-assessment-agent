@@ -422,18 +422,87 @@ async def get_rag_status():
     })
 
 
+@router.get("/documents/{filename}/bindings")
+async def get_document_bindings(filename: str):
+    """查询文档的知识图谱绑定信息"""
+    from src.repository.document_repository import DocumentRecordRepository
+    from src.repository.graph_repository import (
+        GraphEntityRepository, GraphRelationRepository, GraphCommunityRepository,
+    )
+    from src.core.database import async_session_factory
+
+    doc_repo = DocumentRecordRepository(async_session_factory)
+    doc = await doc_repo.get_by_file_name(filename)
+    if not doc:
+        raise ResourceNotFoundException(message=f"文档 {filename} 未找到")
+
+    book_id = doc.id
+    entity_repo = GraphEntityRepository(async_session_factory)
+    relation_repo = GraphRelationRepository(async_session_factory)
+    community_repo = GraphCommunityRepository(async_session_factory)
+
+    entity_count = await entity_repo.count_by_book(book_id)
+    relation_count = await relation_repo.count_by_book(book_id)
+    community_count = await community_repo.count_by_book(book_id)
+    total = entity_count + relation_count + community_count
+
+    return APIResponse.success(data={
+        "book_id": book_id,
+        "graph_ready": bool(doc.graph_ready),
+        "bindings": {
+            "entities": entity_count,
+            "relations": relation_count,
+            "communities": community_count,
+            "total": total,
+        },
+        "has_bindings": total > 0,
+    })
+
+
 @router.delete("/documents/{filename}")
-async def delete_document(filename: str):
-    """删除指定文档及其索引"""
-    # 删除文档记录
+async def delete_document(filename: str, cascade: bool = Query(False, description="是否同时删除知识图谱绑定")):
+    """删除指定文档及其索引。
+
+    如果文档存在知识图谱绑定（实体/关系/社区节点），默认拒绝删除。
+    传入 cascade=true 可同时删除文档和所有绑定数据。
+    """
+    from src.repository.document_repository import DocumentRecordRepository
+    from src.repository.graph_repository import (
+        GraphEntityRepository, GraphRelationRepository, GraphCommunityRepository,
+    )
+    from src.core.database import async_session_factory
+
+    # 检查绑定
+    doc_repo = DocumentRecordRepository(async_session_factory)
+    doc = await doc_repo.get_by_file_name(filename)
+    if doc:
+        book_id = doc.id
+        entity_repo = GraphEntityRepository(async_session_factory)
+        relation_repo = GraphRelationRepository(async_session_factory)
+        community_repo = GraphCommunityRepository(async_session_factory)
+
+        entity_count = await entity_repo.count_by_book(book_id)
+        relation_count = await relation_repo.count_by_book(book_id)
+        community_count = await community_repo.count_by_book(book_id)
+        total_bindings = entity_count + relation_count + community_count
+
+        if total_bindings > 0 and not cascade:
+            raise InvalidParamsException(
+                message=f'文档 "{filename}" 已绑定知识图谱（{entity_count} 个实体、{relation_count} 条关系、{community_count} 个社区节点），无法直接删除。请先在知识管理中解除绑定，或使用 cascade=true 同时删除。',
+                code=409,
+            )
+
+    # 执行删除（index_operations.delete_document 已包含图谱级联删除）
     success = await rag_service.delete_document(filename)
     if not success:
-        # 回退：直接从 source_documents 按标题删除
         fallback_success = await _delete_source_document_by_title(filename)
         if not fallback_success:
             raise ResourceNotFoundException(message=f"文档 {filename} 未找到或删除失败")
-    
-    return APIResponse.success(message=f"Document {filename} deleted.")
+
+    msg = f"Document {filename} deleted."
+    if cascade:
+        msg = f"Document {filename} and all graph bindings deleted."
+    return APIResponse.success(message=msg)
 
 
 @router.get("/documents")

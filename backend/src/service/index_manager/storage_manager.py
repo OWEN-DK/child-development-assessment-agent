@@ -49,6 +49,8 @@ class StorageManager:
                         logger.warning("Docstore loaded from disk but is empty, rebuilding from Chroma...")
                         self._rebuild_docstore_from_chroma()
                         self._persist_index()
+                    # 启动时同步 docstore ↔ Chroma，清理孤儿节点
+                    self._sync_docstore_with_chroma()
                     return
                 else:
                     logger.warning("No existing index found (missing docstore.json). Waiting for file uploads.")
@@ -238,6 +240,95 @@ class StorageManager:
                 self._dirty = True
         except Exception as e:
             logger.error(f"Docstore 重建失败: {e}")
+
+    def _sync_docstore_with_chroma(self):
+        """启动时清理 docstore 中 Chroma 里已不存在的孤儿节点。
+
+        解决 docstore.json 与 Chroma 不同步的问题：
+        某些书籍已从 Chroma 删除，但 docstore 中仍残留节点数据，
+        导致 BM25 检索命中已下架书籍的内容。
+
+        注意：Chroma 使用整数 ID，docstore 使用 UUID，不能直接比较 ID。
+        改用 file_name metadata 做书籍级别比对。
+        """
+        if not self.index or not hasattr(self.index, "docstore"):
+            return
+        if not hasattr(self.index, "_vector_store"):
+            return
+        vs = self.index._vector_store
+        if not (hasattr(vs, "_collection") and vs._collection):
+            return
+
+        try:
+            from collections import Counter
+
+            collection = vs._collection
+            docstore_docs = self.index.docstore.docs
+
+            # 1. 收集 Chroma 中存在的 file_name 集合
+            chroma_file_names = set()
+            chroma_meta = collection.get(where={"file_name": {"$ne": ""}}, include=["metadatas"])
+            if chroma_meta and chroma_meta["metadatas"]:
+                for m in chroma_meta["metadatas"]:
+                    fn = m.get("file_name", "")
+                    if fn:
+                        chroma_file_names.add(fn)
+
+            if not chroma_file_names:
+                logger.info("Chroma 中无 file_name metadata，跳过 docstore 同步")
+                return
+
+            # 2. 从 docstore 节点中提取 file_name，找出孤儿节点
+            orphan_ids = []
+            orphan_books = Counter()
+            for nid, node in list(docstore_docs.items()):
+                node_file_name = ""
+                if hasattr(node, "metadata"):
+                    node_file_name = node.metadata.get("file_name", "")
+                elif isinstance(node, dict):
+                    node_file_name = node.get("metadata", {}).get("file_name", "")
+                if node_file_name and node_file_name not in chroma_file_names:
+                    orphan_ids.append(nid)
+                    orphan_books[node_file_name] += 1
+
+            if not orphan_ids:
+                logger.info("Docstore <-> Chroma 同步检查通过，无孤儿节点")
+                return
+
+            logger.warning(
+                f"发现 {len(orphan_ids)} 个 docstore 孤儿节点（Chroma 中无对应书籍），"
+                f"来源: {dict(orphan_books)}。正在清理..."
+            )
+
+            # 3. 删除孤儿节点
+            for nid in orphan_ids:
+                docstore_docs.pop(nid, None)
+
+            # 4. 清理 ref_doc_info 中已空的条目
+            try:
+                ref_info = self.index.docstore.ref_doc_info
+                orphan_id_set = set(orphan_ids)
+                empty_refs = []
+                for ref_id, info in list(ref_info.items()):
+                    remaining = [n for n in info.get("node_ids", []) if n not in orphan_id_set]
+                    if not remaining:
+                        empty_refs.append(ref_id)
+                    else:
+                        info["node_ids"] = remaining
+                for ref_id in empty_refs:
+                    del ref_info[ref_id]
+                if empty_refs:
+                    logger.info(f"清理 {len(empty_refs)} 个空 ref_doc 条目")
+            except Exception:
+                pass  # ref_doc_info 结构可能不同，不影响主逻辑
+
+            self._dirty = True
+            self._persist_index()
+            logger.info(
+                f"Docstore 同步清理完成: 移除 {len(orphan_ids)} 个孤儿节点"
+            )
+        except Exception as e:
+            logger.error(f"Docstore <-> Chroma 同步清理失败（不影响启动）: {e}")
 
     def _clear_index(self):
         logger.info("All documents deleted, clearing entire index")

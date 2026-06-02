@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Space, Typography, App, Flex, Spin, Empty } from 'antd';
-import { DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
+import { DeleteOutlined, FileTextOutlined, WarningOutlined } from '@ant-design/icons';
 import type { DocumentRecord } from '../../api/documents/types';
-import { deleteDocument } from '../../api/documents';
+import { deleteDocument, getDocumentBindings } from '../../api/documents';
 import { formatDateTime } from '@shared/lib/formatters';
 import { extractApiError, notification } from '@shared/lib/notification';
 
@@ -23,18 +23,75 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   const navigate = useNavigate();
   const { modal } = App.useApp();
 
-  const handleDelete = (doc: DocumentRecord) => {
+  const handleDelete = async (doc: DocumentRecord) => {
+    // 先查询绑定状态
+    let bindings;
+    try {
+      bindings = await getDocumentBindings(doc.file_name);
+    } catch {
+      // 查询失败时降级为直接删除确认
+      modal.confirm({
+        title: '确认删除',
+        content: `确定要删除文档 "${doc.file_name}" 吗？删除后无法恢复。`,
+        onOk: async () => {
+          try {
+            await deleteDocument(doc.file_name);
+            notification.success('删除成功');
+            onRefresh();
+          } catch (e: any) {
+            notification.error(`删除失败: ${extractApiError(e).message}`);
+          }
+        },
+      });
+      return;
+    }
+
+    if (!bindings.has_bindings) {
+      // 无绑定，直接删除
+      modal.confirm({
+        title: '确认删除',
+        content: `确定要删除文档 "${doc.file_name}" 吗？删除后无法恢复。`,
+        onOk: async () => {
+          try {
+            await deleteDocument(doc.file_name);
+            notification.success('删除成功');
+            onRefresh();
+          } catch (e: any) {
+            notification.error(`删除失败: ${extractApiError(e).message}`);
+          }
+        },
+      });
+      return;
+    }
+
+    // 有绑定，显示详细提示
+    const { entities, relations, communities } = bindings.bindings;
     modal.confirm({
-      title: '确认删除',
-      content: `确定要删除文档 "${doc.file_name}" 吗？删除后无法恢复。`,
+      title: '文档存在知识图谱绑定',
+      icon: <WarningOutlined style={{ color: '#faad14' }} />,
+      content: (
+        <div>
+          <p>文档 <strong>{doc.file_name}</strong> 已绑定知识图谱数据：</p>
+          <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
+            {entities > 0 && <li>实体：{entities} 个</li>}
+            {relations > 0 && <li>关系：{relations} 条</li>}
+            {communities > 0 && <li>社区节点：{communities} 个</li>}
+          </ul>
+          <p style={{ color: '#ff4d4f', marginTop: 8 }}>
+            直接删除将同时清除所有绑定的图谱数据，此操作不可恢复。
+          </p>
+        </div>
+      ),
+      okText: '同时删除文档和图谱数据',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
       onOk: async () => {
         try {
-          await deleteDocument(doc.file_name);
-          notification.success('删除成功');
+          await deleteDocument(doc.file_name, true);
+          notification.success('文档和图谱数据已全部删除');
           onRefresh();
         } catch (e: any) {
-          const apiError = extractApiError(e);
-          notification.error(`删除失败: ${apiError.message}`);
+          notification.error(`删除失败: ${extractApiError(e).message}`);
         }
       },
     });
