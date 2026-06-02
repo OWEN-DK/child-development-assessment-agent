@@ -80,7 +80,7 @@ logger.add(
     rotation="00:00",  # 每天零点切割
     retention="7 days",  # 保留7天
     compression="gz",  # 压缩旧日志
-    enqueue=True,  # 异步写入（避免阻塞请求）
+    enqueue=False,  # 同步写入（避免 macOS 信号量限制）
     backtrace=True,  # 记录异常回溯
     diagnose=True,  # 诊断信息（如变量值）
     filter=lambda record: "name" in record["extra"],
@@ -92,7 +92,7 @@ logger.add(
     rotation="00:00",  # 每天零点切割
     retention="7 days",  # 保留7天
     compression="gz",  # 压缩旧日志
-    enqueue=True,  # 异步写入（避免阻塞请求）
+    enqueue=False,  # 同步写入（避免 macOS 信号量限制）
     backtrace=True,  # 记录异常回溯
     diagnose=True,  # 诊断信息（如变量值）
     filter=lambda record: "name" not in record["extra"],

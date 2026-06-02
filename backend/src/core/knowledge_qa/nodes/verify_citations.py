@@ -28,17 +28,42 @@ from src.schemas.knowledge_qa import KnowledgeQAState, SectionOutput, push_progr
 
 logger = logging.getLogger(__name__)
 
-# 运动清单缓存 (模块级，进程重启自动刷新)
-_exercise_name_set_cache: Optional[Set[str]] = None
+# 运动清单统一缓存 (模块级，进程重启自动刷新)
+_exercise_data_cache: Optional[dict] = None
 _exercise_json_path = get_exercise_json_path()
+
+
+def _load_exercise_data() -> dict | None:
+    """加载运动清单 JSON（统一模块级缓存）。"""
+    global _exercise_data_cache
+    if _exercise_data_cache is not None:
+        return _exercise_data_cache
+    try:
+        with open(_exercise_json_path, "r", encoding="utf-8") as f:
+            _exercise_data_cache = json.load(f)
+        return _exercise_data_cache
+    except Exception:
+        return None
+
+
+def _get_exercise_name_set() -> set[str]:
+    """从统一缓存中提取运动名称集合。"""
+    data = _load_exercise_data()
+    if not data:
+        logger.warning("运动清单加载失败，跳过运动约束校验")
+        return set()
+    # 优先用 exercise_name_set 字段，fallback 从 exercises 列表提取
+    names = set(data.get("exercise_name_set", []))
+    if not names:
+        names = {e["name"] for e in data.get("exercises", []) if e.get("name")}
+    return names
 
 
 def _backfill_exercise_from_json(et: dict) -> bool:
     """如果运动名称被模糊纠正，从运动清单 JSON 回填缺失字段。
-    
+
     Returns: True if any field was backfilled.
     """
-    # 检查是否需要回填（category/citation_ids 为空且 name 已修正）
     needs_backfill = (
         not et.get("category")
         or not et.get("target_skills")
@@ -47,18 +72,16 @@ def _backfill_exercise_from_json(et: dict) -> bool:
     )
     if not needs_backfill:
         return False
-    
+
     name = et.get("name", "")
     if not name:
         return False
-    
+
     try:
-        import json
         ex_data = _load_exercise_data()
         if not ex_data:
             return False
-        exercises = ex_data.get("exercises", [])
-        for ex in exercises:
+        for ex in ex_data.get("exercises", []):
             if ex.get("name") == name:
                 backed = False
                 if not et.get("category") and ex.get("type"):
@@ -74,37 +97,6 @@ def _backfill_exercise_from_json(et: dict) -> bool:
     except Exception:
         pass
     return False
-
-
-def _load_exercise_data() -> dict | None:
-    """加载运动清单 JSON（带缓存）"""
-    if hasattr(_load_exercise_data, "_cache"):
-        return _load_exercise_data._cache
-    try:
-        import json
-        path = get_exercise_json_path()
-        with open(path, "r", encoding="utf-8") as f:
-            _load_exercise_data._cache = json.load(f)
-        return _load_exercise_data._cache
-    except Exception:
-        return None
-
-
-
-def _get_exercise_name_set() -> set[str]:
-    """加载权威运动清单的运动名称集合 (模块级缓存)。"""
-    global _exercise_name_set_cache
-    if _exercise_name_set_cache is not None:
-        return _exercise_name_set_cache
-    try:
-        with open(_exercise_json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _exercise_name_set_cache = set(data.get("exercise_name_set", []))
-        logger.info(f"运动清单已加载: {len(_exercise_name_set_cache)} 项运动名称")
-    except Exception as e:
-        logger.warning(f"加载运动清单失败: {e}，跳过运动约束校验")
-        _exercise_name_set_cache = set()
-    return _exercise_name_set_cache
 
 
 def _fuzzy_match_exercise(name: str, valid_set: set[str]) -> Optional[str]:
@@ -123,6 +115,8 @@ async def verify_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
         return await _verify_citations_with_bundle(state, bundle)
 
     # ── 旧版校验 ──
+    # [P0-1] 明确记录 Bundle 不可用，避免静默降级
+    logger.warning("引用校验: Bundle 不可用（build_bundle 未执行或构建失败），回退 Legacy 校验")
     return await _verify_citations_legacy(state)
 
 
@@ -134,13 +128,15 @@ async def _verify_citations_legacy(state: KnowledgeQAState) -> Dict[str, Any]:
     errors = list(state.errors)
     partial = state.partial
 
+    # 全局引用 ID 重编号（跨节唯一）
+    global_counter = 0
+
     for i in range(1, 6):
         sec = sections.get(i)
         if not sec:
             continue
 
         valid_citations = []
-        citation_counter = 0
         section_auto_fixed: dict[str, str] = {}
 
         for c in sec.citations:
@@ -150,10 +146,10 @@ async def _verify_citations_legacy(state: KnowledgeQAState) -> Dict[str, Any]:
             if not c.get("chapter") or not c["chapter"].strip():
                 removed_ids.add(c.get("citation_id", "unknown"))
                 continue
-            citation_counter += 1
+            global_counter += 1
             cid = str(c.get("citation_id", "")) if c.get("citation_id") is not None else ""
             if not re.match(r'^C\d+$', cid):
-                new_cid = f"C{citation_counter}"
+                new_cid = f"C{global_counter}"
                 section_auto_fixed[cid or "(empty)"] = new_cid
                 auto_fixed_ids[cid or "(empty)"] = new_cid
                 c = dict(c)
@@ -418,24 +414,30 @@ def _check_citation_enhanced(
         else:
             return CitationVerdict(False, f"book_title '{book_title}' 不在白名单中")
 
-    # ── L3: 溯源校验 ──
+    # ── L3: 溯源校验（优化版：精确匹配 → 前缀预筛 → 模糊匹配）──
     excerpt = citation["excerpt"].strip()
     source_verified = False
     source_passage_id = ""
 
+    # 精确子串匹配（O(n)，单次遍历）
     for pid, passage in bundle.passage_index.items():
         if excerpt in passage.content:
             source_verified = True
             source_passage_id = pid
             break
 
+    # 精确失败 → 前缀预筛 + 模糊匹配（只对前缀相似的 passage 做全文比较）
     if not source_verified:
-        # 模糊匹配（substring similarity）
+        excerpt_prefix = excerpt[:50]
         for pid, passage in bundle.passage_index.items():
-            if _fuzzy_excerpt_match(excerpt, passage.content) >= 0.85:
-                source_verified = True
-                source_passage_id = pid
-                break
+            pre_ratio = difflib.SequenceMatcher(
+                None, excerpt_prefix, passage.content[:50],
+            ).ratio()
+            if pre_ratio >= 0.7:
+                if _fuzzy_excerpt_match(excerpt, passage.content) >= 0.85:
+                    source_verified = True
+                    source_passage_id = pid
+                    break
 
     if not source_verified:
         return CitationVerdict(
@@ -455,9 +457,9 @@ def _check_citation_enhanced(
             start = max(0, marker_match.start() - 80)
             end = min(len(sec_content), marker_match.end() + 80)
             nearby_text = sec_content[start:end]
-            # 简单 token overlap 判定（低阈值只过滤明显错配）
+            # SequenceMatcher ratio 判定（0.35 约等于有实质内容重叠）
             overlap = _token_overlap(excerpt, nearby_text)
-            if overlap < 0.25:
+            if overlap < 0.35:
                 semantic_mismatch = True
 
     return CitationVerdict(
@@ -526,13 +528,17 @@ def _fuzzy_excerpt_match(excerpt: str, passage_content: str) -> float:
 
 
 def _token_overlap(text1: str, text2: str) -> float:
-    """计算两个文本的 token 重叠比例。"""
-    tokens1 = set(text1)
-    tokens2 = set(text2)
-    if not tokens1 or not tokens2:
+    """计算两个文本的语义相似度。
+
+    使用 SequenceMatcher ratio 替代字符级 set 交集，
+    避免中文常见字导致的假阳性（"的"、"是"等高频字使 overlap 虚高）。
+    """
+    if not text1 or not text2:
         return 0.0
-    intersection = tokens1 & tokens2
-    return len(intersection) / min(len(tokens1), len(tokens2))
+    # 取较短文本的前 200 字符做快速比较，避免长文本 SequenceMatcher 过慢
+    t1 = text1[:200]
+    t2 = text2[:200]
+    return difflib.SequenceMatcher(None, t1, t2).ratio()
 
 
 def _extract_entity_names_from_bundle(

@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # ── 可配置阈值 ──
 BUNDLE_BOOK_MIN_ENTITY_HITS = 3  # 最少 Neo4j 实体命中数
 BUNDLE_BOOK_MIN_PASSAGE_HITS = 5  # 最少 Chroma passage 命中数
-MAX_PASSAGES_PER_BUNDLE = 120  # 全文总 passage 上限
-CHROMA_RESULTS_PER_QUERY = 30  # 每 query 的 Chroma 返回条数
+MAX_PASSAGES_PER_BUNDLE = 180  # 全文总 passage 上限（从 120 提升，增加引用素材）
+CHROMA_RESULTS_PER_QUERY = 40  # 每 query 的 Chroma 返回条数（从 30 提升）
 MAX_QUERIES = 5  # 最多搜索 query 数量
 
 
@@ -43,6 +43,7 @@ async def build_knowledge_bundle(
     child_profile: dict | None = None,
     *,
     embedding_helper=None,
+    section_queries: dict[int, str] | None = None,
 ) -> KnowledgeBundle:
     """Phase 1: 构建完整的不可变 KnowledgeBundle。
 
@@ -86,8 +87,9 @@ async def build_knowledge_bundle(
     passages, book_metas_by_id = await _batch_chroma_search(
         question=question,
         entity_seeds=entity_seeds,
-        matched_book_ids=matched_book_ids,
+        matched_book_ids=None,  # 全库搜索，不限书
         source_para_ids=neo4j_result.source_para_ids,
+        section_queries=section_queries,
     )
 
     # ── Step 1c: LazyGraphRAG 增强遍历 ──
@@ -178,8 +180,9 @@ async def build_knowledge_bundle(
 async def _batch_chroma_search(
     question: str,
     entity_seeds: list[str],
-    matched_book_ids: list[str],
+    matched_book_ids: list[str] | None,
     source_para_ids: dict[str, list[str]],
+    section_queries: dict[int, str] | None = None,
 ) -> tuple[list[Passage], dict[str, BookMeta]]:
     """批量 Chroma 搜索——直接调用 RAG service。
 
@@ -189,8 +192,15 @@ async def _batch_chroma_search(
     """
     from src.service.rag_service import rag_service
 
-    # ── Query 构建：原问题 + 实体种子维度 ──
-    queries = [question]
+    # ── Query 构建：使用去偏后的 section_queries，或原问题 + 实体种子维度 ──
+    queries = []
+    if section_queries:
+        # 使用各节的去偏 query（S1/S2 不含"运动"，S3 含"运动改善"）
+        for sq in dict.fromkeys(section_queries.values()):  # 去重保序
+            if sq:
+                queries.append(sq)
+    else:
+        queries.append(question)
     for ent_name in entity_seeds[:8]:
         if ent_name and ent_name not in queries:
             queries.append(ent_name)
@@ -325,6 +335,10 @@ async def _enhanced_lazy_graph_traversal(
         for book_id in top_book_ids:
             try:
                 roots = await community_repo.get_roots(scope="book", book_id=book_id)
+                logger.info("LazyGraphRAG book=%s: %d roots", book_id[:8], len(roots))
+                if not roots:
+                    logger.warning("LazyGraphRAG: book %s 无社区根节点，跳过", book_id[:8])
+                    continue
                 for root in roots:
                     hits = await explore_community_tree(
                         question=enhanced_query,
@@ -333,6 +347,7 @@ async def _enhanced_lazy_graph_traversal(
                         max_tokens=20000,
                         entity_boost_names=set(all_seeds) if all_seeds else None,
                     )
+                    logger.info("  root=%s: %d hits", root.node_id, len(hits))
                     all_hits.extend(hits)
             except Exception as e:
                 logger.warning(
@@ -423,20 +438,17 @@ def _prune_book_ids(
     neo4j_result: Any,
     passages: list[Passage],
 ) -> tuple[list[str], list[str]]:
-    """精简 book_ids: 剔除命中不足的候选书。
+    """全库模式: 保留所有有 passage 命中的书 + 图谱发现的书。
 
-    命中统计: Neo4j 实体数 + Chroma passage 数。
-    阈值: 实体命中 ≥ 3 或 passage 命中 ≥ 5 (满足其一即保留)。
+    不再按阈值裁剪，只排除完全没有 passage 的书。
+    图谱发现的书（discovered_book_ids）即使没有 passage 也保留（图谱数据本身有价值）。
 
     Returns:
         (pruned_book_ids, retained_book_ids)
     """
-    # 统计命中
-    entity_hits: dict[str, int] = {}
-    for ents in neo4j_result.entities.values():
-        for e in ents:
-            if e.book_id:
-                entity_hits[e.book_id] = entity_hits.get(e.book_id, 0) + 1
+    # 图谱发现的书 + LLM 匹配的书 = 全部保留候选
+    discovered = set(getattr(neo4j_result, 'discovered_book_ids', []))
+    all_candidates = set(matched_book_ids) | discovered
 
     passage_hits: dict[str, int] = {}
     for p in passages:
@@ -445,24 +457,20 @@ def _prune_book_ids(
 
     retained: list[str] = []
     pruned: list[str] = []
-
-    for bid in matched_book_ids:
-        eh = entity_hits.get(bid, 0)
-        ph = passage_hits.get(bid, 0)
-        if eh >= BUNDLE_BOOK_MIN_ENTITY_HITS or ph >= BUNDLE_BOOK_MIN_PASSAGE_HITS:
+    for bid in all_candidates:
+        if passage_hits.get(bid, 0) > 0 or bid in discovered:
             retained.append(bid)
         else:
             pruned.append(bid)
 
     if len(retained) == 0 and matched_book_ids:
-        # 至少保留第一本书（防止全部被剔除）
         retained = [matched_book_ids[0]]
         if matched_book_ids[0] in pruned:
             pruned.remove(matched_book_ids[0])
 
     logger.info(
         "book_ids 精简: %d → %d retained, %d pruned",
-        len(matched_book_ids), len(retained), len(pruned),
+        len(all_candidates), len(retained), len(pruned),
     )
     return pruned, retained
 

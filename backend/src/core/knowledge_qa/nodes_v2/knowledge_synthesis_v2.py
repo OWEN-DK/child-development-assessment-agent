@@ -164,15 +164,25 @@ async def _llm_infer_three_layers(state: KnowledgeQAState) -> Dict[str, Any]:
     )
 
     try:
-        model = LLMServiceFactoryCompat.create_raw(model_name="qwen3.5-27b", temperature=0.2)
-        resp = await model.ainvoke([
-            SystemMessage(content=system),
-            HumanMessage(content="\n\n".join(sections_text)),
-        ])
+        import asyncio
+        from src.core.knowledge_qa.nodes.base import _get_model_name, get_timeout
+        model_name = await _get_model_name("knowledge_synthesis")
+        model = LLMServiceFactoryCompat.create_raw(model_name=model_name, temperature=0.2)
+        timeout = get_timeout("knowledge_synthesis")
+        resp = await asyncio.wait_for(
+            model.ainvoke([
+                SystemMessage(content=system),
+                HumanMessage(content="\n\n".join(sections_text)),
+            ]),
+            timeout=timeout,
+        )
         raw = resp.content.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
         return json.loads(raw)
+    except asyncio.TimeoutError:
+        logger.warning("LLM three-layer inference timed out (%ds)", timeout)
+        return {}
     except Exception as e:
         logger.warning(f"LLM three-layer inference failed: {e}")
         return {}
@@ -207,25 +217,16 @@ async def knowledge_synthesis_v2_node(state: KnowledgeQAState) -> Dict[str, Any]
     if not synthesis:
         return {"three_layer_synthesis": {}, "current_step": ["synthesis_empty"]}
 
-    # Step 3: 兼容 — 从 conflicts 提取 contradictions
-    contradictions = []
-    for c in synthesis.get("conflicts", []):
-        contradictions.append({
-            "topic": c.get("topic", ""),
-            "view_a": f"{c.get('view_a', {}).get('book', '')}: {c.get('view_a', {}).get('position', '')}",
-            "view_b": f"{c.get('view_b', {}).get('book', '')}: {c.get('view_b', {}).get('position', '')}",
-            "resolution": c.get("recommendation", ""),
-            "severity": c.get("severity", "moderate"),
-        })
+    # Step 3: 剔除冲突层 — 仅保留共识与互补，不输出 contradictions
+    synthesis.pop("conflicts", None)
 
     logger.info(
         f"三层综合完成: consensus={len(synthesis.get('consensus', []))}, "
-        f"complementary={len(synthesis.get('complementary', []))}, "
-        f"conflicts={len(synthesis.get('conflicts', []))}"
+        f"complementary={len(synthesis.get('complementary', []))}"
     )
 
     return {
         "three_layer_synthesis": synthesis,
-        "contradictions": contradictions,
+        "contradictions": [],
         "current_step": ["synthesis_done"],
     }

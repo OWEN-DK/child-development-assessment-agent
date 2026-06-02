@@ -1,13 +1,18 @@
 """第 3 节：运动类型推荐 Agent 节点
 
-自管理 LLM 调用（不通过 _run_section_node），流程：
-预筛选候选运动 → 搜索知识库 → LLM 选择 → type_id 校验 → 代码填充 → content 生成
+重设计：从 exercise_type_set 选择运动类型（按序号），而非从预筛选运动列表选择。
+
+流程：
+1. 从 state 读取 exercise_type_set（标准化类型集合）+ exercise_list（完整运动列表）
+2. 构建类型选择表 Markdown 注入 prompt
+3. LLM 从类型表中选择序号 + tier + target_problem_ids
+4. 后处理：序号校验 → 代码填充（从 exercise_list 按类型过滤） → content 生成
+5. 输出 selected_exercise_types 到 state（S4 消费）
 """
 
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Any, Dict
 
 from src.core.knowledge_qa.nodes.base import (
@@ -40,13 +45,8 @@ logger = logging.getLogger(__name__)
 async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
     """第 3 节：运动类型推荐。依赖第 2 节输出。
 
-    Bundle 可用时从 Bundle 消费，否则走旧版搜索路径。
-
-    自管理流程（不通过 _run_section_node）：
-    1. 预筛选候选运动（年龄 + 关键词相关度）
-    2. Bundle→提取 passages / 旧版→搜索知识库
-    3. LLM 从候选表中选择（S3SelectionResponse）
-    4. 后处理：type_id 校验 + 代码填充 + content 生成
+    从 exercise_type_set 中选择运动类型（按序号），而非从预筛选运动列表选择。
+    LLM 输出 index（exercise_type_set 数组序号），代码反查完整类型信息。
     """
     await push_progress("section_3_generating", "正在生成第 3 节：运动类型推荐…")
 
@@ -57,23 +57,23 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
         if ctx and ctx.get("cancellation_event") and ctx["cancellation_event"].is_set():
             raise asyncio.CancelledError("任务已被取消")
 
-        # Step 0: 预筛选
-        child_age = _extract_child_age(state)
-        s2_sd = state.sections.get(2).structured_data if state.sections.get(2) else {}
-        keywords = _extract_problem_keywords(s2_sd)
-        exercise_data = _load_exercise_data()
-        candidates = _prefilter_exercises(
-            exercise_data["exercises"], child_age, keywords
-        )
-        exercise_map = _build_exercise_map(exercise_data["exercises"])
-        candidates_markdown = _build_candidates_markdown(candidates)
+        # Step 0: 从 state 读取结构化运动数据
+        exercise_type_set = state.exercise_type_set
+        exercise_list = state.exercise_list
+
+        if not exercise_type_set:
+            logger.warning("S3: exercise_type_set 为空，无法执行类型选择")
+            return await _section_fallback(state, 3, "运动类型推荐", "exercise_type_set 为空")
+
+        # 构建类型选择表 + 类型→运动映射
+        type_set_markdown = _build_type_set_markdown(exercise_type_set, exercise_list)
+        exercise_map = _build_exercise_map(exercise_list)
 
         # Step 1: 获取知识上下文
         bundle = getattr(state, "knowledge_bundle", None)
         s3_query = state.section_queries.get(3, state.question)
 
         if bundle is not None:
-            # Bundle 模式：从 Bundle 提取 passages，零 HTTP 搜索
             from src.core.knowledge_qa.bundle_consumer import (
                 extract_for_section, build_priority_context,
             )
@@ -108,7 +108,7 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
             search_context=search_context,
             previous_sections=state.sections,
             knowledge_context=state.knowledge_context or "",
-            candidates_markdown=candidates_markdown,
+            type_set_markdown=type_set_markdown,
         )
 
         # Step 3: LLM 调用（S3SelectionResponse 轻量输出）
@@ -127,7 +127,9 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
         )
 
         # Step 4: 后处理
-        result = _build_s3_result(response, exercise_map, exercise_data, state, child_age)
+        result = _build_s3_result(
+            response, exercise_type_set, exercise_list, exercise_map, state,
+        )
 
         await push_progress("section_3_done", "第 3 节：运动类型推荐已完成")
         return result
@@ -140,159 +142,46 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
         return await _section_fallback(state, 3, "运动类型推荐", str(e))
 
 
-# ==================== 预筛选 ====================
+# ==================== 类型选择表构建 ====================
 
 
-def _load_exercise_data() -> dict:
-    """加载运动清单 JSON 数据。"""
-    json_path = get_exercise_json_path()
-    try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"加载运动清单失败: {e}")
-        return {"exercises": []}
+def _build_type_set_markdown(
+    exercise_type_set: list[str],
+    exercise_list: list[dict],
+) -> str:
+    """从 exercise_type_set 构建类型选择表 Markdown。
 
-
-def _extract_child_age(state: KnowledgeQAState) -> int | None:
-    """从 S1 structured_data 中提取孩子年龄"""
-    s1 = state.sections.get(1)
-    if s1 and s1.structured_data:
-        profile = s1.structured_data.get("child_profile", {})
-        age = profile.get("age")
-        if age and isinstance(age, (int, float)):
-            return int(age)
-    import re
-    match = re.search(r'(\d+)\s*岁', state.question)
-    if match:
-        return int(match.group(1))
-    return None
-
-
-def _extract_problem_keywords(s2_structured_data: dict) -> list[str]:
-    """从 S2 structured_data 提取问题关键词。
-
-    取 problems 中每项的 category + name 作为关键词。
+    每行含：序号 | 运动类型 | 包含运动数 | 代表性运动
     """
-    problems = s2_structured_data.get("problems", [])
-    keywords: set[str] = set()
-    for p in problems:
-        if p.get("category"):
-            keywords.add(p["category"])
-        if p.get("name"):
-            keywords.add(p["name"])
-    return list(keywords)
+    # 预计算每个类型下的运动
+    type_to_exercises: dict[str, list[str]] = {}
+    for ex in exercise_list:
+        t = ex.get("type", "")
+        type_to_exercises.setdefault(t, []).append(ex.get("name", ""))
 
+    lines = [
+        "| 序号 | 运动类型 | 包含运动数 | 代表性运动 |",
+        "|------|---------|-----------|-----------|",
+    ]
+    for i, type_name in enumerate(exercise_type_set):
+        names = type_to_exercises.get(type_name, [])
+        count = len(names)
+        repr_names = "、".join(names[:3])
+        if count > 3:
+            repr_names += f"…（共{count}项）"
+        display_name = _clean_type_name(type_name)
+        lines.append(f"| {i} | {display_name} | {count} | {repr_names} |")
 
-def _parse_age_range(age_str: str) -> tuple[int, int] | None:
-    """解析运动清单中的年龄段字符串，返回 (min_age, max_age)"""
-    if not age_str:
-        return None
-    import re
-    match = re.search(r'[（(](\d+)\s*[岁~～]+\s*(\d+)?[岁]?[）)]', age_str)
-    if match:
-        min_age = int(match.group(1))
-        max_age = int(match.group(2)) if match.group(2) else 120
-        return (min_age, max_age)
-    match = re.search(r'(\d+)\s*岁\s*\+', age_str)
-    if match:
-        return (int(match.group(1)), 120)
-    return None
-
-
-def _prefilter_exercises(
-    all_exercises: list[dict],
-    child_age: int | None,
-    problem_keywords: list[str],
-) -> list[dict]:
-    """年龄过滤 + 相关度排序 + 多样性选择，返回候选列表。
-
-    策略：
-    1. 年龄过滤：移除 min_age > child_age 或 max_age < child_age 的运动
-    2. 相关度排序：problem_keywords 与运动 benefits 的关键词交集计数
-    3. 取 Top 20（按相关度）+ 按 category 分散取 5 项（保证多样性）
-    """
-    if not all_exercises:
-        return []
-
-    # Step 1: 年龄过滤
-    if child_age is not None:
-        age_filtered = []
-        for ex in all_exercises:
-            age_range = _parse_age_range(ex.get("age", ""))
-            if age_range is None:
-                age_filtered.append(ex)  # 无年龄信息的保留
-            elif age_range[0] <= child_age <= age_range[1]:
-                age_filtered.append(ex)
-        if not age_filtered:
-            # 极端情况：无适龄运动，跳过年龄过滤使用全量
-            logger.warning(f"年龄过滤(child_age={child_age})后无候选，使用全量")
-            age_filtered = list(all_exercises)
-    else:
-        age_filtered = list(all_exercises)
-
-    # Step 2: 相关度排序
-    scored: list[tuple[int, dict]] = []
-    kw_set = set(problem_keywords)
-    for ex in age_filtered:
-        benefits = ex.get("benefits", "") or ""
-        brain = ex.get("brain_mechanisms", "") or ""
-        text = f"{benefits} {brain}"
-        score = sum(1 for kw in kw_set if kw in text)
-        scored.append((score, ex))
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    # Step 3: Top 20 + 多样性选择
-    top = [ex for _, ex in scored[:20]]
-
-    # 按 category 分散取（保证分类多样性）
-    by_cat: dict[str, list[dict]] = {}
-    for ex in top:
-        cat = ex.get("type", "其他")
-        by_cat.setdefault(cat, []).append(ex)
-
-    diverse: list[dict] = []
-    seen_ids: set[int] = set()
-    # 每个分类至少取 1 项（按相关度最高的）
-    for cat_exs in by_cat.values():
-        ex = cat_exs[0]
-        if ex["id"] not in seen_ids:
-            diverse.append(ex)
-            seen_ids.add(ex["id"])
-    # 补足到 25 项（从 top 中按顺序填充）
-    for ex in top:
-        if ex["id"] not in seen_ids:
-            diverse.append(ex)
-            seen_ids.add(ex["id"])
-        if len(diverse) >= 25:
-            break
-
-    return diverse
+    return "\n".join(lines)
 
 
 def _build_exercise_map(exercises: list[dict]) -> dict[str, dict]:
-    """构建 type_id → exercise record 的映射。"""
-    return {f"ET{ex['id']:03d}": ex for ex in exercises}
-
-
-def _build_candidates_markdown(candidates: list[dict]) -> str:
-    """将候选运动列表格式化为 Markdown 表格，注入 S3 user message。"""
-    if not candidates:
-        return "（无适龄候选运动，请从通用运动中选择）"
-
-    lines = [
-        "| type_id | 运动名称 | 运动类型 | 适用年龄 | 主要益处 |",
-        "|---------|---------|---------|---------|---------|",
-    ]
-    for ex in candidates:
-        tid = f"ET{ex['id']:03d}"
-        name = ex.get("name", "")
-        cat = ex.get("type", "")
-        age = ex.get("age", "")
-        benefits = (ex.get("benefits", "") or "")[:60]
-        lines.append(f"| {tid} | {name} | {cat} | {age} | {benefits} |")
-
-    return "\n".join(lines)
+    """构建 type → exercises 列表的映射。"""
+    result: dict[str, list[dict]] = {}
+    for ex in exercises:
+        t = ex.get("type", "")
+        result.setdefault(t, []).append(ex)
+    return result
 
 
 # ==================== Message 构建 ====================
@@ -319,18 +208,18 @@ def _build_s3_full_message(
     search_context: str,
     previous_sections: Dict[int, SectionOutput],
     knowledge_context: str,
-    candidates_markdown: str,
+    type_set_markdown: str,
 ) -> str:
     """构建 S3 的完整 user message。
 
-    替代 _build_full_user_message：exercise_context 替换为预筛选候选表。
+    替代 _build_full_user_message：exercise_context 替换为类型选择表。
     """
     parts = [user_message]
 
     if search_context and search_context != "（未搜索到相关内容）":
         parts.append(f"\n\n## 知识库检索结果\n{search_context}")
 
-    # 前序节内容（与 _run_section_node 一致：截取前 800 字）
+    # 前序节内容
     if previous_sections:
         prev_parts = []
         for i in sorted(previous_sections.keys()):
@@ -343,8 +232,8 @@ def _build_s3_full_message(
     if knowledge_context:
         parts.append(f"\n\n## 知识上下文（预取）\n{knowledge_context}")
 
-    if candidates_markdown:
-        parts.append(f"\n\n## 候选运动表（预筛选后）\n{candidates_markdown}")
+    if type_set_markdown:
+        parts.append(f"\n\n## 运动类型集合（exercise_type_set）\n{type_set_markdown}")
 
     return "\n\n".join(parts)
 
@@ -354,41 +243,42 @@ def _build_s3_full_message(
 
 def _validate_selections(
     selections: list[S3SelectionItem],
-    exercise_map: dict[str, dict],
+    exercise_type_set: list[str],
 ) -> list[S3SelectionItem]:
-    """过滤掉运动清单中不存在的 type_id。"""
-    valid = [s for s in selections if s.type_id in exercise_map]
+    """过滤掉超出 exercise_type_set 范围的 index。"""
+    max_index = len(exercise_type_set) - 1
+    valid = [s for s in selections if 0 <= s.index <= max_index]
     if len(valid) < len(selections):
-        invalid_ids = [s.type_id for s in selections if s.type_id not in exercise_map]
-        logger.warning(f"S3 过滤 {len(invalid_ids)} 个无效 type_id: {invalid_ids}")
+        invalid = [s.index for s in selections if not (0 <= s.index <= max_index)]
+        logger.warning(f"S3 过滤 {len(invalid)} 个越界 index: {invalid}")
     return valid
 
 
 def _infer_skills(exercise: dict) -> list[str]:
-    """从运动的 benefits + brain_mechanisms 推导 target_skills。"""
-    text = f"{exercise.get('benefits', '')} {exercise.get('brain_mechanisms', '')}"
-    return [
-        skill
-        for skill, keywords in SKILL_KEYWORDS.items()
-        if any(kw in text for kw in keywords)
-    ]
+    """从运动的 benefits 字段直接提取训练效果（不再关键词推导）。"""
+    benefits = exercise.get("benefits", "")
+    if not benefits:
+        return []
+    # 按中文分号/顿号拆分为多条效果
+    import re
+    parts = re.split(r"[；;、]", benefits)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _build_s3_result(
     response: S3SelectionResponse,
-    exercise_map: dict[str, dict],
-    exercise_data: dict,
+    exercise_type_set: list[str],
+    exercise_list: list[dict],
+    exercise_map: dict[str, list[dict]],
     state: KnowledgeQAState,
-    child_age: int | None,
 ) -> Dict[str, Any]:
-    """后处理：type_id 校验 → 代码填充 → content 生成 → 构建 SectionOutput。"""
-    # 4a. type_id 校验
-    valid_selections = _validate_selections(response.selections, exercise_map)
+    """后处理：index 校验 → 代码填充 → content 生成 → 构建 SectionOutput。"""
+    # 4a. index 校验
+    valid_selections = _validate_selections(response.selections, exercise_type_set)
 
-    # 全部无效 → 触发兜底（使用旧逻辑从 content 模糊匹配）
+    # 全部无效 → 降级
     if not valid_selections and response.selections:
-        logger.warning("S3 所有 type_id 无效，触发兜底逻辑")
-        # 构造一个空 structured_data 的 SectionOutput，交给兜底函数
+        logger.warning("S3 所有 index 无效，触发降级逻辑")
         fallback_section = SectionOutput(
             index=3,
             title="运动类型推荐",
@@ -397,42 +287,54 @@ def _build_s3_result(
             structured_data={},
         )
         fallback_section = _validate_and_fix_s3_structured_data(
-            fallback_section, get_exercise_json_path()
+            fallback_section, exercise_type_set, exercise_list,
         )
         sections = dict(state.sections)
         sections[3] = fallback_section
         return {
             "sections": sections,
             "current_step": ["section_3_done"],
-            "errors": state.errors + ["s3_all_type_ids_invalid"],
+            "errors": state.errors + ["s3_all_indices_invalid"],
             "partial": True,
-            "filtered_exercise_candidates": _build_candidates_markdown(
-                _prefilter_exercises(
-                    exercise_data["exercises"], child_age,
-                    _extract_problem_keywords(
-                        state.sections.get(2).structured_data
-                        if state.sections.get(2) else {}
-                    ),
-                )
-            ),
         }
 
-    # 4b. 代码填充：从运动清单精确填充每个字段
+    # 4b. 代码填充：从 index 反查类型信息 + 该类型下的运动
+    # 构建 exercise → exercise_list 位置索引的映射（用于 S4 exercise_index 反查）
+    id_to_list_index: dict[int, int] = {}
+    for pos, ex in enumerate(exercise_list):
+        ex_id = ex.get("id")
+        if ex_id is not None:
+            id_to_list_index[ex_id] = pos
+
     matched_books = [b.title for b in state.matched_books_detail]
     exercise_types: list[dict] = []
+    selected_exercise_types: list[dict] = []
 
     for sel in valid_selections:
-        ex = exercise_map[sel.type_id]
+        type_name = exercise_type_set[sel.index]
+        exercises_of_type = exercise_map.get(type_name, [])
+        # 为每个 exercise 写入 _exercise_index（在 exercise_list 中的位置）
+        for ex in exercises_of_type:
+            ex_id = ex.get("id")
+            ex["_exercise_index"] = id_to_list_index.get(ex_id, ex_id - 1 if ex_id else 0)
         exercise_types.append({
-            "type_id": sel.type_id,
-            "name": ex.get("name", ""),
+            "type_index": sel.index,
+            "type": type_name,
+            "name": _clean_type_name(type_name),
             "tier": sel.tier,
-            "category": ex.get("type", ""),
             "target_problem_ids": sel.target_problem_ids,
-            "target_skills": _infer_skills(ex),
+            "target_skills": _infer_skills(exercises_of_type[0]) if exercises_of_type else [],
             "recommendation_rationale": sel.recommendation_rationale,
             "citation_ids": [],
             "source_books": matched_books,
+        })
+        selected_exercise_types.append({
+            "index": sel.index,
+            "type": type_name,
+            "tier": sel.tier,
+            "target_problem_ids": sel.target_problem_ids,
+            "recommendation_rationale": sel.recommendation_rationale,
+            "exercises": exercises_of_type,
         })
 
     # 构建 structured_data
@@ -455,22 +357,22 @@ def _build_s3_result(
     sections = dict(state.sections)
     sections[3] = section
 
-    # 候选运动表存入 state（审计用）
-    candidates_markdown = _build_candidates_markdown(
-        _prefilter_exercises(
-            exercise_data["exercises"], child_age,
-            _extract_problem_keywords(
-                state.sections.get(2).structured_data
-                if state.sections.get(2) else {}
-            ),
-        )
-    )
-
     return {
         "sections": sections,
         "current_step": ["section_3_done"],
-        "filtered_exercise_candidates": candidates_markdown,
+        "selected_exercise_types": selected_exercise_types,
     }
+
+
+def _clean_type_name(type_name: str) -> str:
+    """去除运动类型名称中的括号后缀，用于展示。
+
+    "拉伸/瑜伽(综合系统)" → "拉伸/瑜伽"
+    "力量训练(战斗/治疗)" → "力量训练"
+    "呼吸调节" → "呼吸调节"（无括号，原样返回）
+    """
+    import re
+    return re.sub(r"[（(][^）)]*[）)]$", "", type_name).strip() or type_name
 
 
 def _generate_s3_content(sd: dict) -> str:
@@ -479,19 +381,24 @@ def _generate_s3_content(sd: dict) -> str:
     if not ets:
         return "运动类型推荐"
 
+    # 清理类型名 + 去重（保留顺序）
+    seen: set[str] = set()
     names: list[str] = []
     tier_counts: dict[str, int] = {"primary": 0, "secondary": 0, "supplementary": 0}
     tier_labels = {"primary": "核心", "secondary": "辅助", "supplementary": "补充"}
     for et in ets:
-        name = et.get("name", "")
+        raw_name = et.get("type", "")
+        name = _clean_type_name(raw_name)
         tier = et.get("tier", "")
-        if name:
+        if name and name not in seen:
             names.append(name)
+            seen.add(name)
         if tier in tier_counts:
             tier_counts[tier] += 1
 
     child_age = sd.get("child_age_group", "")
-    age_hint = f"适用于{child_age}" if child_age else ""
+    # 措辞修正："适用于7岁男孩" → "7岁男孩"
+    age_hint = child_age.replace("适用于", "") if child_age else ""
 
     tier_parts = []
     for t_key in ("primary", "secondary", "supplementary"):
@@ -502,18 +409,20 @@ def _generate_s3_content(sd: dict) -> str:
 
     name_str = "、".join(names[:6]) if names else ""
     return (
-        f"针对{age_hint}孩子推荐{len(ets)}种运动类型{tier_summary}"
+        f"针对{age_hint}推荐{len(ets)}种运动类型{tier_summary}"
         f"{'，包括' + name_str if name_str else ''}。"
     )
 
 
-# ==================== 兜底逻辑 ====================
+# ==================== 降级逻辑 ====================
 
 
 def _validate_and_fix_s3_structured_data(
-    s3: SectionOutput, exercise_list_path: str
+    s3: SectionOutput,
+    exercise_type_set: list[str],
+    exercise_list: list[dict],
 ) -> SectionOutput:
-    """兜底：exercise_types 为空时，从 content 和运动清单模糊匹配提取运动类型。"""
+    """兜底：exercise_types 为空时，从 content 和运动类型集合模糊匹配提取。"""
     sd = s3.structured_data
     if not isinstance(sd, dict):
         s3.structured_data = {}
@@ -523,27 +432,20 @@ def _validate_and_fix_s3_structured_data(
     if ets:
         return s3
 
-    try:
-        with open(exercise_list_path, "r", encoding="utf-8") as f:
-            ex_data = json.load(f)
-    except Exception:
-        return s3
-
-    exercises = ex_data.get("exercises", [])
     content = s3.content or ""
 
     matched = []
-    for ex in exercises:
-        name = ex.get("name", "")
-        if name and name in content:
+    for i, type_name in enumerate(exercise_type_set):
+        if type_name in content:
+            exercises_of_type = [ex for ex in exercise_list if ex.get("type") == type_name]
             matched.append({
-                "type_id": f"ET{ex['id']:03d}",
-                "name": name,
+                "type_index": i,
+                "type": type_name,
+                "name": _clean_type_name(type_name),
                 "tier": "secondary",
-                "category": ex.get("type", ""),
                 "target_problem_ids": [],
-                "target_skills": _infer_skills(ex),
-                "recommendation_rationale": ex.get("benefits", ""),
+                "target_skills": _infer_skills(exercises_of_type[0]) if exercises_of_type else [],
+                "recommendation_rationale": "",
                 "citation_ids": [],
                 "source_books": [],
             })
@@ -556,5 +458,16 @@ def _validate_and_fix_s3_structured_data(
     s3.structured_data = new_sd
     s3.content = _generate_s3_content(new_sd)
 
-    logger.info(f"S3 兜底填充: 从内容提取 {len(matched)} 项运动")
+    logger.info(f"S3 兜底填充: 从内容提取 {len(matched)} 个运动类型")
     return s3
+
+
+# ==================== S3 引用生成（入口函数保留） ====================
+
+
+async def generate_s3_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
+    """为 S3 独立生成引用（委托给通用引用生成函数）。"""
+    from src.core.knowledge_qa.nodes.generate_s1_s2_citations import (
+        _generate_citations_for_section,
+    )
+    return await _generate_citations_for_section(state, 3, "运动类型推荐")

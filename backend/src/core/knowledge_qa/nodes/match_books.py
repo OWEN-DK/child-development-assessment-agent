@@ -64,6 +64,10 @@ class QueryAnalysisResult(BaseModel):
         default_factory=list,
         description="从不同角度改写的搜索查询，2-3个，去除解决方案导向词汇"
     )
+    synonyms: dict = Field(
+        default_factory=dict,
+        description="关键概念→同义词/英文映射，如 {'注意力': ['inattention', '分心'], '坐不住': ['hyperactivity']}"
+    )
 
 
 
@@ -434,18 +438,23 @@ async def _llm_match_books(question: str, candidates: List[Dict]) -> List[Matche
             f"涉及章节: {chapters_str}\n"
         )
 
-    prompt = f"""你是一个文献检索专家。根据用户问题，从候选书籍中评估每本书的相关性。
+    prompt = f"""你是一个文献检索专家。根据用户问题，评估每本候选书籍的相关性。
 
 用户问题：{question}
 
-候选书籍（从知识库搜索结果中提取）：
+候选书籍：
 {candidate_text}
 
-请评估每本候选书籍与用户问题的相关性，返回所有有一定关联的书籍，按匹配度排序。
-- 只要书籍主题与问题的任一方面相关（如儿童发展、教育、运动、心理、营养等），就应纳入匹配结果
-- book_id 必须使用候选书籍中显示的 book_id 值
-- title 根据 book_id 推断一个有意义的书名（去掉文件扩展名）
-- 为每本书写一句话匹配理由
+评估规则（宽松匹配）：
+- 只要书籍主题与问题的任一方面相关，就应纳入
+- 不要求完全匹配，只要有部分相关性即可
+- 例如：问题关于"注意力"，书籍涉及"学习方法""运动""心理"都算相关
+- 每本书都应被评估，不要轻易排除
+
+返回所有有一定关联的书籍，按匹配度排序。每本书包含：
+- book_id: 使用候选书籍中显示的 book_id 值
+- title: 根据 book_id 推断书名（去掉文件扩展名）
+- match_reason: 一句话匹配理由
 - 如果候选书籍确实都不相关，才返回空数组"""
 
     model = LLMServiceFactoryCompat.create_raw(
@@ -453,71 +462,100 @@ async def _llm_match_books(question: str, candidates: List[Dict]) -> List[Matche
         temperature=0.3,
     )
 
-    try:
-        structured_model = model.with_structured_output(MatchBooksResponse)
-        result = await asyncio.wait_for(
-            structured_model.ainvoke(prompt),
-            timeout=15,
-        )
-        return result.matched_books
-    except Exception as e:
-        logger.warning(f"LLM 书籍匹配失败: {e}")
-        return []
+    # 增加重试（最多 3 次），提高超时到 20s
+    for attempt in range(3):
+        try:
+            structured_model = model.with_structured_output(MatchBooksResponse)
+            result = await asyncio.wait_for(
+                structured_model.ainvoke(prompt),
+                timeout=20,
+            )
+            if result.matched_books:
+                return result.matched_books
+            logger.warning(f"LLM 书籍匹配返回空 (attempt {attempt+1})")
+        except asyncio.TimeoutError:
+            logger.warning(f"LLM 书籍匹配超时 (attempt {attempt+1})")
+        except Exception as e:
+            logger.warning(f"LLM 书籍匹配异常 (attempt {attempt+1}): {e}")
+
+    return []  # 3 次都失败才降级
 
 
 def _build_section_queries(question: str, analysis: QueryAnalysisResult) -> dict:
     """从查询分析结果构造逐节搜索 query。
 
-    每节使用与自身主题相关的关键词，而非原始问题中的方案导向词（如"运动"）。
-    不同节天然命中不同书籍，从根本上解决单书垄断问题。
+    使用 LLM 分解的子问题和改写查询，不同节命中不同维度。
+    LLM 分析失败时降级到规则提取。
     """
-    age = analysis.child_age or ""
-    behavior = " ".join(analysis.behavior_traits[:3]) if analysis.behavior_traits else ""
-    cognitive = " ".join(analysis.cognitive_traits[:2]) if analysis.cognitive_traits else ""
-    emotional = " ".join(analysis.emotional_traits[:2]) if analysis.emotional_traits else ""
-
     queries = {}
 
-    # S1: 孩子状态分析 — 用行为+认知特征
-    s1_parts = []
-    if age:
-        s1_parts.append(f"{age}儿童")
-    if behavior:
-        s1_parts.append(behavior)
-    if cognitive:
-        s1_parts.append(cognitive)
-    if s1_parts:
-        queries[1] = " ".join(s1_parts)
+    # S1: 孩子状态分析 — 用 sub_questions[0]（发展/行为维度）
+    if analysis.sub_questions and len(analysis.sub_questions) > 0:
+        queries[1] = analysis.sub_questions[0]
     else:
-        queries[1] = question
+        queries[1] = _fallback_s1(question, analysis)
 
-    # S2: 问题识别 — 用行为+认知+领域词
-    s2_parts = []
-    if behavior:
-        s2_parts.append(behavior)
-    if cognitive:
-        s2_parts.append(cognitive)
-    s2_parts.append("原因分析")
-    queries[2] = "儿童 " + " ".join(s2_parts) if s2_parts else question
+    # S2: 问题识别 — 用 sub_questions[1]（认知/神经科学维度）
+    if analysis.sub_questions and len(analysis.sub_questions) > 1:
+        queries[2] = analysis.sub_questions[1]
+    else:
+        queries[2] = _fallback_s2(question, analysis)
 
-    # S3: 运动类型推荐 — 用行为+认知+情绪，加上运动领域词（此节就是推荐运动，不应去偏）
-    s3_parts = []
-    if behavior:
-        s3_parts.append(behavior)
-    if cognitive:
-        s3_parts.append(cognitive)
-    if emotional:
-        s3_parts.append(emotional)
-    s3_parts.append("运动改善")
-    queries[3] = "儿童 " + " ".join(s3_parts) if s3_parts else question
+    # S3: 运动推荐 — 用 rewritten_queries[0]（运动/身体活动维度）
+    if analysis.rewritten_queries and len(analysis.rewritten_queries) > 0:
+        queries[3] = analysis.rewritten_queries[0]
+    else:
+        queries[3] = _fallback_s3(question, analysis)
 
-    # S4: 运动方案 — 先用原始问题（后续由 plan_outline 自行替换为运动名称）
-    queries[4] = question
+    # S4: 运动方案 — 运动类型维度
+    queries[4] = _fallback_s4(analysis)
 
-    # S5: 总结建议 — 用原始问题
-    queries[5] = question
+    # S5: 总结 — 育儿整合维度
+    queries[5] = _fallback_s5(analysis)
 
     return queries
+
+
+def _fallback_s1(question: str, analysis: QueryAnalysisResult) -> str:
+    """降级: 用规则提取的特征构建 S1 query。"""
+    parts = []
+    if analysis.child_age:
+        parts.append(f"{analysis.child_age}儿童")
+    if analysis.behavior_traits:
+        parts.append(" ".join(analysis.behavior_traits[:3]))
+    if analysis.cognitive_traits:
+        parts.append(" ".join(analysis.cognitive_traits[:2]))
+    return " ".join(parts) if parts else question
+
+
+def _fallback_s2(question: str, analysis: QueryAnalysisResult) -> str:
+    """降级: 用规则提取的特征构建 S2 query。"""
+    parts = []
+    if analysis.behavior_traits:
+        parts.append(" ".join(analysis.behavior_traits[:2]))
+    if analysis.cognitive_traits:
+        parts.append(" ".join(analysis.cognitive_traits[:2]))
+    parts.append("原因分析")
+    return "儿童 " + " ".join(parts) if len(parts) > 1 else question
+
+
+def _fallback_s3(question: str, analysis: QueryAnalysisResult) -> str:
+    """降级: 用规则提取的特征构建 S3 query。"""
+    parts = []
+    if analysis.behavior_traits:
+        parts.append(" ".join(analysis.behavior_traits[:2]))
+    parts.append("运动改善")
+    return "儿童 " + " ".join(parts) if len(parts) > 1 else question
+
+
+def _fallback_s4(analysis: QueryAnalysisResult) -> str:
+    """降级: S4 运动方案 query。"""
+    return "儿童运动类型 适合年龄 8岁"
+
+
+def _fallback_s5(analysis: QueryAnalysisResult) -> str:
+    """降级: S5 总结 query。"""
+    return "儿童注意力改善 家庭环境"
 
 
 async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:

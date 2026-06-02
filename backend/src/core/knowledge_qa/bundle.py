@@ -77,6 +77,7 @@ class GraphEntity:
     source_para_ids: list[str] = field(default_factory=list)
     relations: list[str] = field(default_factory=list)  # 相邻实体名
     aliases: list[str] = field(default_factory=list)  # 跨书合并实体的别名列表
+    relevance_score: float = 0.0  # 加权遍历得分（路径权重 × 衰减）
 
 
 @dataclass(frozen=True)
@@ -104,16 +105,25 @@ class CrossBookConflict:
 
 @dataclass(frozen=True)
 class CrossBookConsensus:
-    """跨书共识/互补。
+    """跨书关系（非冲突类）。
 
-    SAME_AS → 两书对同一实体观点一致
-    CROSS_BOOK_COMPLEMENTS → 一书补充另一书的视角
-    CROSS_TREATS → 跨书治疗方案关系
+    relation_type 可以是以下任意一种：
+    - 实体消歧: SAME_AS（概念等价）
+    - Gen1 legacy: CROSS_BOOK_CONSENSUS, CROSS_BOOK_COMPLEMENTS
+    - 治疗/干预: CROSS_TREATS, CROSS_PREVENTS, CROSS_ALLEVIATES, CROSS_ADDRESSES
+    - 改善/增强: CROSS_IMPROVES, CROSS_ENHANCES
+    - 因果/机制: CROSS_CAUSES, CROSS_CONTRIBUTES_TO, CROSS_AFFECTS, CROSS_INCREASES_RISK
+    - 支持/解释: CROSS_SUPPORTS, CROSS_SUPPORTED_BY, CROSS_EXPLAINS, CROSS_EXPLAINED_BY
+    - 时序/空间: CROSS_OCCURS_AT, CROSS_LOCALIZED_IN
+    - 关联/扩展: CROSS_ASSOCIATED_WITH, CROSS_INVOLVES, CROSS_EXTENDS,
+                 CROSS_COMPLEMENTS, CROSS_ILLUMINATES, CROSS_COMBINES_WITH
+
+    完整定义见 neo4j/schema.py CROSS_BOOK_RELATION_TYPES (23种) + legacy (3种)。
     """
 
     entity_name: str
     books: list[str]
-    relation_type: str  # SAME_AS | CROSS_BOOK_COMPLEMENTS | CROSS_TREATS
+    relation_type: str  # 27 种跨书关系类型中的任意一种（见 _CROSS_RELATION_LABELS）
     description: str = ""
 
 

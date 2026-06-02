@@ -103,8 +103,8 @@ class QueryRewriter:
         Returns:
             是否通过验证
         """
-        # 长度检查
-        if len(expansion_text) > 200:
+        # 长度检查（放宽至 500，Phase C-1 同义词校验器已做逐词审查）
+        if len(expansion_text) > 500:
             return False
 
         # 格式检查（不应包含完整句子）

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,22 @@ def _query_exercises(session, child_profile: dict, problems: list[str]) -> list[
         params = {"age": age}
 
     try:
-        return session.run(query, **params).data()
+        raw_results = session.run(query, **params).data()
+        # 验证: 每个运动必须在预定义清单中
+        authorized = _load_authorized_exercises()
+        if authorized:
+            validated = [
+                e for e in raw_results
+                if _exercise_in_authorized(e.get("name", ""), authorized)
+            ]
+            if len(validated) < len(raw_results):
+                logger.info(
+                    "Exercise 验证: %d → %d (过滤 %d 个不在清单中的运动)",
+                    len(raw_results), len(validated),
+                    len(raw_results) - len(validated),
+                )
+            return validated
+        return raw_results
     except Exception as e:
         logger.warning("Exercise 查询失败: %s", e)
         # 降级: 返回基础查询
@@ -155,3 +171,45 @@ def _query_source_coverage(session, book_ids: list[str]) -> dict:
     except Exception as e:
         logger.warning("Source coverage 查询失败: %s", e)
         return {}
+
+# ── 运动清单验证 ──
+_authorized_exercise_cache: set[str] | None = None
+
+
+def _load_authorized_exercises() -> set[str]:
+    """加载预定义运动名称集合（带缓存）。"""
+    global _authorized_exercise_cache
+    if _authorized_exercise_cache is not None:
+        return _authorized_exercise_cache
+
+    try:
+        import json
+        json_path = str(
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "data" / "运动改变大脑_运动清单.json"
+        )
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _authorized_exercise_cache = {
+            e["name"] for e in data.get("exercises", [])
+            if e.get("name")
+        }
+        logger.info(f"运动清单已加载: {len(_authorized_exercise_cache)} 项")
+    except Exception as e:
+        logger.warning(f"加载运动清单失败: {e}")
+        _authorized_exercise_cache = set()
+
+    return _authorized_exercise_cache
+
+
+def _exercise_in_authorized(name: str, authorized: set[str]) -> bool:
+    """检查运动名是否在预定义清单中（精确匹配 + 子串匹配）。"""
+    if not name or not authorized:
+        return True  # 无清单时放行
+    if name in authorized:
+        return True
+    # 子串匹配: "武术/功夫" 匹配 "武术/功夫"
+    for auth_name in authorized:
+        if name in auth_name or auth_name in name:
+            return True
+    return False

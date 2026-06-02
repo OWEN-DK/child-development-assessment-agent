@@ -699,9 +699,9 @@ async def _run_section_node(
     注意：S3（section_index=3）已自管理，不再通过此函数调用。
     如需修改 S3 的生成逻辑，请直接编辑 recommend_types.py。
     """
-    # ── Bundle 模式：消费不可变知识产物，零 HTTP 搜索 ──
+    # ── Bundle 模式：消费不可变知识产物，零 HTTP 搜索（S1-S5 全部走 Bundle）──
     bundle = getattr(state, "knowledge_bundle", None)
-    if bundle is not None and section_index >= 3:
+    if bundle is not None:
         from src.core.knowledge_qa.bundle_consumer import run_section_from_bundle
         return await run_section_from_bundle(
             state=state, bundle=bundle,

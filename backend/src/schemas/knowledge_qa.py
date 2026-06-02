@@ -331,9 +331,10 @@ class S3SelectionItem(BaseModel):
     """S3 节点 LLM 轻量输出 — 只含需要判断力的 4 个字段。
 
     name/category/target_skills/citation_ids/source_books 由后端代码填充。
+    index 引用 exercise_type_set 数组中的位置序号（文档原始排序）。
     """
 
-    type_id: str = Field(pattern=r"^ET\d{3}$", description="运动类型 ID，必须来自候选运动表")
+    index: int = Field(ge=0, description="运动类型在 exercise_type_set 中的序号")
     tier: Literal["primary", "secondary", "supplementary"] = Field(
         description="推荐层级：primary=核心推荐, secondary=辅助推荐, supplementary=补充推荐",
     )
@@ -659,6 +660,23 @@ class KnowledgeQAState(BaseModel):
     exercise_context: str = Field(
         default="",
         description="Service 层加载的权威运动清单（Markdown），仅注入 S3/S4 的 user_message 作为硬约束",
+    )
+
+    # ===== 运动清单结构化数据（Service 层注入） =====
+    exercise_type_set: List[str] = Field(
+        default_factory=list,
+        description="标准化运动类型集合（44 个类型名称），S3 使用其序号作为 index 输出",
+    )
+    exercise_list: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="完整运动列表（93 个运动对象），S4 按类型过滤后使用其序号作为 exercise_index 输出",
+    )
+
+    # ===== S3 选中的运动类型（S3→S4 桥梁） =====
+    selected_exercise_types: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="S3 选中的运动类型列表，每项含 index/type/tier/target_problem_ids/exercises（该类型下的完整运动对象）。"
+        "由 recommend_types_node 写入，plan_outline_node 消费。",
     )
 
     # ===== S3 预筛选结果（调试/审计用） =====

@@ -23,11 +23,10 @@ export interface Citation {
 // ===== 运动类型推荐项（与后端 ExerciseTypeItem 一致） =====
 export interface ExerciseTypeItem {
   type_id: string;          // ET001-ET999
-  name: string;             // 运动名称，精确匹配权威运动清单
+  name: string;             // 运动类型名称（清理后）
   tier: 'primary' | 'secondary' | 'supplementary';
-  category: string;         // 运动分类（行走/跑步/力量训练/舞蹈…）
   target_problem_ids: string[];
-  target_skills: string[];
+  target_skills: string[];  // 训练效果（直接来自 JSON benefits 字段）
   recommendation_rationale: string;
   citation_ids: string[];
 }

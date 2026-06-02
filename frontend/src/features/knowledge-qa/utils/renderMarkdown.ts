@@ -43,16 +43,15 @@ export function renderS3Markdown(structuredData: Record<string, any>): string {
     };
     lines.push(`**${TIER_LABELS[tier]}**  _${tierDesc[tier] || ''}_`);
     lines.push('');
-    lines.push('| 运动名称 | 分类 | 训练目标 | 推荐理由 |');
-    lines.push('|---------|------|---------|--------|');
+    lines.push('| 运动名称 | 训练效果 | 推荐理由 |');
+    lines.push('|---------|---------|--------|');
 
     for (const et of items) {
-      const name = et.name || '';
-      const category = et.category || '';
-      const skills = (et.target_skills || []).join('、');
+      const name = et.name || et.type || '';
+      const benefits = (et.target_skills || []).join('；');
       const rationale = (et.recommendation_rationale || '').slice(0, 100);
 
-      lines.push(`| **${name}** | ${category} | ${skills} | ${rationale} |`);
+      lines.push(`| **${name}** | ${benefits} | ${rationale} |`);
     }
     lines.push('');
   }

@@ -1,4 +1,7 @@
 """第 4 节大纲：运动方案大纲 — 直接搜索 + 27B 单次生成
+
+重设计：从 selected_exercise_types（S3 输出）构建可用运动清单，
+LLM 输出 type_index + exercise_index（序号引用），代码反查完整运动信息。
 始终生成完整运动方案大纲，不再做领域跳过判断。
 """
 
@@ -26,8 +29,110 @@ from src.schemas.knowledge_qa import (
 logger = logging.getLogger(__name__)
 
 
+# ==================== 运动清单构建 ====================
+
+
+def _build_available_exercises_markdown(selected_exercise_types: list[dict]) -> str:
+    """从 S3 输出的 selected_exercise_types 构建可用运动清单 Markdown。
+
+    按类型分组，每个运动显示 exercise_index（文档原始序号）+ 名称 + 强度 + 益处。
+    LLM 通过 type_index + exercise_index 引用运动，代码反查完整信息。
+    """
+    if not selected_exercise_types:
+        return "（无可用运动清单）"
+
+    parts = ["## 可用运动清单（来自 S3 选中的运动类型）\n"]
+    for type_info in selected_exercise_types:
+        type_idx = type_info.get("index", "?")
+        type_name = type_info.get("type", "未知")
+        tier = type_info.get("tier", "")
+        exercises = type_info.get("exercises", [])
+
+        tier_label = {"primary": "核心", "secondary": "辅助", "supplementary": "补充"}.get(tier, "")
+        # 去除括号后缀用于展示
+        import re as _re
+        display_name = _re.sub(r"[（(][^）)]*[）)]$", "", type_name).strip() or type_name
+        header = f"### {display_name}（type_index={type_idx}，{tier_label}推荐）"
+        parts.append(header)
+        parts.append("")
+
+        if exercises:
+            parts.append("| exercise_index | 运动名称 | 强度 | 主要益处 |")
+            parts.append("|---------------|---------|------|---------|")
+            for ex in exercises:
+                # exercise_index 使用运动在原始 exercises 数组中的 id - 1（0-based 序号）
+                # 或直接用运动对象中记录的位置信息
+                ex_idx = ex.get("_exercise_index", ex.get("id", 0) - 1)
+                name = ex.get("name", "")
+                intensity = ex.get("intensity", "")
+                benefits = (ex.get("benefits", "") or "")[:60]
+                parts.append(f"| {ex_idx} | {name} | {intensity} | {benefits} |")
+            parts.append("")
+        else:
+            parts.append("（该类型下无运动）\n")
+
+    return "\n".join(parts)
+
+
+def _build_exercise_lookup(selected_exercise_types: list[dict]) -> dict:
+    """构建 (type_index, exercise_index) → exercise 对象的查找表。
+
+    用于 S4 后处理：从 LLM 输出的 type_index + exercise_index 反查完整运动信息。
+    """
+    lookup = {}
+    for type_info in selected_exercise_types:
+        type_idx = type_info.get("index", -1)
+        for ex in type_info.get("exercises", []):
+            ex_idx = ex.get("_exercise_index", ex.get("id", 0) - 1)
+            lookup[(type_idx, ex_idx)] = ex
+    return lookup
+
+
+def _enrich_phases_with_exercise_info(
+    phases: list[dict],
+    exercise_lookup: dict,
+    selected_exercise_types: list[dict],
+) -> list[dict]:
+    """为 phases 中每个 exercise 填充 name/category/target_skill 等字段。
+
+    LLM 输出 type_index + exercise_index，代码反查完整运动信息并填充。
+    """
+    # 构建 type_index → type_name 映射
+    type_map = {t.get("index", -1): t.get("type", "") for t in selected_exercise_types}
+
+    for phase in phases:
+        for week in phase.get("weeks", []):
+            for day in week.get("days", []):
+                for ex in day.get("main_exercises", []):
+                    type_idx = ex.get("type_index", -1)
+                    ex_idx = ex.get("exercise_index", -1)
+                    key = (type_idx, ex_idx)
+
+                    if key in exercise_lookup:
+                        full_ex = exercise_lookup[key]
+                        # 填充 LLM 未输出的字段
+                        ex["name"] = full_ex.get("name", ex.get("name", ""))
+                        ex["category"] = full_ex.get("type", "")
+                        ex["brain_mechanisms"] = full_ex.get("brain_mechanisms", "")
+                        ex["benefits"] = full_ex.get("benefits", "")
+                        ex["chapter"] = full_ex.get("chapter", "")
+                    else:
+                        # 序号越界：尝试从 type_map 获取类型名作为降级
+                        type_name = type_map.get(type_idx, "未知")
+                        if not ex.get("name"):
+                            ex["name"] = f"{type_name}运动"
+                        logger.warning(
+                            f"S4 exercise 反查失败: type_index={type_idx}, "
+                            f"exercise_index={ex_idx}, 降级使用类型名"
+                        )
+    return phases
+
+
+# ==================== 主入口 ====================
+
+
 async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
-    """第 4 节大纲：设计阶段划分 + 每周主题 + 运动类型名称。
+    """第 4 节大纲：设计阶段划分 + 每周主题 + 具体运动。
     始终生成运动方案大纲，无论问题是否显式提及运动。
     """
     await push_progress("section_4_outline", "正在生成运动方案大纲…")
@@ -47,17 +152,22 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 bundle=bundle, section_passages=section_passages, section_index=4,
                 custom_knowledge_context=getattr(state, "custom_knowledge_context", "") or "",
                 knowledge_context=getattr(state, "knowledge_context", "") or "",
-                exercise_context=state.exercise_context or "",
+                exercise_context="",  # 不再传全量 exercise_context
             )
             logger.info("S4 outline Bundle 模式: %d passages", len(section_passages))
         else:
             search_results = await _direct_search(s4_query, state.matched_book_ids, state=state)
             search_context = _format_search_context(search_results)
 
-        # Step 2: 构建前序节内容
+        # Step 2: 构建前序节内容 + 可用运动清单
         s1 = state.sections.get(1)
         s2 = state.sections.get(2)
         s3 = state.sections.get(3)
+
+        # 从 state 读取 S3 输出的 selected_exercise_types
+        selected_exercise_types = state.selected_exercise_types or []
+        available_exercises_md = _build_available_exercises_markdown(selected_exercise_types)
+        exercise_lookup = _build_exercise_lookup(selected_exercise_types)
 
         # Step 3: 获取 prompt 并生成
         prompt = await _get_prompt_pair("section_4_outline")
@@ -76,8 +186,9 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
 
         full_message = f"{user_message}\n\n## 知识库检索结果\n{search_context}"
 
-        if state.exercise_context:
-            full_message += f"\n\n{state.exercise_context}"
+        # 注入可用运动清单（替代全量 exercise_context）
+        if selected_exercise_types:
+            full_message += f"\n\n{available_exercises_md}"
 
         # ── 分阶段生成：两次 LLM 调用，避免单次生成两个 phase 导致 Phase 2 质量崩塌 ──
         # Phase 1: 生成第 1 阶段（第 1-2 周）
@@ -103,7 +214,7 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             + f"\n\n## 第 1 阶段摘要（已完成）\n{ph1_summary}\n\n"
             + "## 任务：仅生成第 2 阶段（PH02，第 3-4 周）\n"
             + "输出 phases 数组仅包含 1 个元素（PH02），包含 week 3 和 week 4。"
-            + "运动强度和复杂度应在第 1 阶段基础上递进，但不能重复第 1 阶段的运动名称。"
+            + "运动强度和复杂度应在第 1 阶段基础上递进，但不能重复第 1 阶段的运动。"
         )
         phase2_data = await _invoke_llm_json(
             system_prompt=prompt["system"],
@@ -124,6 +235,12 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             "phases": phase1_phases + phase2_phases,
         }
 
+        # ── 后置处理：从 type_index + exercise_index 反查运动信息 ──
+        if selected_exercise_types and exercise_lookup:
+            data["phases"] = _enrich_phases_with_exercise_info(
+                data["phases"], exercise_lookup, selected_exercise_types,
+            )
+
         # ── 显式校验 phases ──
         phases = data.get("phases", [])
         if not phases:
@@ -131,13 +248,15 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 f"plan_outline: LLM 返回空 phases, data_keys={list(data.keys())}。"
                 f"尝试用简化 prompt 重新生成"
             )
-            # 重试：用更简洁的 prompt 聚焦于 phases 结构
-            phases = await _retry_outline_phases(state, s3, search_context)
+            phases = await _retry_outline_phases(state, s3, search_context, selected_exercise_types)
             if phases:
+                if selected_exercise_types and exercise_lookup:
+                    phases = _enrich_phases_with_exercise_info(
+                        phases, exercise_lookup, selected_exercise_types,
+                    )
                 data["phases"] = phases
                 logger.info(f"plan_outline: 重试成功, 获得 {len(phases)} 个 phases")
             else:
-                # 降级：从 S3 运动类型构建最小可用 phases
                 logger.warning("plan_outline: 重试仍无 phases，从 S3 运动类型降级构建")
                 fallback_phases = _try_build_phases_from_content(data.get("content", ""), state)
                 if fallback_phases:
@@ -154,7 +273,6 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
         exercise_count = _count_exercises_in_phases(data.get("phases", []))
         if exercise_count == 0:
             logger.warning("plan_outline: phases 中无运动条目 (exercise_count=0)")
-            # 再次尝试降级构建
             fallback_phases = _try_build_phases_from_content(data.get("content", ""), state)
             if fallback_phases:
                 data["phases"] = fallback_phases
@@ -196,7 +314,7 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             outline_section = SectionOutput(
                 index=4,
                 title=data.get("title", "运动方案大纲"),
-                content=data.get("content", ""),
+                content=data.get("content", "") or "运动方案大纲（结构化数据见下方）",
                 citations=data.get("citations", []),
                 structured_data=data.get("structured_data", {}),
             )
@@ -208,7 +326,6 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             )
         except Exception as e:
             logger.warning(f"plan_outline: push_progress/SectionOutput 失败: {e}, 仍返回 data")
-            # push_progress 失败不影响结果返回，data 中已有完整的 phases
 
         return {
             "section_4_outline": data,
@@ -222,7 +339,6 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             "current_step": ["section_4_outline_failed"],
             "s4_retry_count": state.s4_retry_count + 1,
         }
-        # 如果降级构建成功（data 中有 phases），保留数据
         if data is not None and data.get("phases"):
             result["section_4_outline"] = data
             logger.info("plan_outline: 超时但保留降级 phases 数据")
@@ -234,34 +350,39 @@ async def plan_outline_node(state: KnowledgeQAState) -> Dict[str, Any]:
             "current_step": ["section_4_outline_failed"],
             "s4_retry_count": state.s4_retry_count + 1,
         }
-        # 如果降级构建成功（data 中有 phases），保留数据
         if data is not None and data.get("phases"):
             result["section_4_outline"] = data
             logger.info("plan_outline: 异常但保留降级 phases 数据")
         return result
 
 
+# ==================== 重试与降级 ====================
+
+
 async def _retry_outline_phases(
     state: "KnowledgeQAState",
     s3,
     search_context: str,
+    selected_exercise_types: list[dict],
 ) -> list:
-    """用简化 prompt 重新生成 phases（绕过完整大纲，只要 phases JSON）。
+    """用简化 prompt 重新生成 phases（绕过完整大纲，只要 phases JSON）。"""
 
-    当 plan_outline 首次调用返回空 phases 时，用更聚焦的 prompt 重试。
-    简化 prompt 只要求输出 phases 数组结构，不要求 content/citations。
-    """
+    # 从 selected_exercise_types 构建运动名称列表
+    exercise_names = []
+    type_mapping_lines = []
+    for type_info in selected_exercise_types:
+        type_name = type_info.get("type", "")
+        type_idx = type_info.get("index", "?")
+        tier = type_info.get("tier", "")
+        type_mapping_lines.append(f"  - {type_name}: type_index={type_idx}, tier={tier}")
+        for ex in type_info.get("exercises", [])[:3]:
+            name = ex.get("name", "")
+            if name:
+                exercise_names.append(name)
 
-
-    s3_ets = []
-    if s3 and s3.structured_data:
-        s3_ets = s3.structured_data.get("exercise_types", [])
-
-    exercise_names = [et.get("name", "") for et in s3_ets if et.get("name")]
     if not exercise_names:
         return []
 
-    # 构造简化 prompt：只要求输出 phases 数组
     system = """你是儿童运动方案设计师。只输出一个 JSON 对象，包含 phases 数组。
 不要输出 markdown、不要输出解释，只输出 JSON。
 
@@ -270,16 +391,14 @@ phases 结构要求：
 - 每阶段 2 周，每周 5 天（周一到周五），每天 1-2 个运动
 - 运动名称必须来自下方提供的合法运动名称列表
 - exercise_id 全局唯一递增(EX001-EX999)
-- type_id 引用第 3 节的 type_id
+- type_index 引用运动类型序号
+- exercise_index 引用运动在清单中的序号
 
 输出格式：
-{"phases": [{"phase_id":"PH01","name":"...","goal":"...","duration_weeks":2,"weeks":[{"week_index":1,"days":[{"day_index":1,"main_exercises":[{"exercise_id":"EX001","name":"...","type_id":"ET001","duration_min":30,"intensity":"中"}]}]}]}]}"""
+{"phases": [{"phase_id":"PH01","name":"...","goal":"...","duration_weeks":2,"weeks":[{"week_index":1,"days":[{"day_index":1,"main_exercises":[{"exercise_id":"EX001","type_index":0,"exercise_index":0,"duration_min":30,"intensity":"中"}]}]}]}]}"""
 
     exercise_list = "、".join(exercise_names[:10])
-    type_mapping = "\n".join(
-        f"  - {et.get('name', '')}: type_id={et.get('type_id', '')}, tier={et.get('tier', '')}"
-        for et in s3_ets[:8]
-    )
+    type_mapping = "\n".join(type_mapping_lines[:8])
 
     user_msg = f"""用户问题：{state.question}
 
@@ -304,13 +423,12 @@ phases 结构要求：
         )
         phases = data.get("phases", [])
         if phases and isinstance(phases, list) and len(phases) > 0:
-            # 验证 phases 结构完整性
             exercise_count = 0
             for ph in phases:
                 for wk in ph.get("weeks", []):
                     for day in wk.get("days", []):
                         for ex in day.get("main_exercises", []):
-                            if ex.get("name"):
+                            if ex.get("name") or ex.get("type_index") is not None:
                                 exercise_count += 1
             if exercise_count > 0:
                 return phases
@@ -324,21 +442,15 @@ phases 结构要求：
 
 
 def _count_exercises_in_phases(phases: list) -> int:
-    """统计 phases 中所有带 name 的 exercise 数量。
-
-    plan_expand_parallel_node._extract_exercise_slots 的过滤条件是
-    `ex.get("name")`，与此处计数逻辑保持一致。
-    """
+    """统计 phases 中所有带 name 或 type_index 的 exercise 数量。"""
     count = 0
     for phase in (phases or []):
         for week in phase.get("weeks", []):
             for day in week.get("days", []):
                 for ex in day.get("main_exercises", []):
-                    if ex.get("name"):
+                    if ex.get("name") or ex.get("type_index") is not None:
                         count += 1
     return count
-
-
 
 
 def _build_phase1_summary(phases: list) -> str:
@@ -366,12 +478,7 @@ def _build_phase1_summary(phases: list) -> str:
 
 
 def _normalize_day_indices(phases: list) -> list:
-    """将 LLM 输出的全局递增 day_index 归一化为每周末尾局部值 1..N。
-
-    LLM 倾向于跨周全局编号（Week1: Day1-7, Week2: Day8-14, Week4: Day22-24），
-    但 _ensure_full_weeks 和 _enforce_rest_days 依赖局部 day_index。
-    不归一化会导致 Week 4 被错误补全为休息日并清空所有原始运动数据。
-    """
+    """将 LLM 输出的全局递增 day_index 归一化为每周末尾局部值 1..N。"""
     for phase in phases:
         for week in phase.get("weeks", []):
             days = week.get("days", [])
@@ -384,10 +491,7 @@ def _normalize_day_indices(phases: list) -> list:
 
 
 def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
-    """确保至少有 min_phases 个阶段。不足时从已有阶段复制并调整。
-
-    当 LLM 未遵守"固定 2 个阶段"约束时自动补全。
-    """
+    """确保至少有 min_phases 个阶段。不足时从已有阶段复制并调整。"""
     if len(phases) >= min_phases:
         return phases
 
@@ -400,7 +504,6 @@ def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
         new_phase = copy.deepcopy(src)
         idx = len(result)
         new_phase["phase_id"] = f"PH{idx + 1:02d}"
-        # 根据阶段序号调整名称和目标
         phase_names = ["基础适应期", "能力提升期", "巩固维持期"]
         phase_goals = [
             "建立运动习惯，适应基础训练",
@@ -410,8 +513,7 @@ def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
         new_phase["name"] = phase_names[idx] if idx < len(phase_names) else f"第{idx + 1}阶段"
         new_phase["goal"] = phase_goals[idx] if idx < len(phase_goals) else "巩固训练效果"
         new_phase["duration_weeks"] = 2
-        # 调整 weeks 的 week_index
-        base_week = len(result) * 2  # 前面阶段的周数偏移
+        base_week = len(result) * 2
         for wi, week in enumerate(new_phase.get("weeks", [])):
             week["week_index"] = base_week + wi + 1
         result.append(new_phase)
@@ -420,17 +522,7 @@ def _ensure_min_phases(phases: list, min_phases: int = 2) -> list:
 
 
 def _enforce_rest_days(phases: list, max_training_days: int | None = None, state=None) -> list:
-    """确保每周休息日数量合理。
-
-    根据孩子年龄和运动强度动态计算每周最大训练天数：
-    - 年龄 ≤ 6 岁：最多 4 天训练（3 天休息）
-    - 年龄 7-10 岁：最多 5 天训练（2 天休息）
-    - 年龄 ≥ 11 岁：最多 6 天训练（1 天休息）
-    - 高强度运动：额外 -1 天训练
-
-    多余的训练天（从后面开始）转为休息日（清空 main_exercises）。
-    """
-    # 动态计算 max_training_days
+    """确保每周休息日数量合理。"""
     if max_training_days is None:
         max_training_days = _compute_max_training_days(state)
 
@@ -439,11 +531,9 @@ def _enforce_rest_days(phases: list, max_training_days: int | None = None, state
             days = week.get("days", [])
             if len(days) <= max_training_days:
                 continue
-            # 均匀分布休息日：每隔 N 天插入一个休息日，而非全部堆在末尾
             days.sort(key=lambda d: d.get("day_index", 0))
             training_days = [d for d in days if d.get("main_exercises")]
             if len(training_days) > max_training_days:
-                # 计算休息日间隔：在训练日之间均匀插入休息
                 excess = len(training_days) - max_training_days
                 interval = max(len(training_days) // (excess + 1), 1)
                 rest_positions = set()
@@ -465,8 +555,7 @@ def _enforce_rest_days(phases: list, max_training_days: int | None = None, state
 
 def _compute_max_training_days(state) -> int:
     """根据孩子年龄和运动强度动态计算每周最大训练天数。"""
-    # 从 S1 获取年龄
-    age = 8  # 默认
+    age = 8
     try:
         s1 = state.sections.get(1) if state else None
         if s1 and s1.structured_data:
@@ -476,15 +565,13 @@ def _compute_max_training_days(state) -> int:
     except Exception:
         pass
 
-    # 年龄映射
     if age <= 6:
-        base = 4  # 幼儿：每周 4 天训练，3 天休息
+        base = 4
     elif age <= 10:
-        base = 5  # 小学低年级：5 天训练，2 天休息
+        base = 5
     else:
-        base = 6  # 高年级以上：6 天训练，1 天休息
+        base = 6
 
-    # 强度调整：检测是否有高强度运动
     try:
         if state:
             for ph in (state.section_4_outline or {}).get("phases", []):
@@ -497,28 +584,20 @@ def _compute_max_training_days(state) -> int:
                                     f"_compute_max_training_days: 检测到高强度运动 {ex.get('name')}, "
                                     f"max_training 调整为 {base}"
                                 )
-                                return max(base, 3)  # 最少保证 3 天训练
+                                return max(base, 3)
     except Exception:
         pass
 
     return base
 
 def _ensure_full_weeks(phases: list, days_per_week: int = 7) -> list:
-    """确保每周恰好有 days_per_week 天。
-
-    - 不足 7 天的周：补全日（main_exercises=[]），追加到周末
-    - 超过 7 天的周：截断到 7 天
-    - 补全的天自动标记为休息日
-
-    这保证 total_duration_days 的计算准确（2阶段 × 2周 × 7天 = 28天）。
-    """
+    """确保每周恰好有 days_per_week 天。"""
     for phase in phases:
         for week in phase.get("weeks", []):
             days = week.get("days", [])
             days.sort(key=lambda d: d.get("day_index", 0))
 
             if len(days) < days_per_week:
-                # 补全缺失天数（作为休息日）
                 existing_indices = {d.get("day_index") for d in days}
                 for di in range(1, days_per_week + 1):
                     if di not in existing_indices:
@@ -529,7 +608,6 @@ def _ensure_full_weeks(phases: list, days_per_week: int = 7) -> list:
                         )
                 days.sort(key=lambda d: d.get("day_index", 0))
             elif len(days) > days_per_week:
-                # 截断到 7 天
                 week["days"] = days[:days_per_week]
                 logger.info(
                     f"_ensure_full_weeks: 第{phase.get('phase_id', '?')}阶段 "
@@ -538,65 +616,70 @@ def _ensure_full_weeks(phases: list, days_per_week: int = 7) -> list:
     return phases
 
 def _try_build_phases_from_content(content: str, state: KnowledgeQAState) -> list:
-    """从 S3 运动类型推荐构建降级 phases。
+    """从 S3 selected_exercise_types 构建降级 phases。"""
+    selected = state.selected_exercise_types or []
+    if not selected:
+        # 兜底：尝试从 sections[3] structured_data 获取
+        s3 = state.sections.get(3)
+        exercise_types = []
+        if s3 and s3.structured_data:
+            exercise_types = s3.structured_data.get("exercise_types", [])
+        if not exercise_types:
+            return []
 
-    当 plan_outline LLM 调用返回空 phases 时的最终降级策略。
-    从第 3 节的 exercise_types 构建完整阶段结构，包含：
-    - 按 tier 分类的运动调度（primary 每天、secondary 轮换、supplementary 补充）
-    - 阶段渐进（适应期 vs 提升期的强度/时长递增）
-    - 每个 exercise 填充 category/target_skill 等 expand 所需字段
-    """
-    s3 = state.sections.get(3)
-    exercise_types = []
-    if s3 and s3.structured_data:
-        exercise_types = s3.structured_data.get("exercise_types", [])
+        # 从 exercise_types 降级构建
+        primary = [et for et in exercise_types if et.get("tier") == "primary"]
+        secondary = [et for et in exercise_types if et.get("tier") == "secondary"]
+        supplementary = [et for et in exercise_types if et.get("tier") == "supplementary"]
+    else:
+        primary = [t for t in selected if t.get("tier") == "primary"]
+        secondary = [t for t in selected if t.get("tier") == "secondary"]
+        supplementary = [t for t in selected if t.get("tier") == "supplementary"]
 
-    if not exercise_types:
-        return []
-
-    # 按 tier 分组
-    primary = [et for et in exercise_types if et.get("tier") == "primary"]
-    secondary = [et for et in exercise_types if et.get("tier") == "secondary"]
-    supplementary = [et for et in exercise_types if et.get("tier") == "supplementary"]
-    # 确保每组非空（回退到全列表）
     if not primary:
-        primary = exercise_types[:2]
+        primary = selected[:2] if selected else exercise_types[:2]
     if not secondary:
-        secondary = exercise_types[2:4] if len(exercise_types) > 2 else exercise_types[:2]
+        secondary = selected[2:4] if len(selected) > 2 else selected[:2]
 
-    ex_id_counter = [1]  # mutable counter for nested functions
+    ex_id_counter = [1]
 
-    def _make_exercise(etype: dict, phase_idx: int) -> dict:
-        """从运动类型构建 exercise 条目（含 expand 所需的完整字段）"""
+    def _make_exercise(type_info: dict, phase_idx: int) -> dict:
+        """从运动类型信息构建 exercise 条目"""
         eid = f"EX{ex_id_counter[0]:03d}"
         ex_id_counter[0] += 1
-        # 适应期偏短偏低，提升期递增
         base_duration = 20 if phase_idx == 0 else 30
         base_intensity = "低" if phase_idx == 0 else "中"
-        tier = etype.get("tier", "secondary")
+        tier = type_info.get("tier", "secondary")
         if tier == "primary":
             base_duration += 5
+
+        # 从 exercises 列表取第一个作为代表
+        exercises = type_info.get("exercises", [])
+        representative = exercises[0] if exercises else {}
+
         return {
             "exercise_id": eid,
-            "name": etype.get("name", ""),
-            "type_id": etype.get("type_id", ""),
-            "category": etype.get("category", ""),
+            "name": representative.get("name", type_info.get("type", "")),
+            "type_index": type_info.get("index", 0),
+            "exercise_index": representative.get("_exercise_index", representative.get("id", 1) - 1),
+            "category": representative.get("type", type_info.get("type", "")),
             "duration_min": base_duration,
             "intensity": base_intensity,
-            "target_skill": ", ".join(etype.get("target_skills", [])[:2]),
-            "citation_ids": etype.get("citation_ids", []),
+            "target_skill": ", ".join(
+                k for k, v in {
+                    "专注力": any(kw in str(representative.get("benefits", "")) for kw in ["专注", "注意", "集中"]),
+                    "身体协调": any(kw in str(representative.get("benefits", "")) for kw in ["协调", "平衡"]),
+                }.items() if v
+            ) or "综合发展",
         }
 
     def _build_week_schedule(phase_idx: int, week_idx: int) -> dict:
-        """构建一周 5 天的运动安排"""
         days = []
         for day_idx in range(5):
             exercises = []
-            # 每天：1 个 primary + 轮换 secondary/supplementary
             if primary:
                 p_idx = day_idx % len(primary)
                 exercises.append(_make_exercise(primary[p_idx], phase_idx))
-            # 交替安排 secondary 和 supplementary
             if day_idx % 2 == 0 and secondary:
                 s_idx = (day_idx + week_idx) % len(secondary)
                 exercises.append(_make_exercise(secondary[s_idx], phase_idx))

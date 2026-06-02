@@ -16,10 +16,15 @@ from langgraph.graph import END, StateGraph
 from src.core.knowledge_qa.nodes.match_books import match_books_node
 from src.core.knowledge_qa.nodes.prefetch_context import prefetch_context_node
 from src.core.knowledge_qa.nodes.fast_knowledge_match import fast_knowledge_match_node
-from src.core.knowledge_qa.nodes_v2.query_neo4j_graph import query_neo4j_graph_node
 from src.core.knowledge_qa.nodes_v2.analyze_child_v2 import analyze_child_v2_node
 from src.core.knowledge_qa.nodes_v2.identify_problems_v2 import identify_problems_v2_node
+from src.core.knowledge_qa.nodes.generate_s1_s2_citations import (
+    generate_s1_citations_node,
+    generate_s2_citations_node,
+    generate_s5_citations_node,
+)
 from src.core.knowledge_qa.nodes_v2.recommend_types_v2 import recommend_types_v2_node
+from src.core.knowledge_qa.nodes.recommend_types import generate_s3_citations_node
 from src.core.knowledge_qa.nodes_v2.plan_outline_v2 import plan_outline_v2_node
 from src.core.knowledge_qa.nodes_v2.plan_expand_parallel_v2 import plan_expand_parallel_v2_node
 from src.core.knowledge_qa.nodes.plan_assemble import plan_assemble_node
@@ -73,6 +78,7 @@ async def build_bundle_node(state: KnowledgeQAState) -> dict:
             s2_problems=s2_problems,
             custom_entities=list(custom_entities),
             child_profile=getattr(state, "child_profile", {}),
+            section_queries=getattr(state, "section_queries", None),
         )
 
         await push_progress(
@@ -150,15 +156,19 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
     workflow.add_node("match_books", match_books_node)
     workflow.add_node("prefetch_context", prefetch_context_node)
     workflow.add_node("plan_assemble", plan_assemble_node)
+    workflow.add_node("generate_s3_citations", generate_s3_citations_node)
     workflow.add_node("generate_s4_citations", generate_s4_citations_node)
     workflow.add_node("conclusion", conclusion_node)
+    workflow.add_node("generate_s5_citations", generate_s5_citations_node)
     workflow.add_node("verify_citations", verify_citations_node)
     workflow.add_node("finalize", finalize_node)
 
     # ── v2 节点 ──
     workflow.add_node("fast_knowledge_match", fast_knowledge_match_node)
     workflow.add_node("analyze_child_v2", analyze_child_v2_node)
+    workflow.add_node("generate_s1_citations", generate_s1_citations_node)
     workflow.add_node("identify_problems_v2", identify_problems_v2_node)
+    workflow.add_node("generate_s2_citations", generate_s2_citations_node)
     workflow.add_node("recommend_types_v2", recommend_types_v2_node)
     workflow.add_node("plan_outline_v2", plan_outline_v2_node)
     workflow.add_node("plan_expand_parallel_v2", plan_expand_parallel_v2_node)
@@ -176,14 +186,17 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
         {"fast_knowledge_match": "fast_knowledge_match", "finalize": "finalize"},
     )
 
-    # ── 新拓扑: match_books → fast_km → prefetch → S1 → S2 → build_bundle → S3 → S4 → ... ──
+    # ── 新拓扑: match_books → fast_km → prefetch → S1 → S1_citations → S2 → S2_citations → build_bundle → S3 → S4 → ... ──
     workflow.add_edge("fast_knowledge_match", "prefetch_context")
     workflow.add_edge("prefetch_context", "analyze_child_v2")
-    workflow.add_edge("analyze_child_v2", "identify_problems_v2")
-    # S2 → build_bundle（在此统一检索）→ S3
-    workflow.add_edge("identify_problems_v2", "build_bundle")
+    workflow.add_edge("analyze_child_v2", "generate_s1_citations")
+    workflow.add_edge("generate_s1_citations", "identify_problems_v2")
+    workflow.add_edge("identify_problems_v2", "generate_s2_citations")
+    # S2_citations → build_bundle（在此统一检索）→ S3
+    workflow.add_edge("generate_s2_citations", "build_bundle")
     workflow.add_edge("build_bundle", "recommend_types_v2")
-    workflow.add_edge("recommend_types_v2", "plan_outline_v2")
+    workflow.add_edge("recommend_types_v2", "generate_s3_citations")
+    workflow.add_edge("generate_s3_citations", "plan_outline_v2")
     workflow.add_edge("plan_outline_v2", "plan_expand_parallel_v2")
     workflow.add_edge("plan_expand_parallel_v2", "plan_assemble")
 
@@ -197,10 +210,11 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
         },
     )
 
-    # ── S4 → synth → S5 → verify → finalize ──
+    # ── S4 → synth → S5 → S5_citations → verify → finalize ──
     workflow.add_edge("generate_s4_citations", "knowledge_synthesis_v2")
     workflow.add_edge("knowledge_synthesis_v2", "conclusion")
-    workflow.add_edge("conclusion", "verify_citations")
+    workflow.add_edge("conclusion", "generate_s5_citations")
+    workflow.add_edge("generate_s5_citations", "verify_citations")
     workflow.add_edge("verify_citations", "finalize")
     workflow.add_edge("finalize", END)
 

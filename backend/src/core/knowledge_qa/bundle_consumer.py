@@ -21,6 +21,67 @@ logger = logging.getLogger(__name__)
 # ── 各节 passage 配额 ──
 SECTION_QUOTAS = {1: 0.20, 2: 0.20, 3: 0.25, 4: 0.25, 5: 0.10}
 
+# ── 跨书关系类型的中文语义标签（用于 LLM prompt 渲染）──
+_CROSS_RELATION_LABELS: dict[str, str] = {
+    # ── 实体消歧 ──
+    "SAME_AS":              "概念等价",
+    "CROSS_BOOK_CONSENSUS": "观点一致",
+    # ── Gen1 legacy ──
+    "CROSS_BOOK_COMPLEMENTS": "互为补充",
+    "CROSS_BOOK_CONFLICTS":   "观点矛盾",
+    # ── 治疗/干预类 ──
+    "CROSS_TREATS":           "治疗/干预",
+    "CROSS_PREVENTS":         "预防",
+    "CROSS_ALLEVIATES":       "缓解",
+    "CROSS_ADDRESSES":        "针对解决",
+    # ── 改善/增强类 ──
+    "CROSS_IMPROVES":         "改善",
+    "CROSS_ENHANCES":         "增强",
+    # ── 因果/机制类 ──
+    "CROSS_CAUSES":           "导致",
+    "CROSS_CONTRIBUTES_TO":   "促成",
+    "CROSS_AFFECTS":          "影响",
+    "CROSS_INCREASES_RISK":   "增加风险",
+    # ── 支持/解释类 ──
+    "CROSS_SUPPORTS":         "支持",
+    "CROSS_SUPPORTED_BY":     "依据来源",
+    "CROSS_EXPLAINS":         "解释",
+    "CROSS_EXPLAINED_BY":     "被解释为",
+    # ── 时序/空间类 ──
+    "CROSS_OCCURS_AT":        "发生于阶段",
+    "CROSS_LOCALIZED_IN":     "定位于",
+    # ── 关联/扩展类 ──
+    "CROSS_ASSOCIATED_WITH":  "相关联",
+    "CROSS_INVOLVES":         "涉及",
+    "CROSS_EXTENDS":          "扩展",
+    "CROSS_COMPLEMENTS":      "互补",
+    "CROSS_ILLUMINATES":      "阐明",
+    "CROSS_COMBINES_WITH":    "组合使用",
+    "CROSS_CONTRADICTS":      "矛盾",
+}
+
+
+def _get_relevant_cross_types(section_index: int) -> set[str]:
+    """返回指定节关注的跨书关系类型集合。"""
+    all_types = set(_CROSS_RELATION_LABELS.keys())
+    if section_index in (1, 2):
+        # S1/S2: 关注因果、解释、支持
+        return {"SAME_AS", "CROSS_BOOK_CONSENSUS",
+                "CROSS_CAUSES", "CROSS_CONTRIBUTES_TO", "CROSS_AFFECTS",
+                "CROSS_SUPPORTS", "CROSS_SUPPORTED_BY",
+                "CROSS_EXPLAINS", "CROSS_EXPLAINED_BY",
+                "CROSS_INCREASES_RISK", "CROSS_CONTRADICTS", "CROSS_BOOK_CONFLICTS"}
+    elif section_index in (3, 4):
+        # S3/S4: 关注治疗、改善、预防、增强
+        return {"SAME_AS", "CROSS_BOOK_CONSENSUS", "CROSS_BOOK_COMPLEMENTS",
+                "CROSS_TREATS", "CROSS_PREVENTS", "CROSS_ALLEVIATES", "CROSS_ADDRESSES",
+                "CROSS_IMPROVES", "CROSS_ENHANCES",
+                "CROSS_COMBINES_WITH", "CROSS_EXTENDS", "CROSS_COMPLEMENTS",
+                "CROSS_CONTRADICTS", "CROSS_BOOK_CONFLICTS"}
+    else:
+        # S5: 全部展示
+        return all_types
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 2a: Extract passages for a section
@@ -45,7 +106,18 @@ def extract_for_section(
     all_passages = list(bundle.passages)
 
     if not all_passages:
+        logger.warning(
+            "extract_for_section(S%d): bundle.passages 为空，跳过", section_index,
+        )
         return []
+
+    # 诊断日志：Bundle 全局概览
+    neo4j_entity_counts = {k: len(v) for k, v in bundle.neo4j_entities.items() if v}
+    logger.info(
+        "extract_for_section(S%d): passages=%d, neo4j_entities=%s, section_query='%s'",
+        section_index, len(all_passages), neo4j_entity_counts,
+        (section_query or "")[:60],
+    )
 
     if section_index == 1:  # S1: 儿童状态分析
         # 偏好：Neo4j 实体相关 + Behavior/Development 相关 passages
@@ -53,20 +125,31 @@ def extract_for_section(
             bundle, ["Problem", "DevelopmentalStage", "RootCause", "Mechanism"],
             top_k=_section_quota(section_index, len(all_passages)),
         )
-        if not passages:
-            passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=15,
+        # 实体检索不足时，补入关键词检索结果
+        if len(passages) < 15:
+            kw_passages = _retrieve_by_keywords(
+                all_passages, section_query, top_k=20,
             )
+            seen = {p.id for p in passages}
+            for p in kw_passages:
+                if p.id not in seen:
+                    passages.append(p)
+                    seen.add(p.id)
         return passages
 
     elif section_index == 2:  # S2: 问题识别
         # 偏好：Neo4j Problem + RootCause 实体相关 passages
         problem_entities = bundle.neo4j_entities.get("Problem", [])
-        passages = _retrieve_by_entities(bundle, problem_entities, top_k=12)
-        if not passages:
-            passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=12,
+        passages = _retrieve_by_entities(bundle, problem_entities, top_k=20)
+        if len(passages) < 12:
+            kw_passages = _retrieve_by_keywords(
+                all_passages, section_query, top_k=20,
             )
+            seen = {p.id for p in passages}
+            for p in kw_passages:
+                if p.id not in seen:
+                    passages.append(p)
+                    seen.add(p.id)
         return passages
 
     elif section_index == 3:  # S3: 运动类型推荐
@@ -76,21 +159,51 @@ def extract_for_section(
             + bundle.neo4j_entities.get("Solution", [])
             + bundle.neo4j_entities.get("Strategy", [])
         )
-        passages = _retrieve_by_entities(bundle, exercise_entities, top_k=15)
+        logger.info(
+            "S3 检索: Exercise=%d, Solution=%d, Strategy=%d, 实体总数=%d",
+            len(bundle.neo4j_entities.get("Exercise", [])),
+            len(bundle.neo4j_entities.get("Solution", [])),
+            len(bundle.neo4j_entities.get("Strategy", [])),
+            len(exercise_entities),
+        )
+        passages = _retrieve_by_entities(bundle, exercise_entities, top_k=25)
+        logger.info(
+            "S3 实体检索: %d entities → %d passages",
+            len(exercise_entities), len(passages),
+        )
+        if len(passages) < 15:
+            before_kw = len(passages)
+            kw_passages = _retrieve_by_keywords(
+                all_passages, section_query, top_k=25,
+            )
+            seen = {p.id for p in passages}
+            for p in kw_passages:
+                if p.id not in seen:
+                    passages.append(p)
+                    seen.add(p.id)
+            logger.info(
+                "S3 关键词补入: query='%s', 候选 %d, 去重补入 %d, 合计 %d",
+                (section_query or "")[:40],
+                len(kw_passages), len(passages) - before_kw, len(passages),
+            )
         if not passages:
-            passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=15,
+            logger.warning(
+                "S3 检索结果为空! entities=%d, passages总量=%d, "
+                "entity_names=%s, query='%s'",
+                len(exercise_entities), len(all_passages),
+                [e.name for e in exercise_entities[:5]],
+                (section_query or "")[:40],
             )
         return passages
 
     elif section_index == 4:  # S4: 运动方案设计
         # 偏好：全部运动/方案相关实体 + 全文覆盖
-        passages = _retrieve_all(bundle, top_k=25)
+        passages = _retrieve_all(bundle, top_k=40)
         return passages
 
     elif section_index == 5:  # S5: 结论
         # 偏好：全部 + 跨书关系 + 冲突
-        passages = _retrieve_all(bundle, top_k=30)
+        passages = _retrieve_all(bundle, top_k=50)
         return passages
 
     return all_passages[:10]
@@ -195,16 +308,41 @@ def _section_quota(section_index: int, total: int) -> int:
     return max(10, int(total * ratio))
 
 
+def _get_cross_rel_weight(rel_type: str) -> float:
+    """获取关系类型的简化权重（用于 passage 排序）。"""
+    high = {"CAUSES", "TREATS", "IMPROVES", "ALLEVIATES", "ADDRESSES", "ENHANCES",
+            "CROSS_TREATS", "CROSS_IMPROVES", "CROSS_ALLEVIATES", "CROSS_ADDRESSES", "CROSS_ENHANCES"}
+    medium = {"PREVENTS", "SUPPORTS", "SUPPORTED_BY", "EXPLAINS", "EXPLAINED_BY",
+              "CROSS_PREVENTS", "CROSS_SUPPORTS", "CROSS_CAUSES"}
+    if rel_type in high:
+        return 0.9
+    if rel_type in medium:
+        return 0.7
+    return 0.5
+
+
 def _retrieve_by_entity_types(
     bundle: KnowledgeBundle,
     entity_types: list[str],
     top_k: int,
 ) -> list[Passage]:
-    """按实体类型偏好提取 passages。"""
+    """按实体类型偏好提取 passages，沿关系链扩展搜索词。"""
     preferred_entity_names: set[str] = set()
     for etype in entity_types:
         for entity in bundle.neo4j_entities.get(etype, []):
             preferred_entity_names.add(entity.name.lower())
+
+    # ── 沿关系链扩展 1 跳邻居 ──
+    if preferred_entity_names and bundle.neo4j_relations:
+        expanded: set[str] = set()
+        for rel in bundle.neo4j_relations:
+            src = rel.source_entity.lower()
+            tgt = rel.target_entity.lower()
+            if src in preferred_entity_names and tgt not in preferred_entity_names:
+                expanded.add(tgt)
+            elif tgt in preferred_entity_names and src not in preferred_entity_names:
+                expanded.add(src)
+        preferred_entity_names.update(expanded)
 
     if not preferred_entity_names:
         return []
@@ -228,17 +366,59 @@ def _retrieve_by_entities(
     entities: list[GraphEntity],
     top_k: int,
 ) -> list[Passage]:
-    """按实体列表提取相关 passages。"""
-    entity_names = {e.name.lower() for e in entities if e.name}
+    """按实体列表提取相关 passages，使用加权遍历得分排序。"""
+    # ── 构建实体名 → relevance_score 映射 ──
+    entity_scores: dict[str, float] = {}
+    entity_names: set[str] = set()
+    for e in entities:
+        if e.name:
+            key = e.name.lower()
+            entity_names.add(key)
+            entity_scores[key] = max(entity_scores.get(key, 0), e.relevance_score or 0.5)
+        for alias in getattr(e, "aliases", []):
+            if alias:
+                entity_names.add(alias.lower())
+                entity_scores[alias.lower()] = entity_scores.get(e.name.lower(), 0.5)
+
+    # ── 沿 Neo4j 关系链扩展：找 1 跳邻居实体名 ──
+    if entity_names and bundle.neo4j_relations:
+        expanded: set[str] = set()
+        for rel in bundle.neo4j_relations:
+            src = rel.source_entity.lower()
+            tgt = rel.target_entity.lower()
+            if src in entity_names and tgt not in entity_names:
+                expanded.add(tgt)
+                # 邻居得分 = 源实体得分 × 关系权重 × 衰减
+                w = _get_cross_rel_weight(rel.relation_type)
+                entity_scores[tgt] = entity_scores.get(src, 0.5) * w * 0.5
+            elif tgt in entity_names and src not in entity_names:
+                expanded.add(src)
+                w = _get_cross_rel_weight(rel.relation_type)
+                entity_scores[src] = entity_scores.get(tgt, 0.5) * w * 0.5
+        entity_names.update(expanded)
 
     if not entity_names:
         return []
 
-    scored: list[tuple[Passage, int]] = []
+    # ── 跨书关系实体集合（所有类型都参与 boost，包括冲突）──
+    cross_book_names: set[str] = set()
+    for c in bundle.cross_book_consensus:
+        cross_book_names.add(c.entity_name.lower())
+    for c in bundle.cross_book_conflicts:
+        cross_book_names.add(c.entity_name.lower())
+
+    # ── 加权 passage 评分 ──
+    scored: list[tuple[Passage, float]] = []
     for p in bundle.passages:
         content_lower = p.content.lower()
-        hits = sum(1 for name in entity_names if name in content_lower)
+        # 加权命中分：命中高 relevance_score 的实体得分更高
+        hits = sum(entity_scores.get(name, 0.5) for name in entity_names if name in content_lower)
         if hits > 0:
+            # 跨书关系 boost：有跨书关系的实体命中额外加分（上限 3）
+            if cross_book_names:
+                cross_hits = sum(1 for n in cross_book_names if n in content_lower)
+                if cross_hits > 0:
+                    hits += min(cross_hits, 3)
             scored.append((p, hits))
 
     scored.sort(key=lambda x: x[1], reverse=True)
@@ -338,9 +518,11 @@ def _format_neo4j_for_section(
         # 跨书关系摘要
         if bundle.cross_book_consensus:
             lines.append("### 跨书共识")
-            for cc in bundle.cross_book_consensus[:5]:
+            for cc in bundle.cross_book_consensus[:8]:
                 books_str = "、".join(f"《{b}》" for b in cc.books)
-                lines.append(f"- {cc.entity_name}: {cc.relation_type} ({books_str})")
+                label = _CROSS_RELATION_LABELS.get(cc.relation_type, cc.relation_type)
+                desc = f" — {cc.description[:100]}" if cc.description else ""
+                lines.append(f"- {cc.entity_name} ({label}){desc} ({books_str})")
         if bundle.cross_book_conflicts:
             lines.append("### 跨书冲突")
             for cc2 in bundle.cross_book_conflicts[:5]:
@@ -368,29 +550,34 @@ def _format_consensus_for_section(
     bundle: KnowledgeBundle,
     section_index: int,
 ) -> str:
-    """为指定节格式化跨书共识数据。"""
+    """为指定节格式化跨书关系数据（全类型覆盖）。
+
+    渲染策略：
+    1. 按节过滤相关关系类型（S1/S2 偏因果解释，S3/S4 偏治疗改善，S5 全部）
+    2. 同一实体只保留 1 条（去重）
+    3. entity_name 长度 < 2 的跳过（噪声实体）
+    """
     if not bundle.cross_book_consensus:
         return ""
 
+    relevant_types = _get_relevant_cross_types(section_index)
     lines: list[str] = []
+    seen_entities: set[str] = set()
+
     for c in bundle.cross_book_consensus:
+        if len(c.entity_name) < 2 or c.entity_name in seen_entities:
+            continue
+        if c.relation_type not in relevant_types:
+            continue
+
+        label = _CROSS_RELATION_LABELS.get(c.relation_type, c.relation_type)
         books_str = "、".join(f"《{b}》" for b in c.books)
 
-        if c.relation_type == "SAME_AS":
-            lines.append(f"- 「{c.entity_name}」在 {books_str} 中观点一致")
-        elif c.relation_type == "CROSS_BOOK_COMPLEMENTS":
-            if section_index in (3, 4):
-                lines.append(
-                    f"- 「{c.entity_name}」：{books_str} 互为补充"
-                    f"{': ' + c.description if c.description else ''}"
-                )
-        elif c.relation_type == "CROSS_TREATS":
-            if section_index == 4:
-                lines.append(
-                    f"- 跨书治疗方案「{c.entity_name}」"
-                    f"{': ' + c.description if c.description else ''}"
-                    f"（来源：{books_str}）"
-                )
+        if c.description:
+            lines.append(f"- 「{c.entity_name}」({label})：{books_str} — {c.description[:150]}")
+        else:
+            lines.append(f"- 「{c.entity_name}」({label})：{books_str}")
+        seen_entities.add(c.entity_name)
 
     return "\n".join(lines) if lines else ""
 

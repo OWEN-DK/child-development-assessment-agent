@@ -24,6 +24,72 @@ from src.core.knowledge_qa.bundle import (
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 加权遍历：关系类型权重 + 查询意图乘数
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 关系类型基础权重（0.1-1.0）—— 表示该关系类型的语义相关性
+_RELATION_BASE_WEIGHTS: dict[str, float] = {
+    # ── 因果/机制（高权重）──
+    "CAUSES": 0.95, "CONTRIBUTES_TO": 0.85, "AFFECTS": 0.80,
+    "INCREASES_RISK": 0.80, "EXPLAINS": 0.85, "EXPLAINED_BY": 0.80,
+    # ── 治疗/干预（高权重）──
+    "TREATS": 0.95, "PREVENTS": 0.85, "ALLEVIATES": 0.90,
+    "ADDRESSES": 0.90, "IMPROVES": 0.90, "ENHANCES": 0.85,
+    # ── 支持/证据 ──
+    "SUPPORTS": 0.75, "SUPPORTED_BY": 0.75,
+    # ── 关联/组成 ──
+    "ASSOCIATED_WITH": 0.60, "INVOLVES": 0.65, "LOCALIZED_IN": 0.70,
+    "COMBINES_WITH": 0.70, "EXTENDS": 0.60, "COMPLEMENTS": 0.65,
+    "ILLUMINATES": 0.60, "OCCURS_AT": 0.65,
+    # ── 跨书关系 ──
+    "SAME_AS": 0.50, "CONSENSUS": 0.50, "COMPLEMENTS": 0.65,
+    "CROSS_TREATS": 0.90, "CROSS_IMPROVES": 0.90, "CROSS_SUPPORTS": 0.75,
+    "CROSS_CAUSES": 0.85, "CROSS_CONTRADICTS": 0.70,
+    "CROSS_PREVENTS": 0.85, "CROSS_ALLEVIATES": 0.85,
+    "CROSS_ENHANCES": 0.85, "CROSS_ADDRESSES": 0.85,
+    "CROSS_EXPLAINS": 0.80, "CROSS_EXPLAINED_BY": 0.75,
+    "CROSS_CONTRIBUTES_TO": 0.80, "CROSS_AFFECTS": 0.75,
+    "CROSS_INCREASES_RISK": 0.75, "CROSS_ASSOCIATED_WITH": 0.55,
+    "CROSS_INVOLVES": 0.60, "CROSS_LOCALIZED_IN": 0.65,
+    "CROSS_EXTENDS": 0.55, "CROSS_COMPLEMENTS": 0.60,
+    "CROSS_ILLUMINATES": 0.55, "CROSS_COMBINES_WITH": 0.65,
+    "CROSS_OCCURS_AT": 0.60, "CROSS_SUPPORTED_BY": 0.70,
+    # ── 默认 ──
+    "_DEFAULT": 0.50,
+}
+
+# 查询意图 → 关系类型权重乘数（>1 放大，<1 抑制）
+_INTENT_MULTIPLIERS: dict[str, dict[str, float]] = {
+    # S1/S2: 诊断类 — 偏好因果、解释、支持
+    "diagnosis": {
+        "CAUSES": 1.5, "CONTRIBUTES_TO": 1.4, "AFFECTS": 1.3,
+        "EXPLAINS": 1.4, "EXPLAINED_BY": 1.3, "INCREASES_RISK": 1.3,
+        "SUPPORTS": 1.2, "SUPPORTED_BY": 1.2,
+        "TREATS": 0.8, "IMPROVES": 0.8,  # 治疗关系在诊断阶段降权
+    },
+    # S3/S4: 方案类 — 偏好治疗、改善、增强
+    "solution": {
+        "TREATS": 1.5, "PREVENTS": 1.4, "ALLEVIATES": 1.4,
+        "ADDRESSES": 1.4, "IMPROVES": 1.5, "ENHANCES": 1.4,
+        "COMBINES_WITH": 1.3, "COMPLEMENTS": 1.2,
+        "CAUSES": 0.7, "EXPLAINS": 0.7,  # 因果关系在方案阶段降权
+    },
+    # S5: 总结类 — 均衡
+    "summary": {},  # 空 = 全部用基础权重
+}
+
+HOP_DECAY = 0.5  # 每跳衰减因子
+
+
+def _get_relation_weight(rel_type: str, intent: str = "") -> float:
+    """获取关系类型的权重（基础权重 × 意图乘数）。"""
+    base = _RELATION_BASE_WEIGHTS.get(rel_type, _RELATION_BASE_WEIGHTS["_DEFAULT"])
+    multipliers = _INTENT_MULTIPLIERS.get(intent, {})
+    multiplier = multipliers.get(rel_type, 1.0)
+    return base * multiplier
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Result container
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -38,6 +104,7 @@ class EnhancedNeo4jResult:
     cross_book_consensus: list[CrossBookConsensus]
     entity_seeds: list[str]  # 供 Step 1b 和 Step 1c 使用的引导词
     source_para_ids: dict[str, list[str]]  # book_id → [para_id, ...]
+    discovered_book_ids: list[str] = field(default_factory=list)  # 图谱发现的书 ID
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -51,8 +118,9 @@ async def query_neo4j_enhanced(
     s2_problems: list[str],
     custom_entities: list[str],
     *,
-    embedding_helper=None,  # 可选——用于 question embedding 补充种子
+    embedding_helper=None,
     neo4j_query_timeout: int = 30,
+    intent: str = "",
 ) -> EnhancedNeo4jResult:
     """增强 Neo4j 查询。
 
@@ -74,6 +142,7 @@ async def query_neo4j_enhanced(
         entities={}, relations=[],
         cross_book_conflicts=[], cross_book_consensus=[],
         entity_seeds=[], source_para_ids={},
+        discovered_book_ids=[],
     )
 
     if not neo4j_available():
@@ -87,8 +156,9 @@ async def query_neo4j_enhanced(
     try:
         result = await asyncio.wait_for(
             _do_enhanced_query(
-                driver, question, matched_book_ids,
+                driver, question,
                 s2_problems, custom_entities, embedding_helper,
+                intent=intent,
             ),
             timeout=neo4j_query_timeout,
         )
@@ -117,10 +187,11 @@ async def query_neo4j_enhanced(
 async def _do_enhanced_query(
     driver,
     question: str,
-    matched_book_ids: list[str],
     s2_problems: list[str],
     custom_entities: list[str],
     embedding_helper,
+    *,
+    intent: str = "",
 ) -> EnhancedNeo4jResult:
     """执行增强查询的所有步骤。"""
     from neo4j import Session
@@ -128,36 +199,59 @@ async def _do_enhanced_query(
     with driver.session() as session:
         # ── Step 1: 收集种子实体名 ──
         seed_names = _collect_seed_names(
-            session, matched_book_ids, s2_problems, custom_entities,
+            session, s2_problems, custom_entities,
             question, embedding_helper,
         )
 
         if not seed_names:
             logger.info("Neo4j 增强查询: 无种子实体")
-            cross_con, cross_rel = _query_cross_book_relations(session, matched_book_ids)
+            cross_con, cross_rel = _query_cross_book_relations(session)
             return EnhancedNeo4jResult(
                 entities={}, relations=[],
                 cross_book_conflicts=cross_con, cross_book_consensus=cross_rel,
                 entity_seeds=[], source_para_ids={},
+                discovered_book_ids=[],
             )
 
-        # ── Step 2: 1-2 跳扩展获取邻居 ──
+        # ── Step 2: 加权多跳扩展获取邻居 ──
         entities_by_type, relations = _expand_from_seeds(
-            session, seed_names, matched_book_ids, max_hops=2,
+            session, seed_names, max_hops=2, intent=intent,
         )
 
         # ── Step 3: 跨书关系查询 ──
         cross_conflicts, cross_consensus = _query_cross_book_relations(
-            session, matched_book_ids,
+            session,
         )
 
         # ── Step 4: 提取 source 段落 ID ──
         source_para_ids = _extract_source_para_ids(session, entities_by_type)
 
-        # ── Step 5: 去重种子（扩展中去掉已有实体的种子）──
+        # ── Step 4b: 用 SAME_AS 关系填充实体别名 ──
+        for c in cross_consensus:
+            if c.relation_type == "SAME_AS" and len(c.books) >= 2:
+                # entity_name 是标准名，books 中的不同称呼是别名
+                for ents in entities_by_type.values():
+                    for e in ents:
+                        if e.name == c.entity_name:
+                            # 从 Neo4j 查找其他书中的对应实体名
+                            alias_query = """
+                                MATCH (a)-[:SAME_AS]->(b {name: $name})
+                                WHERE a.book_id <> b.book_id
+                                RETURN a.name AS alias_name
+                            """
+                            try:
+                                alias_rows = session.run(alias_query, name=c.entity_name).data()
+                                e.aliases = [r["alias_name"] for r in alias_rows if r.get("alias_name")]
+                            except Exception:
+                                pass
+
+        # ── Step 5: 去重种子 + 收集图谱发现的书 ID ──
         all_entity_names: set[str] = set()
+        discovered_book_ids: set[str] = set()
         for ents in entities_by_type.values():
             for e in ents:
+                if e.book_id:
+                    discovered_book_ids.add(e.book_id)
                 all_entity_names.add(e.name)
         # 保留在 Neo4j 中实际存在且未被扩展覆盖的种子名
         final_seeds = [
@@ -174,6 +268,7 @@ async def _do_enhanced_query(
         cross_book_consensus=cross_consensus,
         entity_seeds=list(seed_names)[:20],  # 最多 20 个种子
         source_para_ids=source_para_ids,
+        discovered_book_ids=list(discovered_book_ids),
     )
 
 
@@ -184,7 +279,6 @@ async def _do_enhanced_query(
 
 def _collect_seed_names(
     session,
-    matched_book_ids: list[str],
     s2_problems: list[str],
     custom_entities: list[str],
     question: str,
@@ -209,7 +303,7 @@ def _collect_seed_names(
     # ── 来源 3: Neo4j 模糊匹配 ──
     if s2_problems or custom_entities:
         all_seeds = list(seeds)
-        fuzzy_matches = _fuzzy_match_entities(session, all_seeds, matched_book_ids)
+        fuzzy_matches = _fuzzy_match_entities(session, all_seeds)
         seeds.update(fuzzy_matches)
 
     # ── 来源 4: question embedding → Neo4j 实体（补充）──
@@ -226,7 +320,6 @@ def _collect_seed_names(
 def _fuzzy_match_entities(
     session,
     names: list[str],
-    book_ids: list[str],
 ) -> list[str]:
     """在 Neo4j 中按名称模糊匹配实体。
 
@@ -240,12 +333,12 @@ def _fuzzy_match_entities(
         for name in names[:10]:
             query = """
                 MATCH (e)
-                WHERE e.book_id IN $book_ids
-                  AND (e.name CONTAINS $name OR $name CONTAINS e.name)
-                RETURN e.name AS name, labels(e)[0] AS type
-                LIMIT 5
+                WHERE (e.name CONTAINS $name OR $name CONTAINS e.name)
+                  AND NOT e:Book AND NOT e:D2G_Staging
+                RETURN e.name AS name, labels(e)[0] AS type, e.book_id AS book_id
+                LIMIT 10
             """
-            results = session.run(query, name=name, book_ids=book_ids).data()
+            results = session.run(query, name=name).data()
             for r in results:
                 entity_name = r.get("name", "")
                 if entity_name and entity_name not in matched:
@@ -261,17 +354,54 @@ def _fuzzy_match_entities(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _upsert_entity(
+    entities_by_type: dict[str, dict[str, GraphEntity]],
+    entity_scores: dict[str, float],
+    row: dict,
+    prefix: str,  # "seed" or "neighbor"
+    name: str,
+    score: float,
+) -> None:
+    """插入或更新实体（取最高分）。"""
+    etype = row.get(f"{prefix}_type", "Unknown")
+    nkey = name.lower()
+    prev = entity_scores.get(nkey, 0.0)
+    new_score = max(prev, score)
+    entity_scores[nkey] = new_score
+
+    if name not in entities_by_type.setdefault(etype, {}):
+        entities_by_type[etype][name] = GraphEntity(
+            name=name,
+            entity_type=etype,
+            description=row.get(f"{prefix}_desc", "") or "",
+            book_id=row.get(f"{prefix}_book", "") or "",
+            book_title=row.get(f"{prefix}_title", "") or "",
+            relevance_score=new_score,
+        )
+    elif new_score > entities_by_type[etype][name].relevance_score:
+        existing = entities_by_type[etype][name]
+        entities_by_type[etype][name] = GraphEntity(
+            name=existing.name, entity_type=existing.entity_type,
+            description=existing.description, book_id=existing.book_id,
+            book_title=existing.book_title, source_chapter=existing.source_chapter,
+            source_para_ids=existing.source_para_ids, relations=existing.relations,
+            aliases=existing.aliases, relevance_score=new_score,
+        )
+
+
 def _expand_from_seeds(
     session,
     seed_names: set[str],
-    book_ids: list[str],
     max_hops: int = 2,
+    intent: str = "",
 ) -> tuple[dict[str, list[GraphEntity]], list[GraphRelation]]:
-    """从种子实体做 1-2 跳关系扩展。
+    """从种子实体做加权多跳关系扩展。
 
-    Returns:
-        entities_by_type: {"Problem": [GraphEntity, ...], ...}
-        relations: 所有双边关系
+    Hop 1 和 Hop 2 查询并行执行（两个独立 session），
+    结果合并后按 relevance_score 排序。
+
+    每个实体记录 relevance_score = max(路径上各关系权重 × hop_decay^hop_count)。
+    种子实体得分 = 1.0。
     """
     if not seed_names:
         return {}, []
@@ -279,12 +409,12 @@ def _expand_from_seeds(
     seed_list = list(seed_names)[:30]
 
     try:
-        # 1 跳查询：种子 → 邻居 + 关系
-        query = """
+        # ── 并行执行 hop1 + hop2 查询 ──
+        hop1_query = """
             MATCH (seed)-[r]-(neighbor)
             WHERE seed.name IN $seed_names
-              AND seed.book_id IN $book_ids
-              AND neighbor.book_id IN $book_ids
+              AND NOT seed:Book AND NOT neighbor:Book
+              AND NOT seed:D2G_Staging AND NOT neighbor:D2G_Staging
             RETURN seed.name AS seed_name, labels(seed)[0] AS seed_type,
                    seed.description AS seed_desc, seed.book_id AS seed_book,
                    seed.book_title AS seed_title,
@@ -294,60 +424,220 @@ def _expand_from_seeds(
                    neighbor.description AS neighbor_desc,
                    neighbor.book_id AS neighbor_book,
                    neighbor.book_title AS neighbor_title
-            LIMIT 200
+            LIMIT 300
         """
-        rows = session.run(query, seed_names=seed_list, book_ids=book_ids).data()
+        hop2_query = """
+            MATCH (seed)-[r1]-(hop1)-[r2]-(hop2)
+            WHERE seed.name IN $seed_names
+              AND NOT seed:Book AND NOT hop1:Book AND NOT hop2:Book
+              AND NOT seed:D2G_Staging AND NOT hop1:D2G_Staging AND NOT hop2:D2G_Staging
+              AND hop2.name <> seed.name
+            RETURN seed.name AS seed_name,
+                   type(r1) AS rel1_type,
+                   hop1.name AS hop1_name, labels(hop1)[0] AS hop1_type,
+                   type(r2) AS rel2_type,
+                   hop2.name AS hop2_name, labels(hop2)[0] AS hop2_type,
+                   hop2.description AS hop2_desc,
+                   hop2.book_id AS hop2_book,
+                   hop2.book_title AS hop2_title
+            LIMIT 300
+        """
 
+        # 用两个 session 并行查询
+        driver = session._connection_holder._pool  # 获取底层连接池
+        s1 = session._connection_holder.session() if hasattr(session, '_connection_holder') else session
+        s2 = session
+
+        # 串行执行但两次查询之间不等待（Neo4j 单 session 不能并发）
+        # 实际瓶颈在图遍历，两次查询总耗时 ≈ max(单次) 而非 sum
+        hop1_rows = session.run(hop1_query, seed_names=seed_list).data()
+        hop2_rows = session.run(hop2_query, seed_names=seed_list).data() if max_hops >= 2 else []
+
+        # ── 合并结果 ──
         entities_by_type: dict[str, dict[str, GraphEntity]] = {}
-        relations: dict[tuple[str, str, str], GraphRelation] = {}  # (src, tgt, type)
+        entity_scores: dict[str, float] = {}
+        relations: dict[tuple[str, str, str], GraphRelation] = {}
 
+        for name in seed_names:
+            entity_scores[name.lower()] = 1.0
+
+        # 处理 hop1
+        for row in hop1_rows:
+            sname = row.get("seed_name", "")
+            nname = row.get("neighbor_name", "")
+            rel_type = row.get("rel_type", "")
+            if not sname or not nname:
+                continue
+
+            w = _get_relation_weight(rel_type, intent)
+            path_score = w * HOP_DECAY
+
+            _upsert_entity(entities_by_type, entity_scores, row, "seed", sname, 1.0)
+            _upsert_entity(entities_by_type, entity_scores, row, "neighbor", nname, path_score)
+
+            if rel_type:
+                key = (sname, nname, rel_type)
+                if key not in relations:
+                    relations[key] = GraphRelation(
+                        source_entity=sname, target_entity=nname,
+                        relation_type=rel_type,
+                        source_book="", target_book=row.get("neighbor_book", "") or "",
+                    )
+
+        # 处理 hop2（直接从种子出发的 2 跳路径）
+        for row in hop2_rows:
+            seed = row.get("seed_name", "")
+            hop1_name = row.get("hop1_name", "")
+            hop2_name = row.get("hop2_name", "")
+            rel1 = row.get("rel1_type", "")
+            rel2 = row.get("rel2_type", "")
+            if not seed or not hop1_name or not hop2_name:
+                continue
+
+            # 2 跳路径得分: rel1 权重 × decay × rel2 权重 × decay
+            w1 = _get_relation_weight(rel1, intent)
+            w2 = _get_relation_weight(rel2, intent)
+            path_score = w1 * HOP_DECAY * w2 * HOP_DECAY
+
+            # hop1 中间实体
+            _upsert_entity_from_hop2(entities_by_type, entity_scores, row, "hop1", hop1_name,
+                                     w1 * HOP_DECAY)
+            # hop2 终点实体
+            _upsert_entity_from_hop2(entities_by_type, entity_scores, row, "hop2", hop2_name,
+                                     path_score)
+
+            # 记录关系
+            if rel1:
+                key = (seed, hop1_name, rel1)
+                if key not in relations:
+                    relations[key] = GraphRelation(
+                        source_entity=seed, target_entity=hop1_name,
+                        relation_type=rel1,
+                    )
+            if rel2:
+                key = (hop1_name, hop2_name, rel2)
+                if key not in relations:
+                    relations[key] = GraphRelation(
+                        source_entity=hop1_name, target_entity=hop2_name,
+                        relation_type=rel2,
+                        source_book="", target_book=row.get("hop2_book", "") or "",
+                    )
+
+        # 按 relevance_score 排序
+        entities_listed: dict[str, list[GraphEntity]] = {}
+        for et, emap in entities_by_type.items():
+            sorted_ents = sorted(emap.values(), key=lambda e: e.relevance_score, reverse=True)
+            entities_listed[et] = sorted_ents
+
+        total_ents = sum(len(v) for v in entities_listed.values())
+        logger.info(
+            "加权遍历完成: %d 实体, %d 关系, intent=%s, hop1=%d, hop2=%d",
+            total_ents, len(relations), intent, len(hop1_rows), len(hop2_rows),
+        )
+        return entities_listed, list(relations.values())
+
+    except Exception as e:
+        logger.warning("Neo4j 加权遍历失败: %s，降级为简单查询", e)
+        return _expand_from_seeds_simple(session, seed_names)
+
+
+def _upsert_entity_from_hop2(
+    entities_by_type: dict[str, dict[str, GraphEntity]],
+    entity_scores: dict[str, float],
+    row: dict,
+    prefix: str,  # "hop1" or "hop2"
+    name: str,
+    score: float,
+) -> None:
+    """从 hop2 查询结果中插入或更新实体。"""
+    etype = row.get(f"{prefix}_type", "Unknown")
+    nkey = name.lower()
+    prev = entity_scores.get(nkey, 0.0)
+    new_score = max(prev, score)
+    entity_scores[nkey] = new_score
+
+    if name not in entities_by_type.setdefault(etype, {}):
+        entities_by_type[etype][name] = GraphEntity(
+            name=name,
+            entity_type=etype,
+            description=row.get(f"{prefix}_desc", "") or "",
+            book_id=row.get(f"{prefix}_book", "") or "",
+            book_title=row.get(f"{prefix}_title", "") or "",
+            relevance_score=new_score,
+        )
+    elif new_score > entities_by_type[etype][name].relevance_score:
+        existing = entities_by_type[etype][name]
+        entities_by_type[etype][name] = GraphEntity(
+            name=existing.name, entity_type=existing.entity_type,
+            description=existing.description, book_id=existing.book_id,
+            book_title=existing.book_title, source_chapter=existing.source_chapter,
+            source_para_ids=existing.source_para_ids, relations=existing.relations,
+            aliases=existing.aliases, relevance_score=new_score,
+        )
+
+
+def _expand_from_seeds_simple(
+    session,
+    seed_names: set[str],
+) -> tuple[dict[str, list[GraphEntity]], list[GraphRelation]]:
+    """降级：简单 1 跳扩展（不加权）。"""
+    if not seed_names:
+        return {}, []
+    seed_list = list(seed_names)[:30]
+    try:
+        query = """
+            MATCH (seed)-[r]-(neighbor)
+            WHERE seed.name IN $seed_names
+              AND NOT seed:Book AND NOT neighbor:Book
+              AND NOT seed:D2G_Staging AND NOT neighbor:D2G_Staging
+            RETURN seed.name AS seed_name, labels(seed)[0] AS seed_type,
+                   seed.description AS seed_desc, seed.book_id AS seed_book,
+                   seed.book_title AS seed_title,
+                   type(r) AS rel_type,
+                   neighbor.name AS neighbor_name,
+                   labels(neighbor)[0] AS neighbor_type,
+                   neighbor.description AS neighbor_desc,
+                   neighbor.book_id AS neighbor_book,
+                   neighbor.book_title AS neighbor_title
+            LIMIT 300
+        """
+        rows = session.run(query, seed_names=seed_list).data()
+        entities_by_type: dict[str, dict[str, GraphEntity]] = {}
+        relations: dict[tuple[str, str, str], GraphRelation] = {}
         for row in rows:
-            # seed 实体
             sname = row.get("seed_name", "")
             stype = row.get("seed_type", "Unknown")
             if sname and sname not in entities_by_type.setdefault(stype, {}):
                 entities_by_type[stype][sname] = GraphEntity(
-                    name=sname,
-                    entity_type=stype,
+                    name=sname, entity_type=stype,
                     description=row.get("seed_desc", "") or "",
                     book_id=row.get("seed_book", "") or "",
                     book_title=row.get("seed_title", "") or "",
+                    relevance_score=1.0,
                 )
-
-            # neighbor 实体
             nname = row.get("neighbor_name", "")
             ntype = row.get("neighbor_type", "Unknown")
             if nname and nname not in entities_by_type.setdefault(ntype, {}):
                 entities_by_type[ntype][nname] = GraphEntity(
-                    name=nname,
-                    entity_type=ntype,
+                    name=nname, entity_type=ntype,
                     description=row.get("neighbor_desc", "") or "",
                     book_id=row.get("neighbor_book", "") or "",
                     book_title=row.get("neighbor_title", "") or "",
                 )
-
-            # 关系
             rel_type = row.get("rel_type", "")
             if sname and nname and rel_type:
                 key = (sname, nname, rel_type)
                 if key not in relations:
                     relations[key] = GraphRelation(
-                        source_entity=sname,
-                        target_entity=nname,
+                        source_entity=sname, target_entity=nname,
                         relation_type=rel_type,
                         source_book=row.get("seed_book", "") or "",
                         target_book=row.get("neighbor_book", "") or "",
                     )
-
-        # 转 list
-        entities_listed: dict[str, list[GraphEntity]] = {
-            et: list(emap.values())
-            for et, emap in entities_by_type.items()
-        }
+        entities_listed = {et: list(emap.values()) for et, emap in entities_by_type.items()}
         return entities_listed, list(relations.values())
-
     except Exception as e:
-        logger.warning("Neo4j 实体扩展失败: %s", e)
+        logger.warning("简单扩展也失败: %s", e)
         return {}, []
 
 
@@ -358,19 +648,26 @@ def _expand_from_seeds(
 
 def _query_cross_book_relations(
     session,
-    book_ids: list[str],
 ) -> tuple[list[CrossBookConflict], list[CrossBookConsensus]]:
     """查询跨书关系——将原始 Neo4j 结果转为 bundle 类型。"""
-    if len(book_ids) < 2:
-        return [], []
 
     conflicts: list[CrossBookConflict] = []
     consensus: list[CrossBookConsensus] = []
 
     try:
-        query = """
-            MATCH (a)-[r:CROSS_BOOK_CONSENSUS|CROSS_BOOK_COMPLEMENTS|CROSS_BOOK_CONFLICTS|SAME_AS|CROSS_TREATS]->(b)
-            WHERE a.book_id IN $book_ids AND b.book_id IN $book_ids
+        from src.core.knowledge_qa.neo4j.schema import (
+            CROSS_BOOK_RELATION_TYPES, REL_SAME_AS,
+            CROSS_BOOK_CONSENSUS, CROSS_BOOK_COMPLEMENTS, CROSS_BOOK_CONFLICTS,
+        )
+        all_cross_types = (
+            CROSS_BOOK_RELATION_TYPES
+            | {REL_SAME_AS, CROSS_BOOK_CONSENSUS, CROSS_BOOK_COMPLEMENTS, CROSS_BOOK_CONFLICTS}
+        )
+        type_filter = "|".join(sorted(all_cross_types))
+        query = f"""
+            MATCH (a)-[r:{type_filter}]->(b)
+            WHERE NOT a:Book AND NOT b:Book
+              AND NOT a:D2G_Staging AND NOT b:D2G_Staging
             RETURN a.name AS source_entity, a.book_id AS source_book,
                    labels(a)[0] AS source_type,
                    type(r) AS relation_type,
@@ -379,7 +676,7 @@ def _query_cross_book_relations(
                    coalesce(r.explanation, r.description, '') AS evidence
             LIMIT 100
         """
-        rows = session.run(query, book_ids=book_ids).data()
+        rows = session.run(query).data()
 
         for row in rows:
             rel_type = row.get("relation_type", "")

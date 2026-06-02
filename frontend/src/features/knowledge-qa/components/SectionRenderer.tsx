@@ -1,13 +1,60 @@
 import React, { useMemo } from 'react';
-import { Tag } from 'antd';
+import { Tag, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeSanitize from 'rehype-sanitize';
-import type { SectionOutput } from '../types';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import type { Citation, SectionOutput } from '../types';
 import { getDisplayContent } from '../utils/renderMarkdown';
 
 interface Props {
   section: SectionOutput;
+  /** 所有节的引用列表，用于在正文中显示引用来源书名 */
+  allCitations?: Citation[];
+}
+
+/** 缩写书名：超过 6 字取前 6 字 + … */
+function abbreviateBook(title: string): string {
+  return title.length > 6 ? title.slice(0, 6) + '…' : title;
+}
+
+/**
+ * 将正文中的 [C00X] 替换为带书名的内联引用标记。
+ *
+ * 渲染效果：C001《运动改变大脑》
+ * - 上标编号 + 灰色小字书名缩写
+ * - 整体可点击跳转到底部参考文献
+ * - hover 时显示完整书名
+ *
+ * 使用 HTML 标签（span + sup），由 rehype-sanitize 白名单放行。
+ */
+function linkifyCitations(
+  content: string,
+  citationBookMap: Map<string, string>,
+): string {
+  return content.replace(
+    /\[(C\d+)\]/g,
+    (_, id: string) => {
+      const book = citationBookMap.get(id);
+      if (book) {
+        const abbr = abbreviateBook(book);
+        // span.cite-inline 由自定义 a 组件渲染为带样式的引用标记
+        return `[<span class="cite-inline"><sup>${id}</sup>《${abbr}》</span>](#cite-${id})`;
+      }
+      return `[<sup>${id}</sup>](#cite-${id})`;
+    },
+  );
+}
+
+/** 构建 citation_id → book_title 映射 */
+function buildCitationBookMap(citations?: Citation[]): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!citations) return map;
+  for (const c of citations) {
+    if (c.citation_id && c.book_title) {
+      map.set(c.citation_id, c.book_title);
+    }
+  }
+  return map;
 }
 
 /** 节标题配置：序号标签 + 颜色 */
@@ -19,10 +66,25 @@ const SECTION_CONFIG: Record<number, { color: string }> = {
   5: { color: 'purple' },
 };
 
-export const SectionRenderer: React.FC<Props> = ({ section }) => {
+/** rehype-sanitize 白名单：放行 span[class]（引用标记需要） */
+const SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames || []), 'span', 'sup'],
+  attributes: {
+    ...defaultSchema.attributes,
+    span: ['className', 'title'],
+    sup: [],
+  },
+};
+
+export const SectionRenderer: React.FC<Props> = ({ section, allCitations }) => {
+  const citationBookMap = useMemo(
+    () => buildCitationBookMap(allCitations),
+    [allCitations],
+  );
   const displayContent = useMemo(
-    () => getDisplayContent(section),
-    [section],
+    () => linkifyCitations(getDisplayContent(section), citationBookMap),
+    [section, citationBookMap],
   );
 
   const config = SECTION_CONFIG[section.index] || { color: 'default' };
@@ -67,9 +129,58 @@ export const SectionRenderer: React.FC<Props> = ({ section }) => {
       <div style={{ paddingLeft: 4, lineHeight: 1.8 }}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeSanitize]}
+          rehypePlugins={[[rehypeSanitize, SANITIZE_SCHEMA]]}
           disallowedElements={['img', 'script']}
           components={{
+            a: ({ href, children }) => {
+              // 引用锚链接：#cite-C00X → 渲染为内联引用标记
+              if (href && href.startsWith('#cite-')) {
+                const citationId = href.replace('#cite-', '');
+                const bookTitle = citationBookMap.get(citationId);
+                const inner = (
+                  <a
+                    href={href}
+                    style={{
+                      color: 'inherit',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {children}
+                  </a>
+                );
+                // 有完整书名时加 hover tooltip
+                if (bookTitle) {
+                  return (
+                    <Tooltip title={bookTitle} placement="top">
+                      <span
+                        style={{
+                          display: 'inline',
+                          background: `${borderColor}12`,
+                          borderBottom: `1px dashed ${borderColor}`,
+                          padding: '1px 4px',
+                          borderRadius: 3,
+                          margin: '0 1px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {inner}
+                      </span>
+                    </Tooltip>
+                  );
+                }
+                return inner;
+              }
+              return <a href={href}>{children}</a>;
+            },
+            // 放行 linkifyCitations 注入的 <sup> 和 <span>
+            sup: ({ children }) => <sup style={{ color: borderColor, fontWeight: 600, fontSize: '0.75em' }}>{children}</sup>,
+            span: ({ className, children, ...rest }) => {
+              if (className === 'cite-inline') {
+                return <>{children}</>;
+              }
+              return <span {...(rest as React.HTMLAttributes<HTMLSpanElement>)} className={className}>{children}</span>;
+            },
             h2: ({ children }) => (
               <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 24, marginBottom: 12, color: '#262626', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
                 {children}

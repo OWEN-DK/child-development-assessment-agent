@@ -39,7 +39,9 @@ from src.utils.logger import logger
 
 # 项目根目录下的运动清单 JSON（由 xlsx 转换生成）
 _EXERCISE_JSON_PATH = get_exercise_json_path()
-# 模块级缓存：首次加载后缓存为 Markdown 字符串，进程重启后自动刷新
+# 模块级缓存：运动清单 JSON 原始数据（单次加载，多处消费）
+_exercise_json_cache: dict | None = None
+# 派生缓存：Markdown 字符串（从 _exercise_json_cache 生成）
 _exercise_context_cache: str | None = None
 
 
@@ -291,32 +293,73 @@ class KnowledgeQAService:
     # ===== 内部 =====
 
     @staticmethod
-    def _load_exercise_context() -> str:
-        """加载权威运动清单 JSON → Markdown，模块级缓存。
+    def _load_exercise_json() -> dict | None:
+        """加载运动清单 JSON 原始数据，模块级单次缓存。
+
         首次请求加载并缓存，后续请求命中缓存（零 IO）。
-        失败时退化为空字符串 + log warning，不阻塞流水线。
+        失败时返回 None + log warning，不阻塞流水线。
         """
-        global _exercise_context_cache
-        if _exercise_context_cache is not None:
-            return _exercise_context_cache
+        global _exercise_json_cache
+        if _exercise_json_cache is not None:
+            return _exercise_json_cache
 
         try:
             with open(_EXERCISE_JSON_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError:
-            logger.warning(f"运动清单 JSON 文件不存在: {_EXERCISE_JSON_PATH}，跳过运动约束")
-            _exercise_context_cache = ""
-            return ""
+            logger.error(f"运动清单 JSON 文件不存在: {_EXERCISE_JSON_PATH}，跳过运动约束")
+            _exercise_json_cache = {}
+            return None
         except Exception as e:
-            logger.warning(f"加载运动清单 JSON 失败: {e}，跳过运动约束")
+            logger.error(f"加载运动清单 JSON 失败: {e}，跳过运动约束")
+            _exercise_json_cache = {}
+            return None
+
+        # 完整性校验
+        exercises = data.get("exercises", [])
+        valid = [e for e in exercises if e.get("name") and e.get("id")]
+        if len(valid) < 50:
+            logger.error(f"运动清单异常: 仅 {len(valid)}/{len(exercises)} 项有效，跳过运动约束")
+            _exercise_json_cache = {}
+            return None
+
+        _exercise_json_cache = data
+        logger.info(
+            f"运动清单已加载: {len(exercises)} 项运动, "
+            f"{len(data.get('exercise_type_set', []))} 类型"
+        )
+        return data
+
+    @staticmethod
+    def _load_exercise_context() -> str:
+        """加载权威运动清单 JSON → Markdown，模块级缓存。"""
+        global _exercise_context_cache
+        if _exercise_context_cache is not None:
+            return _exercise_context_cache
+
+        data = KnowledgeQAService._load_exercise_json()
+        if data is None:
             _exercise_context_cache = ""
             return ""
 
         markdown = KnowledgeQAService._build_exercise_markdown(data)
         _exercise_context_cache = markdown
-        exercise_count = len(data.get("exercises", []))
-        logger.info(f"运动清单已加载: {exercise_count} 项运动, {len(markdown)} 字符")
         return markdown
+
+    @staticmethod
+    def _load_exercise_structured_data() -> dict:
+        """加载运动清单 JSON 的结构化数据（exercise_type_set + exercises）。
+
+        返回 {"exercise_type_set": [...], "exercises": [...]}。
+        S3 使用 exercise_type_set 构建类型选择表，S4 使用 exercises 按类型过滤运动子集。
+        """
+        data = KnowledgeQAService._load_exercise_json()
+        if data is None:
+            return {"exercise_type_set": [], "exercises": []}
+        return {
+            "exercise_type_set": data.get("exercise_type_set", []),
+            "exercises": data.get("exercises", []),
+        }
 
     @staticmethod
     def _build_exercise_markdown(data: dict) -> str:
@@ -454,10 +497,13 @@ class KnowledgeQAService:
         set_http_client(http_client)
 
         # 统一由 Graph 内 prefetch_context_node 处理知识上下文预取
+        exercise_structured = self._load_exercise_structured_data()
         initial_state = KnowledgeQAState(
             question=question,
             matched_book_ids=book_ids,
             exercise_context=self._load_exercise_context(),
+            exercise_type_set=exercise_structured["exercise_type_set"],
+            exercise_list=exercise_structured["exercises"],
         )
 
         start_time = time.monotonic()

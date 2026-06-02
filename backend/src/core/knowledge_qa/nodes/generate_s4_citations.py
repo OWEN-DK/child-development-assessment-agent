@@ -54,6 +54,34 @@ class S4CitationsResponse(BaseModel):
         return _parse_list(v)
 
 
+def _backfill_exercise_citations(s4_section: "SectionOutput", citations: list[dict]):
+    """将节级 citations 映射回 structured_data 中每个 exercise 的 citation_ids。
+
+    S4 的 structured_data 含 phases → weeks → days → main_exercises，
+    每个 exercise 有 name 字段。将 citations 中 excerpt 匹配运动名的引用 ID 回填。
+    """
+    sd = s4_section.structured_data or {}
+
+    for phase in sd.get("phases", []):
+        for week in phase.get("weeks", []):
+            for day in week.get("days", []):
+                for ex in day.get("main_exercises", []):
+                    ex_name = ex.get("name", "")
+                    if not ex_name:
+                        continue
+                    # 归一化运动名：取第一段（去掉括号说明和斜杠别名）
+                    # "弹跳训练/跳跃（模仿羚羊/袋鼠肌腱弹簧）" → "弹跳训练"
+                    ex_name_clean = re.split(r"[（/]", ex_name)[0]
+                    matched_ids = []
+                    for c in citations:
+                        excerpt = c.get("excerpt", "")
+                        if (ex_name_clean in excerpt or
+                            ex_name in excerpt or
+                            any(kw in excerpt for kw in ex_name_clean.split() if len(kw) >= 2)):
+                            matched_ids.append(c.get("citation_id", ""))
+                    ex["citation_ids"] = [cid for cid in matched_ids if cid]
+
+
 async def generate_s4_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
     """为 S4 独立生成引用。
 
@@ -194,6 +222,9 @@ async def generate_s4_citations_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 c["citation_id"] = f"C{i+1:03d}"
 
         logger.info(f"S4 引用生成完成: {len(new_citations)} 条")
+
+        # 回填 exercise citation_ids
+        _backfill_exercise_citations(s4, new_citations)
 
         # 合并回 S4
         sections = dict(state.sections)

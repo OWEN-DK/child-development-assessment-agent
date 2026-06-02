@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Alert, Button, Space, Tabs, Typography } from 'antd';
 import {
   CodeOutlined,
@@ -21,6 +21,12 @@ interface Props {
 export const ReportViewer: React.FC<Props> = ({ result }) => {
   const { viewMode, setViewMode } = useKnowledgeQAStore();
   const { downloadMarkdown, downloadJSON } = useReportDownload(result);
+
+  /** 所有节的引用扁平列表，传给 SectionRenderer 做 tooltip 和 CitationsList 做展示 */
+  const allCitations = useMemo(
+    () => result.sections.flatMap((s) => s.citations),
+    [result.sections],
+  );
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -121,10 +127,12 @@ export const ReportViewer: React.FC<Props> = ({ result }) => {
           {viewMode === 'markdown' ? (
             <div>
               {result.sections.map((sec) => (
-                <SectionRenderer key={sec.index} section={sec} />
+                <SectionRenderer key={sec.index} section={sec} allCitations={allCitations} />
               ))}
               <CitationsList
-                citations={result.sections.flatMap((s) => s.citations)}
+                citations={result.sections.flatMap((s) =>
+                  s.citations.map((c) => ({ ...c, _section_index: s.index })),
+                )}
               />
             </div>
           ) : (

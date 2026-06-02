@@ -1,94 +1,94 @@
 import React, { useRef, useEffect } from 'react';
-import { Card, Steps, Typography } from 'antd';
+import { Card, Steps } from 'antd';
 import { useKnowledgeQAStore } from '../stores/knowledgeQAStore';
 
-const { Paragraph } = Typography;
 
+// ── 用户可感知的关键步骤（精简版）──
+const MAIN_STEPS = [
+  { key: 'started',           label: '分析问题' },
+  { key: 'books_matched',     label: '匹配书籍' },
+  { key: 'build_bundle_done', label: '检索知识' },
+  { key: 'section_1_done',    label: '分析孩子状态' },
+  { key: 'section_2_done',    label: '识别问题' },
+  { key: 'section_3_done',    label: '推荐运动类型' },
+  { key: 'section_4_done',    label: '制定运动方案' },
+  { key: 'section_5_done',    label: '总结建议' },
+  { key: 'completed',         label: '完成' },
+];
+
+const MAIN_STEP_KEYS = MAIN_STEPS.map(s => s.key);
+
+// ── 所有步骤的中文化标签（含中间步骤）──
 const STEP_LABELS: Record<string, string> = {
   _connected: '已连接',
   started: '分析问题意图',
-  prefetch_context: '预取知识上下文',
-  section_1_generating: '正在生成第 1 节',
-  section_2_generating: '正在生成第 2 节',
-  section_3_generating: '正在生成第 3 节',
-  section_4_outline: '正在生成方案大纲',
-  section_4_expand: '正在展开运动方案',
-  section_5_generating: '正在生成最终结论',
-  verify_citations: '正在核验引用依据',
   books_matched: '匹配参考书籍',
-  section_1_done: '第 1 节：孩子状态分析',
-  section_2_done: '第 2 节：问题识别',
-  section_3_done: '第 3 节：运动类型推荐',
-  section_4_outline_done: '第 4 节：方案大纲',
-  section_4_done: '第 4 节：运动方案',
-  section_5_done: '第 5 节：最终结论',
-  verify_citations_done: '核验引用依据',
+  prefetch_context: '预取知识上下文',
+  build_bundle: '统一检索知识',
+  build_bundle_done: '知识检索完成',
+  build_bundle_failed: '检索降级',
+  fast_knowledge_match: '匹配自定义知识',
+  query_analysis: '分析问题意图',
+  section_1_generating: '分析孩子状态',
+  section_1_done: '孩子状态分析',
+  section_2_generating: '识别问题',
+  section_2_done: '问题识别',
+  section_3_generating: '推荐运动类型',
+  section_3_done: '运动类型推荐',
+  s3_citations: '生成运动引用',
+  s3_citations_done: '运动引用完成',
+  section_4_outline: '生成方案大纲',
+  section_4_expand: '展开运动方案',
+  section_4_done: '运动方案',
+  s4_citations: '生成方案引用',
+  s4_citations_done: '方案引用完成',
+  synthesis_done: '知识综合',
+  section_5_done: '总结建议',
+  verify_citations: '核验引用依据',
+  verify_citations_done: '核验完成',
   completed: '完成',
-};
-
-const MAIN_STEPS = [
-  'started',
-  'books_matched',
-  'prefetch_context',
-  'section_1_done',
-  'section_2_done',
-  'section_3_done',
-  'section_4_outline_done',
-  'section_4_done',
-  'section_5_done',
-  'verify_citations_done',
-  'completed',
-];
-
-const SECTION_TITLES: Record<number, string> = {
-  1: '第 1 节：孩子状态分析',
-  2: '第 2 节：问题识别',
-  3: '第 3 节：运动类型推荐',
-  4: '第 4 节：运动方案',
-  5: '第 5 节：最终结论',
 };
 
 export const ProgressPanel: React.FC = () => {
   const progress = useKnowledgeQAStore((s) => s.progress);
-  const completedSections = useKnowledgeQAStore((s) => s.completedSections);
 
   const currentStep = progress?.step;
-  const currentStepIndex = currentStep ? MAIN_STEPS.indexOf(currentStep) : -1;
 
-  // 使用 ref 跟踪最后一个有效步骤索引。
-  // 后端会发出大量中间进度事件（searching/search_done/section_N_generating 等），
-  // 这些事件不在 MAIN_STEPS 中，如果直接回退到 0，进度条会反复跳回"分析问题意图"，
-  // 给用户造成卡死的错觉。
-  // 这里只在 currentStep 命中 MAIN_STEPS 时更新 ref；未命中时保持上一个有效值，
-  // 确保进度条单调前进。
+  // 找到当前步骤在 MAIN_STEPS 中的位置
+  const currentMainIndex = currentStep
+    ? MAIN_STEP_KEYS.indexOf(currentStep)
+    : -1;
+
+  // 用 ref 跟踪最后一个有效主步骤索引
   const lastValidIndexRef = useRef<number>(0);
 
   useEffect(() => {
-    if (currentStepIndex >= 0) {
-      lastValidIndexRef.current = currentStepIndex;
+    if (currentMainIndex >= 0) {
+      lastValidIndexRef.current = currentMainIndex;
     }
-  }, [currentStepIndex]);
+  }, [currentMainIndex]);
 
   const current = lastValidIndexRef.current;
 
-  const items = MAIN_STEPS.map((key, idx) => {
-    const isCurrent = key === currentStep;
-    // 当 progress.step 不在 MAIN_STEPS 中时，高亮当前有效步骤而不是一直指向 idx=0
-    const isGhostCurrent = !isCurrent
-      && currentStep
-      && !MAIN_STEPS.includes(currentStep)
-      && idx === current;
+  // 判断当前步骤是否是主步骤
+  const isMainStep = currentMainIndex >= 0;
+
+  // 中间步骤的消息显示
+  const displayMessage = isMainStep
+    ? (progress?.message || '')
+    : (progress?.message || STEP_LABELS[currentStep || ''] || '');
+
+  const items = MAIN_STEPS.map((step, idx) => {
+    const isCurrent = step.key === currentStep;
+    const isGhostCurrent = !isMainStep && idx === current && currentStep;
 
     return {
-      title: STEP_LABELS[key] || key,
-      description:
-        !progress
-          ? idx === 0
-            ? '正在连接…'
-            : undefined
-          : isCurrent || isGhostCurrent
-            ? (progress.message)
-            : undefined,
+      title: step.label,
+      description: !progress
+        ? idx === 0 ? '正在连接…' : undefined
+        : isCurrent || isGhostCurrent
+          ? displayMessage
+          : undefined,
       status: !progress
         ? undefined
         : isCurrent
@@ -105,27 +105,6 @@ export const ProgressPanel: React.FC = () => {
         current={current}
         items={items}
       />
-
-      {/* 流式过程中增量渲染已完成节内容预览 */}
-      {completedSections.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          {completedSections.map((sec) => (
-            <Card
-              key={sec.index}
-              size="small"
-              type="inner"
-              title={sec.title || SECTION_TITLES[sec.index] || `第 ${sec.index} 节`}
-              style={{ marginBottom: 8 }}
-            >
-              <Paragraph
-                ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
-              >
-                {sec.content}
-              </Paragraph>
-            </Card>
-          ))}
-        </div>
-      )}
     </Card>
   );
 };
