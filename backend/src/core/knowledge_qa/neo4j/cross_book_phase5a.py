@@ -1252,6 +1252,7 @@ class CrossBookPhase5a:
     def _save_to_redis(self, result: CrossBookAnalysisResult) -> None:
         try:
             import redis
+            from src.config.modules.redis import get_sync_redis
             r = get_sync_redis()
             key = f"d2g:cross_analysis:{result.book_id}"
             data = {

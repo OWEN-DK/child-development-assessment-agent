@@ -188,6 +188,7 @@ class CrossBookCleanup:
         """清理 Redis 中的跨书数据。"""
         try:
             import redis
+            from src.config.modules.redis import get_sync_redis
             r = get_sync_redis()
 
             # 删除所有相关的 key

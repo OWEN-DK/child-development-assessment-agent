@@ -549,6 +549,7 @@ class CrossBookResolver:
         """将消歧结果持久化到 Redis（支持审计）。"""
         try:
             import redis
+            from src.config.modules.redis import get_sync_redis
             r = get_sync_redis()
             key = f"d2g:cross_disambig:{outcome.book_id}"
             r.setex(key, 86400 * 7, json.dumps({

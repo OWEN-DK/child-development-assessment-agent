@@ -377,6 +377,7 @@ class CrossBookPhase5b:
         """从 Redis 加载 Phase 5a 分析结果。"""
         try:
             import redis
+            from src.config.modules.redis import get_sync_redis
             r = get_sync_redis()
             key = f"d2g:cross_analysis:{book_id}"
             data = r.get(key)
@@ -411,6 +412,7 @@ class CrossBookPhase5b:
         """清理 Redis 缓存。"""
         try:
             import redis
+            from src.config.modules.redis import get_sync_redis
             r = get_sync_redis()
             r.delete(f"d2g:cross_analysis:{book_id}")
             r.delete(f"d2g:cross_decisions:{book_id}")

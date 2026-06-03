@@ -300,7 +300,7 @@ class TaskStateService:
                 return success
 
             # 降级到内存缓存
-            return self._update_memory(task_id, updates)
+            return self._update_memory(task_id, updates, task_type)
         except Exception as e:
             logger.error(f"Redis update failed for task {task_id}: {e}")
 
@@ -310,7 +310,7 @@ class TaskStateService:
                 return False
 
             self._redis_available = False
-            return self._update_memory(task_id, updates)
+            return self._update_memory(task_id, updates, task_type)
 
     async def get(self, task_id: str, task_type: str) -> Optional[TaskState]:
         """获取任务状态"""
@@ -336,28 +336,38 @@ class TaskStateService:
         return None
 
     async def delete(self, task_id: str, task_type: str) -> bool:
-        """删除任务状态（同时从活跃任务索引中移除）"""
-        key = self._build_key(task_id, task_type)
-        active_set_key = self._build_active_set_key(task_type)
-        
+        """删除任务状态（同时从活跃任务索引和内存缓存中移除）"""
+        # 始终清理内存缓存
+        self._memory_cache.pop(task_id, None)
+        self._cache_ttl.pop(task_id, None)
+        key = f"{task_type}:{task_id}"
+        self._cancellation_signals.pop(key, None)
+
         try:
-            await self.redis_client.delete(key)
+            redis_key = self._build_key(task_id, task_type)
+            active_set_key = self._build_active_set_key(task_type)
+            await self.redis_client.delete(redis_key)
             await self.redis_client.srem(active_set_key, task_id)
-            key = f"{task_type}:{task_id}"
-            self._cancellation_signals.pop(key, None)
             return True
         except Exception as e:
-            logger.error(f"Failed to delete task {task_id}: {e}")
+            logger.error(f"Failed to delete task {task_id} from Redis: {e}")
+            # Redis 失败但内存已清理，仍返回 True（单实例场景下内存是 source of truth）
+            if self.fallback_to_memory:
+                return True
             return False
 
     async def list_active(self, task_type: Optional[str] = None) -> list[TaskState]:
         """列出所有活跃任务（非终态）
         
-        使用 Redis Set 索引，避免 scan_iter 全量扫描
+        使用 Redis Set 索引，避免 scan_iter 全量扫描。
+        Redis 不可用时从内存缓存兜底。
         """
         result = []
         
         try:
+            if not self._redis_available:
+                raise RuntimeError("Redis unavailable, using memory fallback")
+
             if task_type:
                 keys = [self._build_active_set_key(task_type)]
             else:
@@ -374,15 +384,24 @@ class TaskStateService:
                     if state and state.is_active:
                         result.append(state)
         except Exception as e:
-            logger.error(f"Failed to list active tasks: {e}")
+            logger.warning(f"Redis list_active failed, falling back to memory: {e}")
+            self._redis_available = False
+            now = time.time()
+            for tid, state in self._memory_cache.items():
+                if now > self._cache_ttl.get(tid, 0):
+                    continue
+                if task_type and state.task_type != task_type:
+                    continue
+                if state.is_active:
+                    result.append(state)
         
         return result
 
     async def list_recent(self, task_type: Optional[str] = None, limit: int = 50) -> list[TaskState]:
         """列出最近的任务（包括活跃任务和最近的终态任务）
         
-        使用 scan_iter 扫描所有任务，按 created_at 倒序排列
-        适用于前端刷新后恢复任务列表
+        使用 scan_iter 扫描所有任务，按 created_at 倒序排列。
+        Redis 不可用时从内存缓存兜底。
         
         Args:
             task_type: 任务类型过滤（可选）
@@ -391,6 +410,9 @@ class TaskStateService:
         result = []
         
         try:
+            if not self._redis_available:
+                raise RuntimeError("Redis unavailable, using memory fallback")
+
             pattern = f"task:{task_type}:*" if task_type else "task:*"
             
             # 扫描所有任务 Key
@@ -418,15 +440,22 @@ class TaskStateService:
                     logger.warning(f"Failed to parse task from {key}: {e}")
                     continue
             
-            # 按 created_at 倒序排列
-            result.sort(key=lambda x: x.created_at, reverse=True)
-            
-            # 限制返回数量
-            return result[:limit]
-            
         except Exception as e:
-            logger.error(f"Failed to list recent tasks: {e}")
-            return []
+            logger.warning(f"Redis list_recent failed, falling back to memory: {e}")
+            self._redis_available = False
+            now = time.time()
+            for tid, state in self._memory_cache.items():
+                if now > self._cache_ttl.get(tid, 0):
+                    continue
+                if task_type and state.task_type != task_type:
+                    continue
+                result.append(state)
+
+        # 按 created_at 倒序排列
+        result.sort(key=lambda x: x.created_at, reverse=True)
+        
+        # 限制返回数量
+        return result[:limit]
 
     async def cancel(self, task_id: str, task_type: str) -> bool:
         """取消任务
@@ -472,10 +501,10 @@ class TaskStateService:
 
     # ==================== 内存兜底方法 ====================
 
-    def _update_memory(self, task_id: str, updates: dict[str, Any]) -> bool:
+    def _update_memory(self, task_id: str, updates: dict[str, Any], task_type: str = "memory_fallback") -> bool:
         """内存缓存兜底（仅单实例部署）"""
         if task_id not in self._memory_cache:
-            fallback_state = TaskState.create(task_id=task_id, task_type="memory_fallback")
+            fallback_state = TaskState.create(task_id=task_id, task_type=task_type)
             self._memory_cache[task_id] = fallback_state
             self._cache_ttl[task_id] = time.time() + 300
         

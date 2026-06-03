@@ -176,57 +176,87 @@ export const useCurationStore = create<CurationState>((set, get) => ({
   generateChapters: [],
   generatePhase: '',
   generatePhaseLabel: '',
-  /** 内部：建立 SSE 连接，绑定消息/错误处理 */
+  /** 内部：建立 SSE 连接，绑定消息/错误处理（含自动重连） */
   _connectSSE: (bookId: string, onNotFound?: () => void) => {
-    const url = curationApi.getGenerationProgressUrl(bookId);
-    const eventSource = new EventSource(url);
+    const MAX_RETRIES = 5;
+    const BASE_DELAY = 1000; // 1 秒起步
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let eventSource: EventSource | null = null;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        // 如果后端返回未找到，执行回调（用于判断是否需要启动生成）
-        if (data.status === 'not_found') {
-          eventSource.close();
-          onNotFound?.();
-          return;
-        }
-        const updates: any = { generating: true };
-        if (data.progress !== undefined) updates.generateProgress = data.progress;
-        if (data.book_title) updates.generateBookTitle = data.book_title;
-        if (data.chapters && Array.isArray(data.chapters)) updates.generateChapters = data.chapters;
-        if (data.phase !== undefined) updates.generatePhase = data.phase;
-        if (data.phase_label !== undefined) updates.generatePhaseLabel = data.phase_label;
-        if (data.status === 'generating') {
-          updates.generateStatus = 'generating';
-        }
-        if (data.status === 'completed') {
-          updates.generateStatus = 'completed';
-          updates.generating = false;
-          updates.generateProgress = 100;
-          eventSource.close();
-          get().loadDraft(bookId);
-        }
-        if (data.status === 'failed') {
-          updates.generateStatus = 'failed';
-          updates.generateError = data.error || '生成失败';
-          updates.generating = false;
-          eventSource.close();
-        }
-        set(updates);
-      } catch { /* ignore */ }
+    const cleanup = () => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      if (eventSource) { eventSource.close(); eventSource = null; }
     };
 
-    eventSource.onerror = () => {
-      eventSource.close();
-      if (get().generating) {
+    const connect = () => {
+      const url = curationApi.getGenerationProgressUrl(bookId);
+      eventSource = new EventSource(url);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // 重连成功，重置计数
+          retryCount = 0;
+          // 如果后端返回未找到，执行回调（用于判断是否需要启动生成）
+          if (data.status === 'not_found') {
+            cleanup();
+            onNotFound?.();
+            return;
+          }
+          const updates: any = { generating: true };
+          if (data.progress !== undefined) updates.generateProgress = data.progress;
+          if (data.book_title) updates.generateBookTitle = data.book_title;
+          if (data.chapters && Array.isArray(data.chapters)) updates.generateChapters = data.chapters;
+          if (data.phase !== undefined) updates.generatePhase = data.phase;
+          if (data.phase_label !== undefined) updates.generatePhaseLabel = data.phase_label;
+          if (data.status === 'generating') {
+            updates.generateStatus = 'generating';
+          }
+          if (data.status === 'completed') {
+            updates.generateStatus = 'completed';
+            updates.generating = false;
+            updates.generateProgress = 100;
+            cleanup();
+            get().loadDraft(bookId);
+          }
+          if (data.status === 'failed') {
+            updates.generateStatus = 'failed';
+            updates.generateError = data.error || '生成失败';
+            updates.generating = false;
+            cleanup();
+          }
+          set(updates);
+        } catch { /* ignore */ }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) eventSource.close();
+        eventSource = null;
+
+        if (!get().generating) return;
+
         const { generateProgress } = get();
         if (generateProgress >= 100) {
           set({ generateStatus: 'completed', generating: false });
+          return;
+        }
+
+        // 指数退避重连
+        retryCount += 1;
+        if (retryCount <= MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount - 1);
+          set({ generatePhaseLabel: `连接中断，${Math.round(delay / 1000)}秒后重连 (${retryCount}/${MAX_RETRIES})` });
+          retryTimer = setTimeout(() => {
+            if (get().generating) connect();
+          }, delay);
         } else {
           set({ generateStatus: 'failed', generateError: 'SSE 连接中断，生成可能未完成', generating: false });
         }
-      }
+      };
     };
+
+    connect();
   },
 
   /** 页面挂载时恢复已有任务的 SSE 连接（不清空已有进度） */

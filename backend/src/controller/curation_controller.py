@@ -238,6 +238,7 @@ async def _cascade_cleanup_stale_cross_refs(
             # 清理 Redis 缓存
             try:
                 import redis as _redis
+                from src.config.modules.redis import get_sync_redis as _get_sync_redis
                 r = _get_sync_redis()
                 for key in [
                     f"d2g:cross_analysis:{other.book_id}",
@@ -2017,6 +2018,7 @@ class CurationController:
             # 尝试从 Redis 读取（备选）
             try:
                 import redis
+                from src.config.modules.redis import get_sync_redis
                 r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 data = r.get(key)
@@ -2079,6 +2081,7 @@ class CurationController:
             # 可选：同步到 Redis 缓存
             try:
                 import redis
+                from src.config.modules.redis import get_sync_redis
                 r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
@@ -2136,6 +2139,7 @@ class CurationController:
             # 可选：同步到 Redis 缓存
             try:
                 import redis
+                from src.config.modules.redis import get_sync_redis
                 r = get_sync_redis()
                 key = f"d2g:cross_analysis:{book_id}"
                 r.setex(key, 86400 * 30, json.dumps(result, ensure_ascii=False))
