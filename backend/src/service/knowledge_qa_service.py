@@ -455,7 +455,47 @@ class KnowledgeQAService:
             "matched_books": [],
         }
 
+        # step → 进度百分比映射
+        _STEP_PROGRESS = {
+            "started": 2,
+            "books_matched": 8,
+            "fast_knowledge_match": 10,
+            "fast_match_hit": 12,
+            "fast_match_miss": 12,
+            "prefetch_context": 14,
+            "prefetch_context_done": 16,
+            "section_1_generating": 18,
+            "section_1_done": 22,
+            "s1_citations": 24,
+            "s1_citations_done": 26,
+            "section_2_generating": 28,
+            "section_2_done": 32,
+            "s2_citations": 34,
+            "s2_citations_done": 36,
+            "build_bundle": 38,
+            "build_bundle_done": 42,
+            "section_3_generating": 44,
+            "section_3_done": 50,
+            "s3_citations": 52,
+            "s3_citations_done": 54,
+            "section_4_outline": 56,
+            "section_4_expanding": 58,
+            "section_4_assembling": 62,
+            "section_4_done": 68,
+            "s4_citations": 70,
+            "s4_citations_done": 72,
+            "knowledge_synthesis": 74,
+            "section_5_generating": 76,
+            "section_5_done": 80,
+            "s5_citations": 82,
+            "s5_citations_done": 84,
+            "verify_citations": 86,
+            "verify_citations_done": 90,
+            "completed": 100,
+        }
+
         async def push(step: str, message: str, **meta):
+            progress = _STEP_PROGRESS.get(step, 0)
             if stream:
                 await TaskSsePublisher.publish(
                     task_type=task_type,
@@ -465,6 +505,9 @@ class KnowledgeQAService:
                         "status": "running",
                         "step": step,
                         "message": message,
+                        "progress": progress,
+                        "phase": step,
+                        "phase_label": message,
                         "metadata": meta,
                     },
                 )

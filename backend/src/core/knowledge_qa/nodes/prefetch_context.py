@@ -79,7 +79,7 @@ async def _do_prefetch(question: str, book_ids: list[str], custom_entities: list
                 enhanced_q = question + " " + " ".join(custom_entities[:5])
             hits = await explore_community_tree(
                 question=enhanced_q,
-                root_id=root.node_id,
+                root_id=root.get("node_id") or root.get("id"),
                 community_repo=community_repo,
                 max_tokens=24000,  # 2× 默认值，更深遍历以覆盖更多关联实体
             )
@@ -89,7 +89,7 @@ async def _do_prefetch(question: str, book_ids: list[str], custom_entities: list
     for root in global_roots:
         hits = await explore_community_tree(
             question=question,
-            root_id=root.node_id,
+            root_id=root.get("node_id") or root.get("id"),
             community_repo=community_repo,
         )
         all_hits.extend(hits)

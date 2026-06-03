@@ -78,9 +78,6 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 extract_for_section, build_priority_context,
             )
             section_passages = extract_for_section(bundle, 3, s3_query)
-            if not section_passages:
-                logger.warning("S3 Bundle passages 为空，跳过 LLM 调用")
-                return await _build_empty_search_fallback(state, 3, "运动类型推荐")
             search_context = build_priority_context(
                 bundle=bundle,
                 section_passages=section_passages,
@@ -88,7 +85,10 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
                 custom_knowledge_context=getattr(state, "custom_knowledge_context", "") or "",
                 knowledge_context=getattr(state, "knowledge_context", "") or "",
             )
-            logger.info("S3 Bundle 模式: %d passages", len(section_passages))
+            if section_passages:
+                logger.info("S3 Bundle 模式: %d passages", len(section_passages))
+            else:
+                logger.warning("S3 Bundle passages 为空，继续使用 S1/S2 内容 + 运动清单生成")
         else:
             search_results = await _direct_search(
                 s3_query, state.matched_book_ids, state=state
@@ -97,8 +97,8 @@ async def recommend_types_node(state: KnowledgeQAState) -> Dict[str, Any]:
             logger.info(f"S3 _direct_search: {len(search_results)} 条")
 
             if not search_results:
-                logger.warning("S3 知识库无搜索结果，跳过 LLM 调用")
-                return await _build_empty_search_fallback(state, 3, "运动类型推荐")
+                logger.warning("S3 知识库无搜索结果，继续使用 S1/S2 内容 + 运动清单生成")
+                search_context = "（知识库无直接检索结果，请基于前序分析和运动清单生成推荐）"
 
         # Step 2: 构建 prompt + full_message
         prompt = await _get_prompt_pair("section_3")

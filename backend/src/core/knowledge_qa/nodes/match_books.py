@@ -136,7 +136,7 @@ def _apply_source_quota(
     return in_quota + over_quota
 
 
-async def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
+def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
     """从搜索结果中提取候选书籍信息（去重，书名规范化去扩展名）。"""
     import re as _re
 
@@ -165,6 +165,54 @@ async def _extract_candidate_books(search_results: List[Dict]) -> List[Dict]:
     return list(seen.values())
 
 
+
+
+
+async def _fetch_all_indexed_books() -> List[Dict]:
+    """从数据库获取所有已索引的书籍，确保候选池覆盖全部书目。
+
+    查询 DocumentRecord 表中 status='indexed' 的记录，
+    返回与 _extract_candidate_books 相同格式的候选列表。
+    """
+    try:
+        from src.core.database import async_session_factory
+        from src.models.document import DocumentRecord, ImportStatus
+        from sqlalchemy import select
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(
+                    DocumentRecord.file_name,
+                    DocumentRecord.file_hash,
+                    DocumentRecord.id,
+                ).where(
+                    DocumentRecord.status == ImportStatus.INDEXED
+                )
+            )
+            rows = result.all()
+
+        books = []
+        for row in rows:
+            raw_name = row.file_name or ""
+            # 规范化: trim + 去文件扩展名
+            clean_name = raw_name.strip()
+            for ext in (".epub", ".pdf", ".txt", ".md", ".docx", ".html", ".mobi"):
+                if clean_name.lower().endswith(ext):
+                    clean_name = clean_name[:-len(ext)].strip()
+                    break
+            if clean_name:
+                books.append({
+                    "source_book": clean_name,
+                    "_raw_source_book": raw_name.strip(),
+                    "file_hash": row.file_hash or "",
+                    "chapters": [],
+                })
+
+        logger.info(f"_fetch_all_indexed_books: 获取到 {len(books)} 本已索引书籍")
+        return books
+    except Exception as e:
+        logger.warning(f"_fetch_all_indexed_books 失败: {e}")
+        return []
 
 
 def _extract_child_profile(question: str) -> dict:
@@ -396,11 +444,11 @@ async def _analyze_and_search_books(question: str) -> List[Dict]:
         base_url=f"http://{host}:{port}",
         timeout=httpx.Timeout(10.0),
     ) as client:
-        for query in queries[:6]:
+        for query in queries[:10]:
             try:
                 resp = await client.get(
                     "/rag/search",
-                    params={"query": query, "limit": 15},
+                    params={"query": query, "limit": 25},
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -416,7 +464,7 @@ async def _analyze_and_search_books(question: str) -> List[Dict]:
                     seen_ids.add(rid)
                     all_results.append(r)
 
-            if len(all_results) >= 25:
+            if len(all_results) >= 50:
                 break
 
     return all_results, analysis
@@ -445,17 +493,19 @@ async def _llm_match_books(question: str, candidates: List[Dict]) -> List[Matche
 候选书籍：
 {candidate_text}
 
-评估规则（宽松匹配）：
-- 只要书籍主题与问题的任一方面相关，就应纳入
+评估规则（最大化包容）：
+- 只要书籍主题与问题的任一方面存在关联，就应纳入
 - 不要求完全匹配，只要有部分相关性即可
-- 例如：问题关于"注意力"，书籍涉及"学习方法""运动""心理"都算相关
-- 每本书都应被评估，不要轻易排除
+- 儿童教育、学习方法、运动、心理、认知发展、情绪调节、家庭教养等领域的书籍都与儿童发展问题相关
+- 例如：问题关于"注意力不集中+体重超标"，涉及"运动""学习""思考""天赋""教养""行为"的书籍都算相关
+- 每本候选书籍都应被评估，优先纳入而非排除
+- 目标是返回所有候选书籍，仅排除确实完全无关的
 
-返回所有有一定关联的书籍，按匹配度排序。每本书包含：
+返回所有相关书籍，按匹配度排序。每本书包含：
 - book_id: 使用候选书籍中显示的 book_id 值
 - title: 根据 book_id 推断书名（去掉文件扩展名）
 - match_reason: 一句话匹配理由
-- 如果候选书籍确实都不相关，才返回空数组"""
+- 尽量返回所有候选书籍，最大化引用多样性"""
 
     model = LLMServiceFactoryCompat.create_raw(
         model_name="qwen3.5-27b",
@@ -580,28 +630,47 @@ async def match_books_node(state: KnowledgeQAState) -> Dict[str, Any]:
         # Step 2: 从搜索结果中提取候选书籍
         # 来源配额：防止单一书籍垄断搜索结果
         search_results = _apply_source_quota(search_results)
-        candidates = await _extract_candidate_books(search_results)
-        logger.info(f"match_books 候选书籍: {[c['source_book'] for c in candidates]}")
+        candidates = _extract_candidate_books(search_results)
+        logger.info(f"match_books 搜索命中候选书籍: {[c['source_book'] for c in candidates]}")
+
+        # Step 2b: 获取所有已索引书籍，合并到候选池（确保书目全覆盖）
+        all_indexed = await _fetch_all_indexed_books()
+        existing_names = {c["source_book"] for c in candidates}
+        missing_books = [b for b in all_indexed if b["source_book"] not in existing_names]
+        if missing_books:
+            logger.info(
+                f"补充 {len(missing_books)} 本未被搜索命中的已索引书籍: "
+                f"{[b['source_book'] for b in missing_books]}"
+            )
+            candidates.extend(missing_books)
 
         if not candidates:
             raise NoMatchingBooksError()
 
+        logger.info(f"match_books 最终候选书籍 ({len(candidates)} 本): {[c['source_book'] for c in candidates]}")
+
         # Step 3: 使用 27B LLM 做匹配评估（单次调用，无工具）
         matched_items = await _llm_match_books(state.question, candidates)
 
-        # Step 4: 确保足够多的书籍被匹配（至少 2 本，以增加引用多样性）
-        if len(matched_items) < 2 and len(candidates) >= 2:
-            logger.info(f"LLM 仅匹配 {len(matched_items)} 本，补充候选书籍以确保多样性")
-            existing_ids = {m.book_id for m in matched_items}
-            for c in candidates:
+        # Step 4: 确保所有候选书籍都被包含（最大化引用多样性）
+        # LLM 匹配的书籍排在前面（有具体匹配理由），未被 LLM 选中的追加到后面
+        existing_ids = {m.book_id for m in matched_items}
+        unmatched_candidates = [
+            c for c in candidates if c["source_book"] not in existing_ids
+        ]
+        if unmatched_candidates:
+            logger.info(
+                f"LLM 匹配 {len(matched_items)} 本，补充 {len(unmatched_candidates)} "
+                f"本候选书籍以确保引用多样性"
+            )
+            for c in unmatched_candidates:
                 clean_name = c["source_book"]
-                if clean_name not in existing_ids:
-                    matched_items.append(MatchedBookItem(
-                        book_id=clean_name,
-                        title=clean_name,
-                        match_reason="综合匹配：该书籍内容与问题领域相关",
-                    ))
-                    existing_ids.add(clean_name)
+                matched_items.append(MatchedBookItem(
+                    book_id=clean_name,
+                    title=clean_name,
+                    match_reason="该书籍内容与儿童发展主题相关，可提供补充视角",
+                ))
+
         if not matched_items:
             logger.info("LLM 匹配返回空，降级为直接提取")
             for c in candidates:

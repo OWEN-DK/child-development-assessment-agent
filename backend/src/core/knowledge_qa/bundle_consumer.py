@@ -19,7 +19,7 @@ from src.core.knowledge_qa.bundle import (
 logger = logging.getLogger(__name__)
 
 # ── 各节 passage 配额 ──
-SECTION_QUOTAS = {1: 0.20, 2: 0.20, 3: 0.25, 4: 0.25, 5: 0.10}
+SECTION_QUOTAS = {1: 0.30, 2: 0.30, 3: 0.35, 4: 0.35, 5: 0.20}
 
 # ── 跨书关系类型的中文语义标签（用于 LLM prompt 渲染）──
 _CROSS_RELATION_LABELS: dict[str, str] = {
@@ -128,28 +128,30 @@ def extract_for_section(
         # 实体检索不足时，补入关键词检索结果
         if len(passages) < 15:
             kw_passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=20,
+                all_passages, section_query, top_k=30,
             )
             seen = {p.id for p in passages}
             for p in kw_passages:
                 if p.id not in seen:
                     passages.append(p)
                     seen.add(p.id)
+        passages = _enforce_section_book_diversity(passages, bundle)
         return passages
 
     elif section_index == 2:  # S2: 问题识别
         # 偏好：Neo4j Problem + RootCause 实体相关 passages
         problem_entities = bundle.neo4j_entities.get("Problem", [])
-        passages = _retrieve_by_entities(bundle, problem_entities, top_k=20)
+        passages = _retrieve_by_entities(bundle, problem_entities, top_k=30)
         if len(passages) < 12:
             kw_passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=20,
+                all_passages, section_query, top_k=30,
             )
             seen = {p.id for p in passages}
             for p in kw_passages:
                 if p.id not in seen:
                     passages.append(p)
                     seen.add(p.id)
+        passages = _enforce_section_book_diversity(passages, bundle)
         return passages
 
     elif section_index == 3:  # S3: 运动类型推荐
@@ -166,7 +168,7 @@ def extract_for_section(
             len(bundle.neo4j_entities.get("Strategy", [])),
             len(exercise_entities),
         )
-        passages = _retrieve_by_entities(bundle, exercise_entities, top_k=25)
+        passages = _retrieve_by_entities(bundle, exercise_entities, top_k=40)
         logger.info(
             "S3 实体检索: %d entities → %d passages",
             len(exercise_entities), len(passages),
@@ -174,7 +176,7 @@ def extract_for_section(
         if len(passages) < 15:
             before_kw = len(passages)
             kw_passages = _retrieve_by_keywords(
-                all_passages, section_query, top_k=25,
+                all_passages, section_query, top_k=40,
             )
             seen = {p.id for p in passages}
             for p in kw_passages:
@@ -187,26 +189,93 @@ def extract_for_section(
                 len(kw_passages), len(passages) - before_kw, len(passages),
             )
         if not passages:
+            # 兜底：实体+关键词都为空时，返回全量 passages（按 score 排序）
             logger.warning(
                 "S3 检索结果为空! entities=%d, passages总量=%d, "
-                "entity_names=%s, query='%s'",
+                "entity_names=%s, query='%s' — 降级为全量 passages",
                 len(exercise_entities), len(all_passages),
                 [e.name for e in exercise_entities[:5]],
                 (section_query or "")[:40],
             )
+            passages = _retrieve_all(bundle, top_k=40)
+            logger.info("S3 降级: 返回 %d 条全量 passages", len(passages))
+        passages = _enforce_section_book_diversity(passages, bundle)
         return passages
 
     elif section_index == 4:  # S4: 运动方案设计
         # 偏好：全部运动/方案相关实体 + 全文覆盖
-        passages = _retrieve_all(bundle, top_k=40)
+        passages = _retrieve_all(bundle, top_k=60)
+        passages = _enforce_section_book_diversity(passages, bundle)
         return passages
 
     elif section_index == 5:  # S5: 结论
         # 偏好：全部 + 跨书关系 + 冲突
-        passages = _retrieve_all(bundle, top_k=50)
+        passages = _retrieve_all(bundle, top_k=80)
+        passages = _enforce_section_book_diversity(passages, bundle)
         return passages
 
     return all_passages[:10]
+
+
+
+
+def _enforce_section_book_diversity(
+    passages: list[Passage],
+    bundle: "KnowledgeBundle",
+    min_per_book: int = 5,
+) -> list[Passage]:
+    """保证每本书在节级 passages 中至少有 min_per_book 条。
+
+    从 bundle.passages 全量中为不足的书按 score 补充，
+    同时对过多的书施加上限（每本不超过总数的 50%）。
+    """
+    if not passages or not bundle or not bundle.passages:
+        return passages
+
+    # 统计当前每本书 passage 数
+    book_counts: dict[str, int] = {}
+    passage_ids: set[str] = {p.id for p in passages}
+    for p in passages:
+        bid = p.book_id or ""
+        book_counts[bid] = book_counts.get(bid, 0) + 1
+
+    # 找出不足的书，从 bundle 全量中按 score 补充
+    under = {bid for bid, cnt in book_counts.items() if cnt < min_per_book}
+    if under:
+        # bundle.passages 已按 score 降序
+        for p in bundle.passages:
+            if not under:
+                break
+            bid = p.book_id or ""
+            if bid in under and p.id not in passage_ids:
+                passages.append(p)
+                passage_ids.add(p.id)
+                book_counts[bid] = book_counts.get(bid, 0) + 1
+                if book_counts[bid] >= min_per_book:
+                    under.discard(bid)
+        if under:
+            logger.info(
+                "节级 per-book 补充后仍有 %d 本不足 %d 条: %s",
+                len(under), min_per_book,
+                {bid: book_counts.get(bid, 0) for bid in under},
+            )
+
+    # 施加上限：每本不超过总数的 50%
+    total = len(passages)
+    max_per_book = max(int(total * 0.50), min_per_book)
+    in_quota: list[Passage] = []
+    over_quota: list[Passage] = []
+    quota_counts: dict[str, int] = {}
+    for p in passages:
+        bid = p.book_id or ""
+        cnt = quota_counts.get(bid, 0)
+        if cnt < max_per_book:
+            in_quota.append(p)
+            quota_counts[bid] = cnt + 1
+        else:
+            over_quota.append(p)
+
+    return in_quota + over_quota
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -283,7 +352,7 @@ def build_priority_context(
     # ── L3: LazyGraphRAG 知识上下文 ──
     if knowledge_context:
         parts.append("## 🔍 关联知识上下文")
-        parts.append(knowledge_context[:8000])  # 截断保护
+        parts.append(knowledge_context[:16000])  # 截断保护
         parts.append("")
 
     # ── 运动清单约束 ──
@@ -430,11 +499,42 @@ def _retrieve_by_keywords(
     query: str,
     top_k: int,
 ) -> list[Passage]:
-    """按关键词匹配提取 passages（纯文本分词匹配）。"""
+    """按关键词匹配提取 passages（中英文混合分词）。
+
+    中文不像英文按空格分词，所以除了按空格切分外，
+    还提取 2-4 字的中文子串作为关键词，提高召回率。
+    """
     if not query:
         return passages[:top_k]
 
-    keywords = [w.strip().lower() for w in query.split() if len(w.strip()) >= 2]
+    import re as _re
+
+    # 基础分词：按空格切分，过滤短词
+    raw_tokens = [w.strip().lower() for w in query.split() if len(w.strip()) >= 2]
+
+    # 中文子串提取：从每个 token 中提取 2-4 字的中文片段
+    keywords: list[str] = []
+    seen_kw: set[str] = set()
+    for token in raw_tokens:
+        if token not in seen_kw:
+            keywords.append(token)
+            seen_kw.add(token)
+        # 提取中文连续子串 (2-4 字)
+        cn_runs = _re.findall(r'[\u4e00-\u9fff]{2,}', token)
+        for run in cn_runs:
+            for n in (4, 3, 2):  # 优先长匹配
+                for i in range(len(run) - n + 1):
+                    sub = run[i:i+n]
+                    if sub not in seen_kw:
+                        keywords.append(sub)
+                        seen_kw.add(sub)
+
+    # 补充通用运动/教育领域高频词（如果 query 中未包含）
+    domain_hints = ['运动', '注意力', '学习', '教育', '心理', '认知', '情绪', '儿童']
+    for hint in domain_hints:
+        if hint in query and hint not in seen_kw:
+            keywords.append(hint)
+            seen_kw.add(hint)
 
     if not keywords:
         return passages[:top_k]
@@ -482,7 +582,7 @@ def _format_neo4j_for_section(
                 for e in entities[:8]:
                     line = f"- {e.name}"
                     if e.description:
-                        line += f": {e.description[:120]}"
+                        line += f": {e.description[:300]}"
                     if e.book_title:
                         line += f"（来源: 《{e.book_title}》）"
                     lines.append(line)
@@ -497,7 +597,7 @@ def _format_neo4j_for_section(
                 for e in entities[:10]:
                     line = f"- {e.name}"
                     if e.description:
-                        line += f": {e.description[:150]}"
+                        line += f": {e.description[:300]}"
                     if e.book_title:
                         line += f"（来源: 《{e.book_title}》）"
                     lines.append(line)
@@ -582,30 +682,57 @@ def _format_consensus_for_section(
     return "\n".join(lines) if lines else ""
 
 
-def _format_passages_text(passages: list[Passage]) -> str:
-    """格式化 Passage 列表为 LLM 可读文本。"""
+def _format_passages_text(passages: list[Passage], max_per_book: int = 10) -> str:
+    """格式化 Passage 列表为 LLM 可读文本。
+
+    使用 round-robin 交替展示不同书籍的 passages，
+    确保 LLM 均匀接触各书内容（而非先看完 A 书再看 B 书）。
+    每本书最多展示 max_per_book 条。
+    """
     if not passages:
         return ""
 
-    lines: list[str] = []
-    current_book = ""
-
+    # 按书分组 + 每书限数
+    by_book: dict[str, list[Passage]] = {}
     for p in passages:
-        # 书籍头
-        if p.book_title != current_book:
-            current_book = p.book_title
-            lines.append(f"\n### 📖 {current_book}")
+        bid = p.book_title or "未知"
+        if bid not in by_book:
+            by_book[bid] = []
+        if len(by_book[bid]) < max_per_book:
+            by_book[bid].append(p)
 
-        source_tag = ""
-        if p.source == "neo4j_source":
-            source_tag = " [图谱关联]"
-        elif p.neo4j_verified:
-            source_tag = " [图谱验证]"
+    # Round-robin 交替取 passage
+    lines: list[str] = []
+    book_names = list(by_book.keys())
+    indices = {name: 0 for name in book_names}
+    active = True
 
-        lines.append(
-            f"> **{p.chapter_title}**{source_tag}\n"
-            f"> {p.content[:500]}\n"
-        )
+    # 先输出每本书的标题
+    for name in book_names:
+        lines.append(f"\n### 📖 {name}（{len(by_book[name])} 条）")
+
+    lines.append("")
+
+    while active:
+        active = False
+        for name in book_names:
+            idx = indices[name]
+            if idx >= len(by_book[name]):
+                continue
+            p = by_book[name][idx]
+            indices[name] = idx + 1
+            active = True
+
+            source_tag = ""
+            if p.source == "neo4j_source":
+                source_tag = " [图谱关联]"
+            elif p.neo4j_verified:
+                source_tag = " [图谱验证]"
+
+            lines.append(
+                f"> **[{name}] {p.chapter_title}**{source_tag}\n"
+                f"> {p.content[:1000]}\n"
+            )
 
     return "\n".join(lines)
 
@@ -625,7 +752,8 @@ def _format_citation_rules(bundle: KnowledgeBundle) -> str:
 2. chapter: 必须来自下方原文中的章节名
 3. excerpt: 必须从下方原文中逐字复制（≥10 字符）
 4. 禁止编造书名、禁止编造章节名、禁止概括 excerpt
-5. 如果某条 citation 无法在上方原文中找到依据，不要生成该条引用"""
+5. 如果某条 citation 无法在上方原文中找到依据，不要生成该条引用
+6. 每本合法书籍至少引用 1 条。引用总数 >= 6 时，至少覆盖 {min(3, len(bundle.book_index))} 本不同书籍。"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -691,12 +819,11 @@ async def run_section_from_bundle(
         )
         section_passages = extract_for_section(bundle, section_index, section_query)
 
-        # ── 空检查 ──
+        # ── 空 passages 时不跳过，继续用前序节+知识上下文生成 ──
         if not section_passages:
             logger.warning(
-                "第%d节 Bundle passages 为空，降级为空节", section_index,
+                "第%d节 Bundle passages 为空，继续使用前序节内容生成", section_index,
             )
-            return await _build_empty_search_fallback(state, section_index, section_label)
 
         # ── 构建优先级上下文 ──
         from src.core.llm.factory import LLMServiceFactoryCompat

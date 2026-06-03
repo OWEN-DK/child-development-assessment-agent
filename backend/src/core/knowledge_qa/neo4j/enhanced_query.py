@@ -306,10 +306,35 @@ def _collect_seed_names(
         fuzzy_matches = _fuzzy_match_entities(session, all_seeds)
         seeds.update(fuzzy_matches)
 
+    # ── 来源 3b: 问题关键词提取（当 seeds 不足时的补充）──
+    if len(seeds) < 3 and question.strip():
+        try:
+            import jieba
+            # 提取中文关键词（2-4 字），过滤停用词
+            _stop = {"的", "了", "是", "我", "你", "他", "她", "有", "在",
+                     "和", "也", "都", "就", "不", "很", "会", "能", "要",
+                     "什么", "怎么", "为什么", "可以", "一下", "比较", "还是",
+                     "孩子", "男孩", "女孩", "平时", "学校", "有点"}
+            tokens = jieba.lcut(question)
+            kw_candidates = []
+            for tok in tokens:
+                tok = tok.strip()
+                if len(tok) >= 2 and tok not in _stop:
+                    kw_candidates.append(tok)
+            if kw_candidates:
+                fuzzy_from_q = _fuzzy_match_entities(session, kw_candidates[:10])
+                seeds.update(fuzzy_from_q)
+                if fuzzy_from_q:
+                    logger.info(
+                        "Neo4j 问题关键词补充: %d 个候选 → %d 个命中",
+                        len(kw_candidates[:10]), len(fuzzy_from_q),
+                    )
+        except Exception as e:
+            logger.debug("问题关键词提取失败: %s", e)
+
     # ── 来源 4: question embedding → Neo4j 实体（补充）──
     if embedding_helper and question.strip() and len(seeds) < 5:
         try:
-            # 同步调用 embedding（在 await 上下文中）
             pass  # embedding 调用放在 _do_enhanced_query 的 async 上下文中
         except Exception:
             pass

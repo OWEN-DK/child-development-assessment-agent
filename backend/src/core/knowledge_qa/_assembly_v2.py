@@ -1,12 +1,12 @@
 """知识问答 LangGraph 图组装 — v2（三层架构融合 + Bundle 统一检索）
 
 图结构变更（相对 v1）:
-1. 新增 build_bundle 节点——S2 完成后统一检索，产出 KnowledgeBundle
-2. S3-S5 节点消费 Bundle（零搜索），S1-S2 保持轻量路径
-3. Node 内 if/else 兼容——Bundle 可用时走新路径，否则走旧版
+1. 新增 build_bundle 节点——prefetch 完成后立即统一检索，产出 KnowledgeBundle
+2. S1-S5 全部消费 Bundle（零搜索），消除旧版 _direct_search 路径
+3. Node 内 if/else 兼容——Bundle 可用时走新路径，否则走旧版（降级）
 
 降级路径:
-- Bundle 构建失败 → S3-S5 回退旧版 _direct_search
+- Bundle 构建失败 → S1-S5 回退旧版 _direct_search
 - Neo4j 不可用 → Bundle 仅含 Chroma + LazyGraphRAG
 """
 
@@ -46,8 +46,10 @@ logger = logging.getLogger(__name__)
 async def build_bundle_node(state: KnowledgeQAState) -> dict:
     """Phase 1: 构建 KnowledgeBundle。
 
-    在 S2 完成后执行——此时 s2_problems 可用作 Neo4j 查询种子。
-    Bundle 构建成功后注入 state，S3-S5 从 Bundle 消费。
+    在 prefetch_context 之后、S1 之前执行——确保 S1-S5 全部走 Bundle 路径。
+    s2_problems 此时为空（S2 尚未运行），Neo4j 查询降级为使用
+    custom_entities（来自 fast_knowledge_match）+ question embedding 补偿。
+    Bundle 构建成功后注入 state，S1-S5 从 Bundle 消费。
     """
     from src.core.knowledge_qa.bundle_config import _use_bundle
     from src.schemas.knowledge_qa import push_progress
@@ -145,9 +147,9 @@ def _route_after_s4_assemble(state: KnowledgeQAState) -> str:
 def create_knowledge_qa_v2_graph() -> StateGraph:
     """创建 v2 知识问答 LangGraph 图。
 
-    拓扑: match_books → fast_km → prefetch → S1 → S2
+    拓扑: match_books → fast_km → prefetch
            → build_bundle（Phase 1: 统一检索）
-           → S3 → S4(outline→expand→assemble→citations)
+           → S1 → S2 → S3 → S4(outline→expand→assemble→citations)
            → synth → conclusion → verify → finalize
     """
     workflow = StateGraph(KnowledgeQAState)
@@ -186,15 +188,14 @@ def create_knowledge_qa_v2_graph() -> StateGraph:
         {"fast_knowledge_match": "fast_knowledge_match", "finalize": "finalize"},
     )
 
-    # ── 新拓扑: match_books → fast_km → prefetch → S1 → S1_citations → S2 → S2_citations → build_bundle → S3 → S4 → ... ──
+    # ── 新拓扑: match_books → fast_km → prefetch → build_bundle → S1 → S1_citations → S2 → S2_citations → S3 → S4 → ... ──
     workflow.add_edge("fast_knowledge_match", "prefetch_context")
-    workflow.add_edge("prefetch_context", "analyze_child_v2")
+    workflow.add_edge("prefetch_context", "build_bundle")
+    workflow.add_edge("build_bundle", "analyze_child_v2")
     workflow.add_edge("analyze_child_v2", "generate_s1_citations")
     workflow.add_edge("generate_s1_citations", "identify_problems_v2")
     workflow.add_edge("identify_problems_v2", "generate_s2_citations")
-    # S2_citations → build_bundle（在此统一检索）→ S3
-    workflow.add_edge("generate_s2_citations", "build_bundle")
-    workflow.add_edge("build_bundle", "recommend_types_v2")
+    workflow.add_edge("generate_s2_citations", "recommend_types_v2")
     workflow.add_edge("recommend_types_v2", "generate_s3_citations")
     workflow.add_edge("generate_s3_citations", "plan_outline_v2")
     workflow.add_edge("plan_outline_v2", "plan_expand_parallel_v2")

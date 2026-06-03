@@ -365,7 +365,7 @@ async def _direct_search(
                 f"正在检索知识库: {query[:60]}…",
             )
             try:
-                params: Dict[str, Any] = {"query": query, "limit": 15}
+                params: Dict[str, Any] = {"query": query, "limit": 25}
                 if book_ids:
                     params["book_ids"] = ",".join(book_ids)
                 resp = await client.get("/rag/search", params=params)
@@ -387,39 +387,39 @@ async def _direct_search(
                     seen_ids.add(rid)
                     all_results.append(r)
 
-        # 多书多样性保障：如果多本书匹配但结果集中于少数书，补充搜索缺失书籍
+        # 多书多样性保障：始终执行 per-book 补充，确保每本书至少有 5 条结果
         if book_ids and len(book_ids) > 1 and all_results:
-            books_in_results: set[str] = set()
+            # 统计每本书的 passage 数
+            book_passage_counts: dict[str, int] = {}
             for r in all_results:
-                source = (r.get("source_book", "") or "").strip()
-                if source:
-                    books_in_results.add(source)
-            if len(books_in_results) < 2:
-                main_query = queries[0] if queries else question
-                for bid in book_ids:
-                    book_found = any(
-                        r.get("file_hash", "") == bid
-                        for r in all_results
-                    )
-                    if book_found:
-                        continue
-                    try:
-                        params = {"query": main_query, "limit": 8, "book_ids": bid}
-                        resp = await client.get("/rag/search", params=params)
-                        resp.raise_for_status()
-                        data = resp.json()
-                        extra = data.get("data", {}).get("results", [])
-                        added = 0
-                        for r in extra:
-                            rid = r.get("id", "")
-                            if rid and rid not in seen_ids:
-                                seen_ids.add(rid)
-                                all_results.append(r)
-                                added += 1
-                        if added:
-                            logger.info(f"_direct_search 多书补充 book={bid[:8]}… +{added} 条")
-                    except Exception as e:
-                        logger.warning(f"_direct_search 多书补充失败 book={bid[:8]}: {e}")
+                fh = r.get("file_hash", "")
+                if fh:
+                    book_passage_counts[fh] = book_passage_counts.get(fh, 0) + 1
+
+            main_query = queries[0] if queries else question
+            min_per_book = 5
+            for bid in book_ids:
+                current_count = book_passage_counts.get(bid, 0)
+                if current_count >= min_per_book:
+                    continue
+                needed = min_per_book - current_count
+                try:
+                    params = {"query": main_query, "limit": max(needed + 5, 10), "book_ids": bid}
+                    resp = await client.get("/rag/search", params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    extra = data.get("data", {}).get("results", [])
+                    added = 0
+                    for r in extra:
+                        rid = r.get("id", "")
+                        if rid and rid not in seen_ids:
+                            seen_ids.add(rid)
+                            all_results.append(r)
+                            added += 1
+                    if added:
+                        logger.info(f"_direct_search per-book 补充 book={bid[:8]}… +{added} 条 (原有 {current_count})")
+                except Exception as e:
+                    logger.warning(f"_direct_search per-book 补充失败 book={bid[:8]}: {e}")
 
     # 写入缓存
     if state is not None:
@@ -450,8 +450,8 @@ def _format_search_context(results: List[Dict]) -> str:
     - 配额制多样性：每本书最多 MAX_PER_BOOK 条，防止热门书垄断
     - 显式源标注：📖 前缀 + 按书籍分组，LLM 可明确区分来源
     """
-    MAX_PER_BOOK = 5
-    MAX_CHARS = 10000
+    MAX_PER_BOOK = 8
+    MAX_CHARS = 15000
 
     if not results:
         return "（未搜索到相关内容）"
@@ -504,7 +504,7 @@ def _format_search_context(results: List[Dict]) -> str:
     book_list_str = "、".join(book_names) if book_names else "未知"
     parts.append(
         f"\n> ⚠️ 引用要求：本次检索结果来自以下书籍：{book_list_str}。"
-        "请尽量从不同书籍中选取引用，确保引用来源多样化。"
+        "请务必从至少 3 本不同书籍中选取引用，每本书至少引用 1 条，确保引用来源多样化。"
         "citations 中每条必须包含 book_title, chapter, excerpt, relevance 字段。"
         "book_title 使用上方已规范化的书名（不含文件扩展名），chapter 使用上方的章节名。"
         "excerpt 必须从上方结果中的原文逐字复制，不允许改写或概括。"
@@ -734,10 +734,10 @@ async def _run_section_node(
             f"第{section_index}节 _direct_search: {len(search_results)} 条"
         )
 
-        # 空搜索守卫：知识库无结果时跳过 LLM 调用，避免 LLM 编造不存在书籍的引用
+        # 空搜索时不跳过，继续用前序节内容+知识上下文生成
         if not search_results:
-            logger.warning(f"第{section_index}节知识库无搜索结果，跳过 LLM 调用")
-            return await _build_empty_search_fallback(state, section_index, section_label)
+            logger.warning(f"第{section_index}节知识库无搜索结果，继续使用前序节内容生成")
+            search_context = "（知识库无直接检索结果，请基于前序分析生成）"
 
         # Step 2: 获取 prompt 模板并构建消息
         prompt = await _get_prompt_pair(prompt_key)

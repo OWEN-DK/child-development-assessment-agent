@@ -1,20 +1,17 @@
 # ============================================
 # 儿童发展评估系统 - Docker Compose
 #
+# 部署路径: /data/shilianjia/rag-test/
+#
 # 使用方式：
-#   开发环境：  docker compose up
-#   测试环境：  ENV_FILE=backend/.env.test docker compose up
 #   后台运行：  docker compose up -d
-#   查看日志：  docker compose logs -f backend
-#   重新构建：  docker compose up --build
+#   查看日志：  docker compose logs -f
+#   重新构建：  docker compose up --build -d
 #
-# 注意：
-#   旧服务器 (glibc < 2.27, manylinux_2_17) 无法直接 uv sync，
-#   因为 onnxruntime (chromadb 依赖) 没有 Python 3.13 的
-#   manylinux_2_17 wheel。必须通过 Docker 部署。
-#
-#   所有业务配置（端口、数据库、Redis、模型等）均通过 env_file
-#   注入，environment 仅覆盖容器内路径映射和运行时必要参数。
+# 访问地址：
+#   后端 API:  http://114.115.255.226:51002
+#   Neo4j:     http://114.115.255.226:51001
+#   Neo4j Bolt: bolt://114.115.255.226:7687
 # ============================================
 
 services:
@@ -26,7 +23,7 @@ services:
     user: "0:0"
     restart: unless-stopped
     mem_limit: 4g
-    cpus: 2
+    cpus: 3
     pids_limit: 4096
     shm_size: "1g"
     security_opt:
@@ -53,9 +50,8 @@ services:
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
     volumes:
-      - ./app_data:/app/app_data
-      - ./logs:/app/backend/logs
-    # 显式指定启动命令，避免依赖镜像 CMD（部分环境下 CMD 可能丢失）
+      - /data/shilianjia/rag-test/app_data:/app/app_data
+      - /data/shilianjia/rag-test/logs:/app/backend/logs
     command: ["/app/backend/.venv/bin/uvicorn", "src.server:create_app", "--host", "0.0.0.0", "--port", "51002", "--factory"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:51002/health/')"]
@@ -64,13 +60,6 @@ services:
       start_period: 900s
       retries: 3
 
-  # ============================================
-  # Neo4j 图数据库
-  #
-  # HTTP:        http://localhost:51001
-  # Bolt:        bolt://localhost:7687
-  # 默认账户:     neo4j / neo4j（首次登录需修改密码）
-  # ============================================
   neo4j:
     image: neo4j:5.26-community
     container_name: child-dev-neo4j
@@ -80,18 +69,18 @@ services:
       - "51001:7474"
       - "7687:7687"
     environment:
-      NEO4J_AUTH: "neo4j/devpass123"
+      NEO4J_AUTH: "neo4j/slj@neo4j"
       NEO4J_server_memory_heap_initial__size: "512m"
       NEO4J_server_memory_heap_max__size: "1g"
       NEO4J_server_memory_pagecache_size: "512m"
       NEO4J_server_default__listen__address: "0.0.0.0"
     volumes:
-      - ./neo4j/data:/data
-      - ./neo4j/logs:/logs
-      - ./neo4j/import:/var/lib/neo4j/import
-      - ./neo4j/plugins:/plugins
+      - /data/shilianjia/rag-test/neo4j/data:/data
+      - /data/shilianjia/rag-test/neo4j/logs:/logs
+      - /data/shilianjia/rag-test/neo4j/import:/var/lib/neo4j/import
+      - /data/shilianjia/rag-test/neo4j/plugins:/plugins
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "devpass123", "RETURN 1;"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "slj@neo4j", "RETURN 1;"]
       interval: 15s
       timeout: 10s
       start_period: 60s
