@@ -1,17 +1,23 @@
 # ============================================
-# 儿童发展评估系统 - Docker Compose
+# Neo4j 图数据库 - Docker Compose
 #
 # 部署路径: /data/shilianjia/rag-test/
 #
+# Java 说明：
+#   使用 Neo4j Docker 镜像内置的 Java (eclipse-temurin:17-jre)
+#   路径: /opt/java/openjdk
+#   无需在宿主机安装 Java，不影响宿主机环境
+#
 # 使用方式：
-#   后台运行：  docker compose up -d
-#   查看日志：  docker compose logs -f
-#   重新构建：  docker compose up --build -d
+#   启动：  docker compose up -d
+#   日志：  docker compose logs -f
+#   停止：  docker compose down
+#   重启：  docker compose restart
 #
 # 访问地址：
-#   后端 API:  http://114.115.255.226:51002
-#   Neo4j:     http://114.115.255.226:51001
-#   Neo4j Bolt: bolt://114.115.255.226:7687
+#   HTTP:  http://114.115.255.226:51001
+#   Bolt:  bolt://114.115.255.226:7687
+#   账户:  neo4j / slj@neo4j
 # ============================================
 
 services:
@@ -64,10 +70,10 @@ services:
     image: neo4j:5.26-community
     container_name: child-dev-neo4j
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 2g
     ports:
-      - "51001:7474"
-      - "7687:7687"
+      - "51003:7474"
+      - "51004:7687"
     environment:
       NEO4J_AUTH: "neo4j/slj@neo4j"
       NEO4J_server_memory_heap_initial__size: "512m"
@@ -79,8 +85,11 @@ services:
       - /data/shilianjia/rag-test/neo4j/logs:/logs
       - /data/shilianjia/rag-test/neo4j/import:/var/lib/neo4j/import
       - /data/shilianjia/rag-test/neo4j/plugins:/plugins
+    security_opt: # 新增
+      - seccomp:unconfined     # 禁用 seccomp 限制
+      # - apparmor:unconfined  # 如果宿主机使用 AppArmor（Ubuntu/Debian）则取消注释，CentOS/RHEL 不需要
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "slj@neo4j", "RETURN 1;"]
+      test: [ "CMD", "cypher-shell", "-u", "neo4j", "-p", "slj@neo4j", "RETURN 1;" ]
       interval: 15s
       timeout: 10s
       start_period: 60s

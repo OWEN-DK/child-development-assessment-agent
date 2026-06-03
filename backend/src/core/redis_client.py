@@ -49,7 +49,7 @@ class RedisClient:
                 decode_responses=True,
                 retry=retry,
                 retry_on_timeout=True,
-                health_check_interval=30,  # 每30秒做一次连接健康检查
+                health_check_interval=120,  # 每120秒做一次连接健康检查
             )
             cls._instance = redis.Redis(connection_pool=cls._pool)
             cls._loop_id = current_loop_id

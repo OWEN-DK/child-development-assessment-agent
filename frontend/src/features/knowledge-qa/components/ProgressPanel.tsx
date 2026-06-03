@@ -84,7 +84,7 @@ export const ProgressPanel: React.FC = () => {
 
     return {
       title: step.label,
-      description: !progress
+      content: !progress
         ? idx === 0 ? '正在连接…' : undefined
         : isCurrent || isGhostCurrent
           ? displayMessage
@@ -100,7 +100,7 @@ export const ProgressPanel: React.FC = () => {
   return (
     <Card size="small" style={{ marginTop: 24 }}>
       <Steps
-        direction="vertical"
+        orientation="vertical"
         size="small"
         current={current}
         items={items}

@@ -87,7 +87,7 @@ export const QuestionInput: React.FC<Props> = ({
             handleSubmit();
           }
         }}
-        disabled={loading}
+        disabled={loading && !isViewingHistory}
         style={{ flex: 1, fontSize: 16, padding: '12px 16px' }}
       />
       {renderButton()}

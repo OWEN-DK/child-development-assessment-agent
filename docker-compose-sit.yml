@@ -1,0 +1,98 @@
+# ============================================
+# 儿童发展评估系统 - Docker Compose
+#
+# 使用方式：
+#   开发环境：  docker compose up
+#   测试环境：  ENV_FILE=backend/.env.test docker compose up
+#   后台运行：  docker compose up -d
+#   查看日志：  docker compose logs -f backend
+#   重新构建：  docker compose up --build
+#
+# 注意：
+#   旧服务器 (glibc < 2.27, manylinux_2_17) 无法直接 uv sync，
+#   因为 onnxruntime (chromadb 依赖) 没有 Python 3.13 的
+#   manylinux_2_17 wheel。必须通过 Docker 部署。
+#
+#   所有业务配置（端口、数据库、Redis、模型等）均通过 env_file
+#   注入，environment 仅覆盖容器内路径映射和运行时必要参数。
+# ============================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: child-dev-backend
+    user: "0:0"
+    restart: unless-stopped
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 4096
+    shm_size: "1g"
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "${APP_PORT:-51002}:51002"
+    env_file: ${ENV_FILE:-backend/.env.test}
+    environment:
+      # 容器内路径映射和运行时必要参数，其余全部由 env_file 提供
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "51002"
+      APP_RELOAD: "False"
+      DATA_DIR: "/app/app_data/data"
+      RAG_STORAGE_DIR: "/app/app_data/storage"
+      RAG_TEMP_UPLOAD_DIR: "/app/app_data/temp_uploads"
+      LOG_FILE: "/app/backend/logs/app.log"
+      # 以下变量本应由 Dockerfile ENV 设置，部分环境下镜像 ENV 丢失，此处显式补充
+      PATH: "/app/backend/.venv/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      PYTHONPATH: "/app/backend"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # 限制 ML 库线程数，减少容器内线程创建压力
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    volumes:
+      - ./app_data:/app/app_data
+      - ./logs:/app/backend/logs
+    # 显式指定启动命令，避免依赖镜像 CMD（部分环境下 CMD 可能丢失）
+    command: ["/app/backend/.venv/bin/uvicorn", "src.server:create_app", "--host", "0.0.0.0", "--port", "51002", "--factory"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:51002/health/')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 900s
+      retries: 3
+
+  # ============================================
+  # Neo4j 图数据库
+  #
+  # HTTP:        http://localhost:7474
+  # Bolt:        bolt://localhost:7687
+  # 默认账户:     neo4j / neo4j（首次登录需修改密码）
+  # ============================================
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: child-dev-neo4j
+    restart: unless-stopped
+    mem_limit: 2g
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: "neo4j/devpass123"
+      NEO4J_server_memory_heap_initial__size: "256m"
+      NEO4J_server_memory_heap_max__size: "512m"
+      NEO4J_server_memory_pagecache_size: "256m"
+      NEO4J_server_default__listen__address: "0.0.0.0"
+    volumes:
+      - ./neo4j/data:/data
+      - ./neo4j/logs:/logs
+      - ./neo4j/import:/var/lib/neo4j/import
+      - ./neo4j/plugins:/plugins
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "devpass123", "RETURN 1;"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 5

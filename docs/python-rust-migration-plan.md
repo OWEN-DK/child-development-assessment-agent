@@ -566,7 +566,7 @@ Phase 1 (2 周)          Phase 2 (3 周)          Phase 3 (4 周)          Phase
 ### 8.1 Docker Compose
 
 ```yaml
-# docker-compose.yml
+# docker-compose-sit.yml
 version: '3.8'
 
 services:

@@ -425,6 +425,11 @@ def _trigger_graph_build(file_hash: str, processed_nodes: list) -> None:
                 logger.warning(f"未找到文档: file_hash={file_hash}，跳过图构建")
                 return
 
+            # 幂等检查：已有完整图谱则跳过
+            if doc_info.get("graph_ready"):
+                logger.info(f"书籍 graph_ready=True，跳过重复图构建: file_hash={file_hash}")
+                return
+
             book_id = doc_info.get("id")
             if not book_id:
                 logger.warning(f"文档无 ID: file_hash={file_hash}，跳过图构建")

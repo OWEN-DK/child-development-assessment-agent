@@ -381,6 +381,15 @@ async def _enhanced_lazy_graph_traversal(
 
         # 精简为 top-3 书
         top_book_ids = matched_book_ids[:3]
+
+        # 过滤 graph_ready 的书 + file_hash → UUID 转换
+        from src.core.knowledge_qa.nodes.prefetch_context import _filter_graph_ready
+        ready_uuids = await _filter_graph_ready(top_book_ids)
+        if not ready_uuids:
+            logger.info("LazyGraphRAG: top-3 书均无 graph_ready，跳过遍历")
+            return "", 0
+        top_book_ids = ready_uuids
+
         # 使用更长超时的 HTTP 客户端（图谱遍历需要多次 HTTP 调用）
         from src.utils.http_client import RagHttpClient
         long_timeout_client = RagHttpClient()
@@ -409,12 +418,12 @@ async def _enhanced_lazy_graph_traversal(
                 for root in roots:
                     hits = await explore_community_tree(
                         question=enhanced_query,
-                        root_id=root.node_id,
+                        root_id=root.get("node_id") or root.get("id"),
                         community_repo=community_repo,
                         max_tokens=20000,
                         entity_boost_names=set(all_seeds) if all_seeds else None,
                     )
-                    logger.info("  root=%s: %d hits", root.node_id, len(hits))
+                    logger.info("  root=%s: %d hits", root.get("node_id"), len(hits))
                     all_hits.extend(hits)
             except Exception as e:
                 logger.warning(

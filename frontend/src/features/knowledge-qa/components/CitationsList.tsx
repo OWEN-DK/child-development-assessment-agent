@@ -45,7 +45,7 @@ export const CitationsList: React.FC<Props> = ({ citations }) => {
           <Title level={5} style={{ marginBottom: 4 }}>{book}</Title>
           {cites.map((c) => (
             <div
-              key={c.citation_id}
+              key={`${c.citation_id}-${c._section_index}`}
               id={`cite-${c.citation_id}`}
               style={{ marginBottom: 8, paddingLeft: 12 }}
             >

@@ -187,10 +187,17 @@ class TaskStateService:
 
     async def _ensure_scripts_loaded(self):
         """加载 Lua 脚本到 Redis"""
-        if self._update_script is None:
-            self._update_script = self.redis_client.register_script(_UPDATE_TASK_LUA_SCRIPT)
-        if self._create_script is None:
-            self._create_script = self.redis_client.register_script(_CREATE_TASK_LUA_SCRIPT)
+        if not self._redis_available:
+            return
+
+        try:
+            if self._update_script is None:
+                self._update_script = self.redis_client.register_script(_UPDATE_TASK_LUA_SCRIPT)
+            if self._create_script is None:
+                self._create_script = self.redis_client.register_script(_CREATE_TASK_LUA_SCRIPT)
+        except Exception as e:
+            logger.warning(f"Failed to load Redis scripts: {e}")
+            self._redis_available = False
 
     async def create(self, state: TaskState, ttl: Optional[int] = None) -> None:
         """创建任务状态（初始状态）
@@ -220,7 +227,16 @@ class TaskStateService:
             logger.debug(f"Task {state.task_id} created with status={state.status.value}")
         except Exception as e:
             logger.error(f"Failed to create task {state.task_id}: {e}")
-            raise
+            self._redis_available = False
+
+            if not self.fallback_to_memory:
+                raise
+
+            self._memory_cache[state.task_id] = state
+            self._cache_ttl[state.task_id] = time.time() + 300
+            logger.warning(
+                f"Task {state.task_id} created in memory cache due to Redis failure"
+            )
 
     async def update(
         self,
@@ -274,25 +290,26 @@ class TaskStateService:
             if self._redis_available:
                 result = await self._update_script(keys=[key, active_set_key], args=argv)
                 success = result == 1
-                
+
                 if not success:
                     logger.warning(
                         f"Task {task_id} update rejected (terminal state protection): "
                         f"status={new_status}"
                     )
-                
+
                 return success
-            else:
-                # 降级到内存缓存
-                return self._update_memory(task_id, updates)
+
+            # 降级到内存缓存
+            return self._update_memory(task_id, updates)
         except Exception as e:
             logger.error(f"Redis update failed for task {task_id}: {e}")
-            self._redis_available = False
-            
+
             if not self.fallback_to_memory:
                 logger.error("Redis unavailable in multi-instance mode, fallback disabled")
+                self._redis_available = False
                 return False
-            
+
+            self._redis_available = False
             return self._update_memory(task_id, updates)
 
     async def get(self, task_id: str, task_type: str) -> Optional[TaskState]:
@@ -458,7 +475,9 @@ class TaskStateService:
     def _update_memory(self, task_id: str, updates: dict[str, Any]) -> bool:
         """内存缓存兜底（仅单实例部署）"""
         if task_id not in self._memory_cache:
-            return False
+            fallback_state = TaskState.create(task_id=task_id, task_type="memory_fallback")
+            self._memory_cache[task_id] = fallback_state
+            self._cache_ttl[task_id] = time.time() + 300
         
         state = self._memory_cache[task_id]
         

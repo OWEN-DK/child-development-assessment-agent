@@ -91,7 +91,7 @@ export const WizardMode: React.FC = () => {
           onChange={setCurrentStep}
           items={WIZARD_STEPS.map((step, index) => ({
             title: step.title,
-            description: step.description,
+            content: step.description,
             status: index < currentStep ? 'finish' : index === currentStep ? 'process' : 'wait'
           }))}
         />

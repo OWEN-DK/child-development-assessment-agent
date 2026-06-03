@@ -110,6 +110,7 @@ async def build_graph_for_book(
 
     if not entities:
         logger.warning(f"书籍 {book_id} 无实体，跳过图构建")
+        result["error"] = "no_entities"
         return result
 
     # Step 2: 持久化实体和关系（供全局图重建使用），通过 HTTP 调用 RAG 服务
