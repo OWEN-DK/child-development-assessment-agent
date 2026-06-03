@@ -323,7 +323,7 @@ SECTION_4_EXPAND_SYSTEM = """你是一个儿童运动方案设计专家。根据
      * exercise_index: 引用大纲中的 exercise_index（运动在清单中的序号）
      * duration_min: 单次时长(分钟)
      * intensity: "低"/"中"/"高"
-     * description: 执行要点（1-2 句，控制在 100 字以内，写动作要领+呼吸节奏+家长配合）
+     * description: 执行要点（1-2 句，控制在 50 字以内，写动作要领+呼吸节奏+家长配合）
 
 2. **plan_summary**: 方案摘要，包含：
    - total_duration_days: 总天数
@@ -382,7 +382,7 @@ SECTION_4_EXPAND_GROUP_SYSTEM = """你是一个儿童运动方案设计师。你
 - reps: 每组次数（无则 null）
 - rest_seconds: 组间休息秒数（无则 null）
 - target_skill: 主要训练目标（如"专注力"、"抑制控制"）
-- notes: 执行要点（1-2句，控制在 100 字以内，写具体动作+呼吸节奏+家长怎么帮，禁用"提升执行功能"等泛词）
+- notes: 执行要点（1-2句，控制在 50 字以内，写具体动作+呼吸节奏+家长怎么帮，禁用"提升执行功能"等泛词）
 - alternatives: 替代运动名称列表（1-2个）
 - citation_ids: 关联的引用 ID 列表
 

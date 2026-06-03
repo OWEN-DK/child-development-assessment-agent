@@ -115,7 +115,7 @@ export function renderS4Markdown(structuredData: Record<string, any>): string {
           const intensity = ex.intensity || '-';
           const intensityHint = ex.intensity_hint ? ` (${ex.intensity_hint})` : '';
           const targetSkill = ex.target_skill || '';
-          const desc = (ex.description || ex.notes || '').slice(0, 40);
+          const desc = (ex.description || ex.notes || '').slice(0, 200);
 
           const phaseCell = firstInPhase ? `**${phaseName}**` : '';
           const weekCell = firstInWeek ? `第${weekIdx}周` : '';
