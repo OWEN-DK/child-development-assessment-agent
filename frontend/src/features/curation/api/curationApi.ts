@@ -1,4 +1,5 @@
 import { apiClient } from '@shared/api/client';
+import { API_BASE_URL } from '@shared/lib/constants';
 import type {
   CurationBookListResponse,
   DraftDetail,
@@ -48,7 +49,8 @@ export const curationApi = {
 
   /** 获取生成进度 (SSE endpoint, 返回 URL) */
   getGenerationProgressUrl: (bookId: string): string => {
-    return `/api/v2/curation/books/${bookId}/generate/progress`;
+    const base = API_BASE_URL.replace(/\/$/, '');
+    return `${base}/api/v2/curation/books/${bookId}/generate/progress`;
   },
 
   /** 取消正在进行的生成任务 */

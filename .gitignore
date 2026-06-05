@@ -132,3 +132,4 @@ chroma_db/
 /neo4j
 .playwright-cli
 codex_tmp
+*.mjs

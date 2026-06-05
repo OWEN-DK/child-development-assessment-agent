@@ -186,9 +186,21 @@ def _read_md_file(md_path: str) -> str:
 
 
 def _update_progress(book_id: str, **kwargs):
-    """更新共享进度状态并通知 SSE 订阅者。"""
+    """更新共享进度状态并通过 SSEPublisher 通知订阅者。"""
     if book_id in _progress_states:
         _progress_states[book_id].update(kwargs)
+    # 通过统一 SSE 通道推送（与书籍上传相同的机制）
+    import asyncio as _aio
+    try:
+        from src.api.sse import SSEPublisher
+        state = _progress_states.get(book_id, {})
+        channel = f"curation:{book_id}"
+        _aio.get_running_loop().create_task(
+            SSEPublisher.publish(channel, dict(state))
+        )
+    except Exception:
+        pass
+    # 兼容：仍通知旧的 Event（供 _run_d2g_pipeline 内部等待）
     if book_id in _progress_events:
         _progress_events[book_id].set()
 
@@ -1138,110 +1150,54 @@ class CurationController:
         return APIResponse.success(message="取消请求已发送", data={"book_id": book_id, "status": "cancelling"})
 
     async def generation_progress(self, book_id: str):
-        """生成进度 SSE — 纯只读订阅，不驱动任何任务逻辑。
+        """生成进度 SSE — 使用统一 SSEPublisher 通道（与书籍上传相同机制）。
 
-        只从共享状态 _progress_states 读取进度并推送。
-        浏览器断开不影响后台任务。
+        浏览器断开不影响后台任务，重连后自动恢复进度。
         """
-        from fastapi.responses import StreamingResponse
+        from src.api.sse import sse_response
 
-        async def event_stream():
+        # 若任务已启动，立即推送当前快照到 SSE 通道，确保重连后能拿到最新状态
+        if book_id in _progress_states:
+            from src.api.sse import SSEPublisher
+            state = _progress_states[book_id]
+            await SSEPublisher.publish(f"curation:{book_id}", dict(state))
+
+        # 检查 DB 残留状态（后端重启后内存丢失，DB 仍标记 generating）
+        # 或任务根本不存在/已结束 → 发 not_found 让前端重置
+        if book_id not in _running_tasks:
+            from src.api.sse import SSEPublisher
             try:
-                # 等待进度状态初始化（最多 10 秒）
-                for _ in range(20):
-                    if book_id in _progress_states:
-                        break
-                    await _asyncio.sleep(0.5)
-                else:
-                    # 没有运行中的任务 — 检查数据库是否有残留的 "generating" 状态
-                    # （后端重启后内存状态丢失，但 DB 元数据仍标记为 generating）
-                    try:
-                        from src.models.md_metadata import MDMetadata
-                        from src.core.database import async_session_factory
-                        from sqlalchemy import select
+                from src.models.md_metadata import MDMetadata
+                from src.core.database import async_session_factory
+                from sqlalchemy import select
 
-                        async with async_session_factory() as session:
-                            result = await session.execute(
-                                select(MDMetadata).where(MDMetadata.book_id == book_id)
-                            )
-                            meta = result.scalar_one_or_none()
-                            if meta and meta.status == "generating":
-                                # 残留状态：任务已丢失，重置为 failed
-                                meta.status = "failed"
-                                await session.commit()
-                                logger.warning(
-                                    "[SSE] 检测到残留 generating 状态，已重置为 failed book_id=%s",
-                                    book_id,
-                                )
-                                yield f"data: {json.dumps({'status': 'failed', 'error': '生成任务已中断（可能因服务重启），请重试'}, ensure_ascii=False)}\n\n"
-                                return
-                    except Exception as _db_exc:
-                        logger.warning("[SSE] 检查 DB 状态失败: %s", _db_exc)
+                async with async_session_factory() as session:
+                    result = await session.execute(
+                        select(MDMetadata).where(MDMetadata.book_id == book_id)
+                    )
+                    meta = result.scalar_one_or_none()
+                    if meta and meta.status == "generating":
+                        meta.status = "failed"
+                        await session.commit()
+                        logger.warning("[SSE] 检测到残留 generating 状态，已重置为 failed book_id=%s", book_id)
+                        await SSEPublisher.publish(f"curation:{book_id}", {
+                            "status": "failed",
+                            "error": "生成任务已中断（可能因服务重启），请重试",
+                        })
+                    else:
+                        # 任务不存在或已完成
+                        await SSEPublisher.publish(f"curation:{book_id}", {
+                            "status": "not_found",
+                            "message": "任务未启动或已完成",
+                        })
+            except Exception as _db_exc:
+                logger.warning("[SSE] 检查 DB 状态失败: %s", _db_exc)
+                await SSEPublisher.publish(f"curation:{book_id}", {
+                    "status": "not_found",
+                    "message": "任务未启动或已完成",
+                })
 
-                    yield f"data: {json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'})}\n\n"
-                    return
-
-                if book_id not in _progress_events:
-                    _progress_events[book_id] = _asyncio.Event()
-
-                # 如果进度是终态且无运行中任务，说明是旧残留，返回 not_found
-                _state = _progress_states.get(book_id, {})
-                _task = _running_tasks.get(book_id)
-                if _state.get("status") in ("completed", "failed", "cancelled") and (
-                    _task is None or _task.done()
-                ):
-                    _progress_states.pop(book_id, None)
-                    _progress_events.pop(book_id, None)
-                    yield f"data: {json.dumps({'status': 'not_found', 'message': '任务未启动或已完成'}, ensure_ascii=False)}\n\n"
-                    return
-
-                # 发送首条快照（当前状态）
-                state = _progress_states[book_id]
-                yield f"data: {json.dumps(state, ensure_ascii=False)}\n\n"
-
-                # 轮询进度直到任务完成
-                while True:
-                    try:
-                        evt = _progress_events.get(book_id)
-                        if evt:
-                            await _asyncio.wait_for(evt.wait(), timeout=15.0)
-                            evt.clear()
-                        else:
-                            await _asyncio.sleep(1.0)
-                    except _asyncio.TimeoutError:
-                        pass  # 超时发送心跳
-
-                    state = _progress_states.get(book_id, {})
-                    yield f"data: {json.dumps(state, ensure_ascii=False)}\n\n"
-
-                    if state.get("status") in ("completed", "failed", "cancelled"):
-                        break
-
-                    # 任务已完成但状态未更新
-                    task = _running_tasks.get(book_id)
-                    if task is None or task.done():
-                        final = _progress_states.get(book_id, {})
-                        if final.get("status") not in ("completed", "failed", "cancelled"):
-                            final["status"] = "failed"
-                            final["error"] = final.get("error") or "任务已结束"
-                        yield f"data: {json.dumps(final, ensure_ascii=False)}\n\n"
-                        break
-            except Exception as _sse_exc:
-                logger.warning("[SSE] event_stream 异常 book_id=%s: %s", book_id, _sse_exc)
-                try:
-                    yield f"data: {json.dumps({'status': 'failed', 'error': f'SSE 异常: {str(_sse_exc)[:100]}'})}\n\n"
-                except Exception:
-                    pass
-
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
+        return sse_response(f"curation:{book_id}")
 
     # ================================================================
     # 章节

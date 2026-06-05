@@ -7,6 +7,8 @@ import type {
   PendingItem,
 } from '../types';
 import { curationApi } from '../api/curationApi';
+import { createSSEConnection } from '../../rag-eval/utils/sse';
+import { API_BASE_URL } from '@shared/lib/constants';
 
 interface CurationState {
   /* ===== 书籍 ===== */
@@ -56,6 +58,7 @@ interface CurationState {
   resumeGeneration: (bookId: string) => void;
   _connectSSE: (bookId: string, onNotFound?: () => void) => void;
   cancelGeneration: (bookId: string) => Promise<void>;
+  _sseController: AbortController | null;
 }
 
 export const useCurationStore = create<CurationState>((set, get) => ({
@@ -168,6 +171,7 @@ export const useCurationStore = create<CurationState>((set, get) => ({
   },
 
   /* ===== 生成 ===== */
+  _sseController: null,
   generating: false,
   generateProgress: 0,
   generateStatus: 'idle',
@@ -176,93 +180,91 @@ export const useCurationStore = create<CurationState>((set, get) => ({
   generateChapters: [],
   generatePhase: '',
   generatePhaseLabel: '',
-  /** 内部：建立 SSE 连接，绑定消息/错误处理（含自动重连） */
+  /** 内部：建立 SSE 连接（fetch-based，与知识问答/上传相同的机制） */
   _connectSSE: (bookId: string, onNotFound?: () => void) => {
-    const MAX_RETRIES = 5;
-    const BASE_DELAY = 1000; // 1 秒起步
-    let retryCount = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let eventSource: EventSource | null = null;
+    // 先断开旧连接
+    if (get()._sseController) {
+      get()._sseController!.abort();
+      set({ _sseController: null });
+    }
 
-    const cleanup = () => {
-      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-      if (eventSource) { eventSource.close(); eventSource = null; }
-    };
+    const controller = new AbortController();
+    set({ _sseController: controller });
 
-    const connect = () => {
-      const url = curationApi.getGenerationProgressUrl(bookId);
-      eventSource = new EventSource(url);
+    const base = API_BASE_URL.replace(/\/$/, '');
+    const url = `${base}/api/v2/curation/books/${bookId}/generate/progress`;
 
-      eventSource.onmessage = (event) => {
+    createSSEConnection(url, controller.signal, {
+      onOpen: () => {},
+      onMessage: (raw) => {
         try {
-          const data = JSON.parse(event.data);
-          // 重连成功，重置计数
-          retryCount = 0;
-          // 如果后端返回未找到，执行回调（用于判断是否需要启动生成）
+          const data = JSON.parse(raw);
+
+          // 忽略 SSEPublisher 系统事件
+          if (data.type === 'connected' || data.type === 'heartbeat') return;
+
+          // not_found → 通知调用方
           if (data.status === 'not_found') {
-            cleanup();
+            controller.abort();
+            set({ _sseController: null });
             onNotFound?.();
             return;
           }
-          const updates: any = { generating: true };
+
+          const updates: Record<string, unknown> = {};
           if (data.progress !== undefined) updates.generateProgress = data.progress;
           if (data.book_title) updates.generateBookTitle = data.book_title;
           if (data.chapters && Array.isArray(data.chapters)) updates.generateChapters = data.chapters;
           if (data.phase !== undefined) updates.generatePhase = data.phase;
           if (data.phase_label !== undefined) updates.generatePhaseLabel = data.phase_label;
+
           if (data.status === 'generating') {
+            updates.generating = true;
             updates.generateStatus = 'generating';
-          }
-          if (data.status === 'completed') {
-            updates.generateStatus = 'completed';
+          } else if (data.status === 'completed') {
             updates.generating = false;
+            updates.generateStatus = 'completed';
             updates.generateProgress = 100;
-            cleanup();
+            set(updates);
+            controller.abort();
+            set({ _sseController: null });
             get().loadDraft(bookId);
-          }
-          if (data.status === 'failed') {
+            return;
+          } else if (data.status === 'failed') {
+            updates.generating = false;
             updates.generateStatus = 'failed';
             updates.generateError = data.error || '生成失败';
-            updates.generating = false;
-            cleanup();
+            set(updates);
+            controller.abort();
+            set({ _sseController: null });
+            return;
           }
-          set(updates);
-        } catch { /* ignore */ }
-      };
 
-      eventSource.onerror = () => {
-        if (eventSource) eventSource.close();
-        eventSource = null;
-
+          if (Object.keys(updates).length > 0) {
+            set(updates);
+          }
+        } catch { /* ignore parse errors */ }
+      },
+      onError: () => {
         if (!get().generating) return;
-
         const { generateProgress } = get();
         if (generateProgress >= 100) {
           set({ generateStatus: 'completed', generating: false });
-          return;
-        }
-
-        // 指数退避重连
-        retryCount += 1;
-        if (retryCount <= MAX_RETRIES) {
-          const delay = BASE_DELAY * Math.pow(2, retryCount - 1);
-          set({ generatePhaseLabel: `连接中断，${Math.round(delay / 1000)}秒后重连 (${retryCount}/${MAX_RETRIES})` });
-          retryTimer = setTimeout(() => {
-            if (get().generating) connect();
-          }, delay);
         } else {
           set({ generateStatus: 'failed', generateError: 'SSE 连接中断，生成可能未完成', generating: false });
         }
-      };
-    };
-
-    connect();
+        set({ _sseController: null });
+      },
+    });
   },
 
   /** 页面挂载时恢复已有任务的 SSE 连接（不清空已有进度） */
   resumeGeneration: (bookId: string) => {
-    // 先重置状态，避免残留旧书的 completed/failed 状态
-    set({ generating: false, generateStatus: 'idle', generateProgress: 0, generateError: '', generateBookTitle: '', generateChapters: [], generatePhase: '', generatePhaseLabel: '' });
+    // 先断开旧连接并重置状态
+    if (get()._sseController) {
+      get()._sseController!.abort();
+    }
+    set({ generating: false, generateStatus: 'idle', generateProgress: 0, generateError: '', generateBookTitle: '', generateChapters: [], generatePhase: '', generatePhaseLabel: '', _sseController: null });
     get()._connectSSE(bookId, () => {
       // SSE 返回 not_found，说明没有运行中的任务，重置为 idle
       set({ generating: false, generateStatus: 'idle' });
@@ -283,6 +285,11 @@ export const useCurationStore = create<CurationState>((set, get) => ({
     get()._connectSSE(bookId);
   },
   cancelGeneration: async (bookId: string) => {
+    // 断开 SSE 连接
+    if (get()._sseController) {
+      get()._sseController!.abort();
+      set({ _sseController: null });
+    }
     try {
       await curationApi.cancelGeneration(bookId);
     } catch {
