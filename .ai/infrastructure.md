@@ -4,7 +4,7 @@
 
 ## 4.1 RAG 测试与评估数据模型
 
-基于 MySQL 5.7 存储，所有主键统一采用 UUID `String(36)`，表之间通过弱引用关联，避免严格的外键约束。共 21 张表支持完整工作流与配置追踪。
+基于 MySQL 5.7 存储，所有主键统一采用 UUID `String(36)`，表之间通过弱引用关联，避免严格的外键约束。共 30 张表支持完整工作流与配置追踪。
 
 ### 评估工作流模型
 - **测试集 (TestSet)**: `id`, `name`, `description`, `source_type`
@@ -30,6 +30,16 @@
 - **提示词版本 (PromptVersion)**: 提示词内容版本控制与变更影响分析。
 - **链路追踪 (Trace)**: 全链路追踪记录，含总耗时、总 token、总成本、状态。
 
+### 知识问答与图谱模型
+- **知识问答历史 (KnowledgeQAHistory)**: 知识问答会话历史记录，支持按用户查询和分页。
+- **图谱实体 (GraphEntity)**: LazyGraphRAG 提取的知识图谱实体节点。
+- **图谱关系 (GraphRelation)**: 实体间的关系边。
+- **图谱社区节点 (GraphCommunityNode)**: 社区检测结果存储。
+
+### 知识审核模型
+- **MD 策管状态 (MDMetadata)**: Markdown 文档的策管/审核状态跟踪。
+- **MD 版本历史 (MDVersion)**: Markdown 文档的版本历史，支持增量更新。
+
 ## 4.2 6层校验引擎架构
 全链路诊断体系，从规则校验到效果验证，覆盖测试执行的完整生命周期：
 
@@ -50,10 +60,9 @@
 
 ### 配置与追踪模型
 - **源文档 (SourceDocument)**: 知识库文件元数据、状态与解析结果。
-- **意图标注 (IntentAnnotation) / 意图日志 (QueryIntentLog) / 同义词 (SynonymQueryPair)**: 检索优化模型。
 - **配置版本 (ConfigVersion) / 提示词版本 (PromptVersion)**: 记录系统设置的历史变更，支持回滚。
-- **配置变更集 (ConfigChangeSet / ConfigChangeSetPrompt)**: 原子保存多项配置与提示词变更的集合。
-- **调优建议 (TuningSuggestionRecord / PromptSuggestionRecord / IgnoredSuggestion)**: 6层校验引擎生成的智能建议与用户处理记录。
+- **评估配置变更集 (EvalConfigChangeSet)**: 原子保存多项配置变更的集合。
+- **调优建议 (TuningSuggestion)**: 6层校验引擎生成的智能调参建议，含类别、严重度、建议值、状态跟踪。
 
 ## 5. 前端功能模块
 
@@ -130,8 +139,28 @@
 - **配置优先级（严格）**：MySQL 数据库（主） > `.env` 文件（仅兜底）
 - **三层分层架构**:
   - `core/`：配置基础设施，包含管理器、持久化存储、事件系统
-  - `modules/`：按功能域拆分的配置模块（基础配置、AI模型、RAG、业务规则）
+  - `modules/`：按功能域拆分的配置模块（基础配置、AI模型、RAG、Neo4j、链路追踪、业务规则）
   - `rules/`：独立的业务规则配置层
+- **配置模块清单** (`config/modules/`):
+  - `app.py`: AppSettings — 应用基础配置
+  - `database.py`: DatabaseSettings — 数据库连接配置
+  - `redis.py`: RedisSettings — Redis 连接配置
+  - `neo4j.py`: Neo4jSettings — Neo4j 知识图谱连接配置
+  - `logging.py`: LoggingSettings — 日志配置
+  - `paths.py`: PathsSettings — 路径配置
+  - `tracing.py`: TracingConfig — 链路追踪配置
+  - `models/`: LLM/Embedding/ML 评分配置模块
+    - `llm.py`: LLMSettings
+    - `embedding.py`: EmbeddingSettings
+    - `ml_scoring.py`: MLScoringSettings
+  - `rag/`: RAG 配置子模块
+    - `core.py`: RAGCoreSettings
+    - `chunking.py`: ChunkingSettings
+    - `retrieval.py`: RetrievalSettings
+    - `vector_store.py`: VectorStoreSettings
+    - `pageindex.py`: PageIndexSettings — PageIndex 全网检索配置
+    - `pipeline.py`: PipelineSettings
+    - `testing.py`: TestingSettings
 - **统一入口**: 所有配置通过 `from src.config import settings, rules, config_manager` 一站式导入
 - **热重载**: 配置文件变更自动生效
 - **版本控制**: 支持配置版本管理和回滚
@@ -146,12 +175,14 @@
 - **DI Container**: 使用 Injector 框架管理依赖
 - **服务注册**: 核心服务通过 DI 容器注册和解析
 - **测试友好**: 便于单元测试的依赖替换
+- **代码入口**: `src/core/di_container.py`
 
 ### 6.3 事件总线
 - **发布/订阅**: 组件间解耦的事件通信
 - **配置事件**: 配置变更事件通知
 - **业务事件**: 业务流程事件触发
 - **Redis Pub/Sub**: 支持分布式事件传播，跨进程/跨实例通信
+- **代码入口**: `src/core/event_bus.py`
 
 ### 6.4 安全防护
 - **提示词注入防护**: PromptInjectionGuard 检测和阻止恶意注入
@@ -171,7 +202,16 @@
 ### 6.7 数据库基础设施
 - **SQLAlchemy ORM**: 异步数据库引擎/会话管理，内置慢查询检测，连接池配置
 - **数据库版本管理**: 直接修改 `.ai/full_init_script_mysql57.sql` DDL 脚本，禁止编写 Alembic 迁移脚本
-- **数据模型**: `src/models/` 包含配置(版本与审计)、测试用例(用例/草稿/测试集/运行结果)、文档(源文档/导入记录)、监控(A/B指标/LLM日志)、提示词模型
+- **数据模型**: `src/models/` 包含：
+  - 配置模型：`ConfigVersion`（版本）、`ConfigAuditLog`（审计日志）
+  - RAG 评估模型：`TestCase`/`TestCaseDraft`/`TestSet`/`TestSetCase`/`TestRun`/`TestRunResult`/`KnowledgeSnapshot`/`EvalReport`/`TuningSuggestion`/`EvalConfigVersion`/`EvalConfigChangeSet`
+  - 文档模型：`SourceDocument`/`DocumentRecord`
+  - 监控模型：`ABTestMetrics`/`LLMCallLog`
+  - 提示词模型：`PromptMetadata`/`PromptVersion`
+  - 知识问答模型：`KnowledgeQAHistory`
+  - 知识图谱模型：`GraphEntity`/`GraphRelation`/`GraphCommunityNode`
+  - 知识审核模型：`MDMetadata`/`MDVersion`
+  - 链路追踪：`Trace`
 - **配置模块**: `src/config/modules/database.py` 数据库配置
 
 ### 6.8 Redis 基础设施
@@ -187,11 +227,11 @@ graph LR
     L3 -.未命中.-> DB[(数据库/计算)]
 ```
 
-- **Redis 客户端**: 异步 Redis 连接管理，连接池配置，懒加载机制
-- **分布式锁**: 基于 Redis 的分布式锁实现 (带看门狗自动续期)
-- **会话管理**: 用户会话存储和管理 (Redis Hash 结构)
-- **熔断器**: CircuitBreaker 模式实现服务保护
-- **布隆过滤器**: pybloom-live 实现的高效去重过滤器
+- **Redis 客户端**: 异步 Redis 连接管理，连接池配置，懒加载机制 (`src/core/redis_client.py`)
+- **分布式锁**: 基于 Redis 的分布式锁实现，带看门狗自动续期，Redis 不可用降级 asyncio.Lock (`src/core/distributed_lock.py`)
+- **会话管理**: 用户会话存储和管理 (Redis Hash 结构) (`src/core/session_manager.py`)
+- **熔断器**: CircuitBreaker 模式实现服务保护，CLOSED/OPEN/HALF_OPEN 三态 (`src/core/circuit_breaker.py`)
+- **布隆过滤器**: pybloom-live 实现的高效去重过滤器 (`src/core/bloom_filter.py`)
 - **三级缓存**: Memory (cachetools LRU) + Redis + Disk 三级缓存架构
 - **配置模块**: `src/config/modules/redis.py` Redis 配置
 
@@ -248,6 +288,9 @@ graph TB
             ConfigRepo[config_repository]
             DocRepo[document_repository]
             MonitorRepo[monitor_repository]
+            CustomKnowledgeRepo[custom_knowledge_repository]
+            KnowledgeQAHistoryRepo[knowledge_qa_history_repository]
+            GraphRepo[graph_repository]
             subgraph RagEvalRepo [RAG Eval Repository]
                 DraftRepo[draft_repository]
                 CaseRepo[test_case_repository]
@@ -271,11 +314,17 @@ graph TB
     DI --> ConfigRepo
     DI --> DocRepo
     DI --> MonitorRepo
+    DI --> CustomKnowledgeRepo
+    DI --> KnowledgeQAHistoryRepo
+    DI --> GraphRepo
     DI --> RagEvalRepo
     
     ConfigRepo --继承--> Base
     DocRepo --继承--> Base
     MonitorRepo --继承--> Base
+    CustomKnowledgeRepo --继承--> Base
+    KnowledgeQAHistoryRepo --继承--> Base
+    GraphRepo --继承--> Base
     RagEvalRepo --继承--> Base
     
     Base --> DB
@@ -292,7 +341,10 @@ graph TB
   - `repository/config_repository.py`: `ConfigVersionRepository`, `ConfigAuditLogRepository` - 配置版本与审计日志
   - `repository/document_repository.py`: `SourceDocumentRepository`, `DocumentRecordRepository` - 文档管理
   - `repository/monitor_repository.py`: `LLMCallLogRepository`, `ABTestMetricRepository` - 监控日志
-  - `repository/rag_eval/` (12 个独立文件):
+  - `repository/custom_knowledge_repository.py`: `CustomKnowledgeRepository` - 自定义知识管理（MySQL + Neo4j 双写）
+  - `repository/knowledge_qa_history_repository.py`: `KnowledgeQAHistoryRepository` - 知识问答历史记录
+  - `repository/graph_repository.py`: `GraphEntityRepository`, `GraphRelationRepository`, `GraphCommunityNodeRepository` - 知识图谱存储
+  - `repository/rag_eval/` (11 个独立文件):
     - `draft_repository.py`: `DraftRepository`
     - `test_case_repository.py`: `TestCaseRepository`
     - `test_set_repository.py`: `TestSetRepository`

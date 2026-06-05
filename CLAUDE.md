@@ -1,4 +1,15 @@
-# ⚠️ 核心工作原则 (不可忽略)
+# ️ 核心工作原则 (不可忽略)
+
+## ️ Skill 与 MCP 使用原则
+
+**每次收到用户消息时，必须先评估 skill 适用性（1% 可能性也要调用），再响应。**
+
+- 创建型任务 → 先 `brainstorming`；修复型任务 → 先 `systematic-debugging`
+- 多步骤任务 → 先 `writing-plans`；完成前 → `verification-before-completion`
+- **禁止跳过 skill 直接执行。**
+- 完整 Skill/MCP 目录与使用说明：[.ai/skill_mcp_usage.md](.ai/skill_mcp_usage.md)
+
+**MCP 使用优先级**：CodeGraph 优先于 grep/read 用于结构性查询；Context7 用于框架文档查询；其余（GitHub/Vercel/Playwright）按需调用。
 
 【以第一性原理！从原始需求和问题本质出发，不从惯例或模板出发。
 1. 不要假设我清楚自己想要什么。动机或目标不清晰时，停下来讨论。
@@ -27,6 +38,7 @@
 | **Agent 业务编排** | `.ai/agents_workflow.md` | LangGraph 状态管理、NodePre 到 Node5 节点职责与输入输出 |
 | **知识问答模块** | `.ai/agents_workflow.md` + `core/knowledge_qa/` + `service/knowledge_qa_service.py` | 独立 LangGraph 编排的知识问答系统，含 v1(13节点)/v2(16节点+Neo4j三层架构) 双版本、KnowledgeBundle 统一检索、自定义知识三通道匹配、D2G 书→图谱流水线 |
 | **知识问答架构（Neo4j 三层）** | `.ai/agents_workflow.md` + `.ai/rag_pipeline.md` | ✅ 已实施 — Neo4j 知识图谱(27种实体+30+种关系) + Bundle 统一检索 + 三层优先级模型(L0 自定义规则 > L1 图谱 > L2 原文)。 特性开关控制，支持灰度发布 |
+| **知识审核与图谱管理** | `.ai/architecture.md` + `controller/curation_controller.py` | 书籍绑定/AI生成/草稿编辑/图谱可视化/待提炼队列/跨书融合/发布入库Neo4j，前端 `features/curation/` |
 | **系统架构与设计** | `.ai/architecture.md` | 多层架构总览图、各微服务或子系统的模块交互关系、数据流向 |
 | **基础设施与配置** | `.ai/infrastructure.md` | 数据库(MySQL/Redis)参数、DI注入规范、LLM模型工厂、提示词管理 |
 | **数据库初始化**   | `.ai/full_init_script_mysql57.sql` | 完整的 MySQL 5.7 DDL 脚本，包含建库、21张业务建表语句（无外键约束，采用弱关联） |
@@ -40,7 +52,7 @@
 
 # 📌 项目宏观概览与技术栈
 
-**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（6节点 LangGraph 流水线）、知识问答 Agent（v1: 13节点纯 Chroma / v2: 16节点 Neo4j 三层架构 + Bundle 统一检索）、RAG 知识检索（双流水线混合检索）、自定义知识三通道匹配系统、D2G 文档→知识图谱流水线（27种实体+30+种关系）、6层校验诊断引擎、以及多提供商 LLM 热切换支持。
+**儿童发展评估 Agent** 是一个基于 AI 的多智能体系统，根据儿童的发展画像评估其运动计划。该系统使用 **LangGraph** 进行编排，采用前后端完全解耦架构。核心能力包含：评估 Agent（7节点 LangGraph 流水线）、知识问答 Agent（v1: 13节点纯 Chroma / v2: 16节点 Neo4j 三层架构 + Bundle 统一检索）、RAG 知识检索（双流水线混合检索）、知识审核与图谱管理（书籍绑定/AI生成/草稿编辑/跨书融合）、自定义知识三通道匹配系统、D2G 文档→知识图谱流水线（27种实体+30+种关系）、6层校验诊断引擎、统一任务状态管理、以及多提供商 LLM 热切换支持。
 
 ## 技术栈
 - **语言**: Python 3.13, TypeScript 5.3
@@ -53,42 +65,46 @@
 - **DI/调度**: injector (依赖注入), APScheduler (定时任务)
 - **缓存/过滤**: cachetools (LRU), pybloom-live (布隆过滤器)
 - **前端架构**: React 19.2.4, Vite 6.4, Ant Design 6.3.2, @ant-design/pro-components 3.1.11, @ant-design/charts 2.6, Zustand 5, React Router 7 (react-router-dom 7.13), TanStack Query 5
+- **前端图谱可视化**: cytoscape + react-cytoscapejs（知识图谱 GraphCanvas 组件）
+- **前端 Markdown**: react-markdown + remark-gfm + rehype-raw + rehype-sanitize
 - **前端测试**: Vitest 4.1, React Testing Library 16.3
 - **包管理**: uv (后端), npm (前端)
-- **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`（配置于 `frontend/vite.config.ts`）
+- **前端路径别名**: `@` → `src/`, `@app` → `src/app/`, `@pages` → `src/pages/`, `@features` → `src/features/`, `@entities` → `src/entities/`, `@shared` → `src/shared/`, `@curation` → `src/features/curation`（配置于 `frontend/vite.config.ts`）
 
 ## 后端目录结构
 ```
 backend/src/
 ├── api/                    # API 基础设施
-│   ├── json_response.py    # 统一 JSON 响应类
-│   └── sse.py              # SSE 推送基础设施
-├── data/                   # 静态数据文件（术语表/同义词/里程碑/测试集/运动清单/jieba词典/敏感词）
+│   ├── json_response.py    # UtcJsonResponse（自动为 MySQL DATETIME 追加 Z）
+│   └── sse.py              # SSE 基础设施（SSEPublisher + sse_response 流式响应）
+├── data/                   # 静态数据文件（术语表/同义词/里程碑/测试集/运动清单/jieba词典/敏感词/Prompt注入模式库/知识问答评估测试集）
 ├── config/                 # 配置系统
-│   ├── core/               # 配置基础设施（管理器、持久化、事件）
+│   ├── core/               # 配置基础设施（manager/repository/singleton/entities/events/init/metadata）
 │   ├── modules/            # 按功能域拆分的配置模块
+│   │   ├── app.py / database.py / redis.py / neo4j.py / logging.py / paths.py / tracing.py
 │   │   ├── models/         # LLM/Embedding/ML 评分配置模块
-│   │   └── rag/            # RAG 配置子模块（分块/检索/向量化/测试/管道）
-│   └── rules/              # 业务规则配置层
+│   │   └── rag/            # RAG 配置子模块（core/chunking/retrieval/vector_store/pageindex/pipeline/testing）
+│   └── rules/              # 业务规则配置层（rules.json 加载 + Pydantic 建模）
 ├── controller/             # API 控制器层
 │   ├── rag_eval/           # RAG 评估子控制器（8个：case/draft/metric/report/run/snapshot/tuning + registry）
 │   ├── config_controller.py
 │   ├── config_health_controller.py
 │   ├── config_management_controller.py
-│   ├── health_controller.py
+│   ├── curation_controller.py    # 知识审核 API（书籍管理/AI生成/草稿CRUD/图谱/待提炼队列/跨书融合/发布入库Neo4j）
 │   ├── custom_knowledge_controller.py  # 自定义知识管理（三通道匹配+上传+CRUD）
+│   ├── health_controller.py
 │   ├── knowledge_qa_controller.py
 │   ├── monitoring_controller.py
 │   ├── prompt_management_controller.py
 │   ├── rag_controller.py
-│   └── task_controller.py
+│   └── task_controller.py        # 统一任务 API（所有任务类型的 CRUD/SSE 订阅/取消）
 ├── core/                   # 核心业务逻辑
 │   ├── knowledge_qa/       # 知识问答模块（v1/v2 双版本 LangGraph）
 │   │   ├── graph/          # LazyGraphRAG（实体提取/图构建/社区检测/遍历/全局重建）
-│   │   ├── neo4j/          # Neo4j 层（driver/schema/enhanced_query/query_dispatcher/跨书消歧）
-│   │   ├── d2g/            # D2G 文档→图谱流水线（book_pipeline/实体消歧/关系推理/图谱写入）
-│   │   ├── nodes/          # v1 节点（13个: match_books/analyze_child/identify_problems/...）
-│   │   ├── nodes_v2/       # v2 节点（8个: fast_km/analyze_child_v2/build_bundle/synthesis_v2/...）
+│   │   ├── neo4j/          # Neo4j 层（20个文件: driver/schema/enhanced_query/query_dispatcher/aggregator/chapter_parser/cross_book_*/delta_cypher/diversity_rerank/synonym_registry/md_* 等）
+│   │   ├── d2g/            # D2G 文档→图谱流水线（11个文件: book_pipeline/book_reader/chapter_extractor/entity_resolver/global_relation_inference/graph_committer/graph_quality/long_chapter/master_graph/models/review_md_generator）
+│   │   ├── nodes/          # v1 节点（16个文件: base + match_books/prefetch_context/analyze_child/identify_problems/recommend_types/plan_outline/plan_expand_parallel/plan_assemble/generate_s1_s2_citations/generate_s4_citations/contradiction_audit/conclusion/verify_citations/finalize/fast_knowledge_match）
+│   │   ├── nodes_v2/       # v2 节点（8个独立文件，复用部分v1节点组成16节点图: analyze_child_v2/identify_problems_v2/recommend_types_v2/plan_outline_v2/plan_expand_parallel_v2/knowledge_synthesis_v2/query_neo4j_graph/contradiction_audit_v2）
 │   │   ├── prompts/        # 提示词模板
 │   │   ├── bundle.py       # KnowledgeBundle 不可变知识产物数据模型
 │   │   ├── bundle_builder.py # Bundle Phase 1 构建器（Neo4j+Chroma+LazyGraphRAG）
@@ -114,34 +130,87 @@ backend/src/
 │   │   ├── cleanup.py      # 追踪数据清理
 │   │   ├── langgraph_middleware.py  # LangGraph 追踪中间件
 │   │   └── truncation.py   # 追踪数据截断
-│   ├── rag/                # RAG 核心模块
-│   ├── metadata/           # 文档元数据处理
-│   ├── ml/                 # ML 评分引擎
-│   ├── nodes/              # LangGraph 节点（评估 Agent）
+│   ├── rag/                # RAG 核心模块（query_analyzer/dedup_engine/synonym_expander/score_calibrator/model_warmer 等 8 个）
+│   ├── metadata/           # 文档元数据处理（chunk_chapter/chunk_page/chunk_hierarchical/key_chunk_identifier/metadata_extraction/node_cleaner/splitter_manager/extraction_helpers）
+│   ├── ml/                 # ML 评分引擎（qwen_scorer）
+│   ├── nodes/              # LangGraph 节点（评估 Agent: base/preprocessing/validation/assessment/retrieval/scoring/reporting）
 │   ├── pipeline/           # RAG 查询流水线
-│   │   ├── orchestrator.py # 流水线编排器
-│   │   └── steps/          # 流水线步骤（缓存/去重/混合检索/页面增强/查询改写/路由/重排/融合/同义词扩展）
+│   │   ├── orchestrator.py # PipelineOrchestrator 流水线编排器
+│   │   └── steps/          # 10个步骤: cache_check/query_rewrite/query_router/synonym_expansion/hybrid_retrieval/reranking/deduplication/pageindex_enhancement/result_fusion
 │   ├── prompt/             # 提示词管理（manager + validator）
-│   ├── prompt_impl/        # 提示词实现层（facade + ab_test + initializer + storage）
-│   └── config/             # 配置缓存
+│   ├── prompt_impl/        # 提示词实现层（facade + ab_test_manager + initializer + prompt_storage）
+│   ├── config/             # 配置缓存（cache.py）
+│   ├── async_task.py       # AsyncTaskManager 通用异步任务管理器（内置 SSE 进度推送）
+│   ├── bloom_filter.py     # BloomFilterService 布隆过滤器
+│   ├── circuit_breaker.py  # 熔断器（CLOSED/OPEN/HALF_OPEN 三态）
+│   ├── database.py         # SQLAlchemy 异步引擎 + session 工厂
+│   ├── di_container.py     # DI 容器（Injector 配置所有 Module）
+│   ├── distributed_lock.py # Redis 分布式锁 + watchdog 续期
+│   ├── embedding.py        # SafeDashScopeEmbedding 安全包装器
+│   ├── embedding_batch.py  # DashScope Embedding 批量调用
+│   ├── event_bus.py        # 基于 Redis Pub/Sub 的事件总线
+│   ├── events.py           # BaseEvent 事件基类
+│   ├── graph.py            # create_agent_graph() 评估 Agent LangGraph 工作流
+│   ├── hybrid_retrieval.py # HybridRetrievalMerger（RRF + Min-Max 归一化）
+│   ├── interfaces.py       # 抽象接口（IIndexManager/ICacheService/IRetrievalService 等）
+│   ├── layered_content_generator.py  # 分层内容生成器（LLM 驱动，SSE 进度）
+│   ├── memory_manager.py   # MemoryManager 会话记忆管理器
+│   ├── metadata_extractor.py  # LLM 驱动的文档元数据提取
+│   ├── metadata_processor.py  # MetadataProcessor 元数据处理器门面
+│   ├── pageindex_wrapper.py   # PageIndex 全网检索 API 封装（熔断/重试/降级）
+│   ├── parsers.py          # 文档解析器集合（PDF/EPUB/HTML）
+│   ├── prometheus_metrics.py  # Prometheus 指标定义
+│   ├── prompt_injection_guard.py  # PromptInjectionGuard 注入防护
+│   ├── prompts_fallback.py # 提示词降级备用
+│   ├── query_decomposer.py # QueryDecomposer 查询分解器（LLM 驱动）
+│   ├── query_router.py     # QueryRouter 查询路由器（LLM 驱动）
+│   ├── rag_eval_task_manager.py  # RAG 评估专用任务管理器
+│   ├── rag_evaluator.py    # RetrievalMetrics 检索评估指标
+│   ├── redis_client.py     # RedisClient Redis 异步客户端单例
+│   ├── reranker.py         # Reranker 创建工厂
+│   ├── result_fusion.py    # ResultFusion 结果融合器
+│   ├── scheduler.py        # APScheduler 定时任务调度器
+│   ├── session_manager.py  # SessionManager 基于 Redis 的会话管理
+│   └── vector_store_factory.py  # VectorStoreFactory（chroma/pinecone/milvus/weaviate）
 ├── middleware/              # 中间件层
 │   ├── exception_handler.py # 全局异常处理
 │   ├── response_wrapper.py  # 响应包装中间件
 │   └── trace_middleware.py  # 追踪中间件
 ├── models/                 # SQLAlchemy 数据模型
-│   ├── rag_eval/           # RAG 评估模型（11个：draft/test_case/test_run/test_set/snapshot/report/tuning/config/enums等）
-│   ├── config.py / document.py / graph.py / monitor.py / trace.py
-│   └── prompt_version.py / prompt_metadata.py / prompt_enums.py
+│   ├── rag_eval/           # RAG 评估模型（12个: draft/test_case/test_set/test_set_case/test_run/test_run_result/snapshot/report/tuning/config/enums + __init__）
+│   ├── config.py           # ConfigVersion + ConfigAuditLog
+│   ├── document.py         # SourceDocument + DocumentRecord
+│   ├── graph.py            # GraphEntity + GraphRelation + GraphCommunityNode（LazyGraphRAG 存储层）
+│   ├── knowledge_qa_history.py  # KnowledgeQAHistory（知识问答历史记录）
+│   ├── md_metadata.py      # MDMetadata（MD 策管状态）
+│   ├── md_version.py       # MDVersion（MD 版本历史，支持增量更新）
+│   ├── monitor.py          # ABTestMetrics + LLMCallLog
+│   ├── prompt_version.py   # PromptVersion
+│   ├── prompt_metadata.py  # PromptMetadata
+│   ├── prompt_enums.py     # PromptCategory 枚举
+│   └── trace.py            # Trace（全链路追踪记录）
 ├── repository/             # 数据访问层
-│   ├── rag_eval/           # RAG 评估仓库（11个）
-│   ├── base.py             # 泛型 CRUD 基类
-│   ├── config_repository.py / document_repository.py
-│   ├── graph_repository.py / monitor_repository.py
+│   ├── rag_eval/           # RAG 评估仓库（11个: draft/test_case/test_set/test_set_case/test_run/test_run_result/snapshot/report/tuning_suggestion/config_version/config_change_set）
+│   ├── base.py             # BaseRepository 泛型 CRUD 基类
+│   ├── config_repository.py    # ConfigVersionRepository + ConfigAuditLogRepository
+│   ├── custom_knowledge_repository.py  # CustomKnowledgeRepository（MySQL + Neo4j 双写）
+│   ├── document_repository.py  # SourceDocumentRepository + DocumentRecordRepository
+│   ├── graph_repository.py     # GraphEntity/Relation/CommunityNode Repository
+│   ├── knowledge_qa_history_repository.py  # KnowledgeQAHistoryRepository
+│   └── monitor_repository.py   # LLMCallLogRepository + ABTestMetricRepository
 ├── schemas/                # Pydantic 实体类
-│   ├── rag_eval/           # RAG 评估实体（diagnosis/draft/metrics/report/snapshot/test_case/test_run/test_set/tuning）
-│   ├── assessment.py / auth.py / config.py / knowledge_qa.py
+│   ├── rag_eval/           # RAG 评估实体（diagnosis/draft/metrics/report/snapshot/source_document/test_case/test_run/test_set/tuning）
+│   ├── assessment.py       # ChildProfile/Activity/ProposedPlan/AgentState
+│   ├── auth.py             # User
+│   ├── cognitive_dimension.py  # CognitiveDimension（12种认知维度枚举）
+│   ├── common.py           # APIResponse/HealthResponse/PaginatedResponse
+│   ├── config.py           # 配置 DTO（ConfigSaveRequest/ConfigVersionResponse 等）
+│   ├── events.py           # 11种 SSE 事件类型
+│   ├── knowledge_qa.py     # KnowledgeQARequest/MatchedBook/SectionOutput/Agent State
 │   ├── llm.py / prompt.py / metadata.py / ml.py / monitoring.py
-│   └── query.py / rag.py / task.py / events.py / common.py
+│   ├── query.py            # QueryType/QueryClassification
+│   ├── rag.py              # DocumentMetadata/DocumentRecord/DocumentStore
+│   └── task.py             # TaskStatus/TaskState/TaskSseEvent（统一任务状态模型）
 ├── service/                # 业务服务层
 │   ├── rag_eval/           # RAG 评估服务
 │   │   ├── case/           # 测试用例服务（facade + case_service + set_service）
@@ -157,9 +226,26 @@ backend/src/
 │   ├── document_ingestion/ # 文档导入服务
 │   ├── cache/              # 缓存服务
 │   ├── index_manager/      # 索引管理服务
-│   ├── custom_knowledge_service.py  # 自定义知识服务（三通道匹配+上传+LLM关键词生成）
-│   ├── knowledge_qa_service.py  # 知识问答服务
-│   └── [其他独立服务]      # alert/audit/config_health/content_audit/document_manager/monitoring/rag/trace 等
+│   ├── alert_service.py              # LLM 监控告警（规则匹配/阈值触发）
+│   ├── audit_log_service.py          # RAG 评估操作审计日志
+│   ├── config_conflict_detector.py   # 配置冲突检测（10条规则）
+│   ├── config_health_service.py      # 配置健康诊断（LLM + 本地规则评分）
+│   ├── config_validation_engine.py   # 配置校验引擎（类型/范围/推荐值）
+│   ├── content_audit_service.py      # 内容审核（敏感词匹配）
+│   ├── custom_knowledge_service.py   # 自定义知识服务（三通道匹配+上传+LLM关键词生成）
+│   ├── document_manager.py           # 文档管理器（MySQL document_records 跟踪）
+│   ├── draft_deduplicator.py         # 草稿去重器（基于 difflib 相似度）
+│   ├── export_notification.py        # 导出 SSE 通知（独立 SSE 通道）
+│   ├── grayscale_rollout.py          # Neo4j 灰度上线（基于 question_id hash）
+│   ├── intent_annotation_service.py  # 意图标注服务
+│   ├── knowledge_qa_service.py       # 知识问答服务（并发限制/LangGraph/SSE/超时降级/导出）
+│   ├── monitoring_service.py         # RAG 监控服务（Prometheus 集成）
+│   ├── prompt_impact_analyzer.py     # 提示词影响分析引擎
+│   ├── rag_service.py                # RAG 服务门面（委托子服务）
+│   ├── task_sse_publisher.py         # 统一任务 SSE 发布器
+│   ├── task_state_service.py         # 统一任务状态服务（Redis Hash + Lua 原子更新）
+│   ├── test_run_task_adapter.py      # TestRun 任务适配器（Redis + MySQL 双写）
+│   └── trace_service.py              # 追踪数据服务（Trace/Span 查询/统计）
 ├── templates/              # 模板文件
 │   └── reports/            # 报告模板（HTML for WeasyPrint）
 └── utils/                  # 工具函数
@@ -203,7 +289,7 @@ frontend/src/
 │   ├── knowledge/          # 搜索特性（hooks/, pages/）
 │   ├── curation/           # 知识管理特性（书籍绑定/草稿编辑/图谱可视化/自定义知识/跨书管理）
 │   │   ├── api/            # curationApi（书籍/草稿/图谱/自定义知识/跨书 API）
-│   │   ├── components/     # 16个组件（ChapterRow/GraphCanvas/NodeDetail/CrossBookPanel/EntityNav等）
+│   │   ├── components/     # 15个组件（ChapterRow/ConflictInline/CrossBookBadge/CrossBookPanel/DropZone/EmptyState/EntityNav/GraphCanvas/InfoPanel/NodeDetail/ProgressBar/QueueItem/RelationshipCards/StatsGrid/StatusBadge）
 │   │   ├── hooks/          # useDraftEditor / useGraphData / useSSEGeneration
 │   │   ├── pages/          # 8个页面（BookList/BindBook/Generate/DraftEditor/Graph/PendingQueue/CustomKnowledge/CrossBook）
 │   │   ├── stores/         # curationStore
@@ -218,22 +304,55 @@ frontend/src/
 │   │   └── utils/          # renderMarkdown（S3/S4 结构化数据→Markdown 渲染）
 │   ├── monitoring/         # LLM 监控特性（LLMMonitoringDashboard）
 │   └── rag-eval/           # RAG 评估特性
-│       ├── pages/          # 12个页面（Draft/PromptList/PromptEdit/PromptSandbox/PromptComparison/Run/TestCase/TestSet/Report/ReportDetail/Tuning/Main）
+│       ├── pages/          # 13个页面（RagEvalMain/Draft/TestCase/TestSet/Run/Report/ReportDetail/Tuning + lazy: PromptList/PromptEdit/PromptVersionComparison/PromptTestSandbox）
 │       ├── components/     # 16个业务组件（common: LayerStatusBadge/MetricScoreCard/StatusBadge, diagnosis: DiagnosisPanel/IssueList/LayerResultCard, draft: DraftGenerationForm/DraftTable, metrics: LayerScoreCard/ScoringDashboard, report: BadCaseTable/ReportHeader/TrendChart, test-set: CaseTransferModal, tuning: ConflictAlert/SuggestionPanel）
-│       ├── hooks/          # 13个业务 Hooks（useDrafts/useDraftGenerationProgress/useMetrics/usePrompts/useReports/useSSEProgress/useSnapshots/useTestCases/useTestRuns/useTestSets/useTuning + index + ragEvalHooks.test）
+│       ├── hooks/          # 12个业务 Hooks + index + 2个测试文件（ragEvalHooks.test/useSSEProgress.test）
 │       ├── stores/         # 3个 Zustand Store（draftGenerationStore/reportProgressStore/runProgressStore）
 │       └── utils/          # 工具函数（export.ts/sse.ts + 测试）
-├── lib/                    # 全局库（queryClient - TanStack Query 配置）
+├── lib/                    # 全局库
+│   ├── queryClient.ts      # TanStack Query 客户端配置（staleTime/gcTime/retry）
+│   └── markdown.ts         # Markdown 处理（stripFrontmatter + preprocessCurationMarkdown + 50+种关系类型中文映射）
 ├── pages/                  # 独立页面（BookChunksPage, SystemConfigPage）
 ├── router/                 # 路由配置
 ├── shared/                 # 共享层
-│   ├── api/                # 通用 API 工具（client）
-│   ├── hooks/              # 通用 Hooks（useDebounce, usePagination, useSSE）
-│   ├── lib/                # 通用库（constants, formatters, highlight, notification, validators）
-│   ├── types/              # 通用类型（sse）
+│   ├── api/                # 通用 API 工具（Axios client，统一响应解包/错误处理/FormData）
+│   ├── hooks/              # 通用 Hooks（useDebounce+useDebounceCallback, usePagination, useSSE 自动重连+指数退避）
+│   ├── lib/                # 通用库（constants/formatters/highlight/notification/validators）
+│   ├── styles/             # 全局样式（tokens.css 设计 Token + global.scss）
+│   ├── types/              # 通用类型（SSE 事件类型 10种 + RecoveryState）
 │   └── ui/                 # 共享 UI（DiffViewer）
-└── app/                    # 应用根组件（含 styles/）
+└── app/                    # 应用根组件
+    ├── main.tsx            # 入口文件（createRoot + RouterProvider）
+    ├── App.tsx             # 根组件（QueryClientProvider + ConfigProvider + ProLayout 顶部导航 + Outlet）
+    └── styles/             # 入口样式
 ```
+
+## 前端路由配置
+| 路径 | 组件 | 加载方式 |
+|------|------|---------|
+| `/` | KnowledgeQAPage（首页=知识问答） | eager |
+| `/knowledge-base` | KnowledgeBasePage | eager |
+| `/knowledge-search` | KnowledgeSearchPage | eager |
+| `/rag-eval` | RagEvalMainPage（Tabs 布局，含子路由） | eager |
+| `/rag-eval/drafts` | DraftPage | eager |
+| `/rag-eval/cases` | TestCasePage | eager |
+| `/rag-eval/sets` | TestSetPage | eager |
+| `/rag-eval/runs` | RunPage | eager |
+| `/rag-eval/reports` | ReportPage | eager |
+| `/rag-eval/reports/:reportId` | ReportDetailPage | eager |
+| `/rag-eval/tuning` | TuningPage | eager |
+| `/book-chunks/:fileHash/:fileName` | BookChunksPage | eager |
+| `/system-config` | SystemConfigPage | eager |
+| `/prompt-management/*` | PromptList/Edit/Comparison/TestSandbox | lazy |
+| `/monitoring` | LLMMonitoringDashboard | eager |
+| `/curation/books` | BookListPage | eager |
+| `/curation/bind` | BindBookPage | eager |
+| `/curation/generate/:bookId` | GeneratePage | eager |
+| `/curation/editor/:bookId` | DraftEditorPage | eager |
+| `/curation/graph[/:bookId]` | GraphPage | eager |
+| `/curation/pending` | PendingQueuePage | eager |
+| `/curation/custom-knowledge` | CustomKnowledgePage | eager |
+| `/curation/cross-book` | CrossBookPage | eager |
 
 ## 常用开发命令
 - **后端**: `cd backend && uv sync && uv run start` 或 `uv run python src/server.py`
@@ -298,6 +417,7 @@ frontend/src/
 ### 2. 异步编程与 FastAPI
 - **SSE 推送异常**: 在通过 `AsyncTaskManager` 或 `SSEPublisher` 推送 SSE 结果时，确保结果被 `jsonable_encoder` 处理为 JSON 序列化对象，直接传 Pydantic 或 ORM 模型会导致 ASGI `ExceptionGroup` 崩溃。
 - **异步任务签名**: 通过 `AsyncTaskManager.start_task` 触发异步任务时，关键字参数必须与目标函数签名完全匹配；后台任务严禁抛出未捕获异常，防止 `Task exception was never retrieved`。
+- **统一任务状态**: `TaskStateService`（Redis Hash + Lua 原子更新）管理所有任务生命周期，`TaskSSEPublisher` 提供统一 SSE 事件格式，频道 `{task_type}:{task_id}`。
 
 ### 3. RAG 与 LlamaIndex
 - **ChromaDB 距离度量**: 使用输出 Cosine Similarity 的 Embedding 模型（如 DashScope）时，创建 Chroma collection 必须指定 `metadata={'hnsw:space': 'cosine'}`，否则分数计算异常。
@@ -314,6 +434,7 @@ frontend/src/
 
 ### 5. 前端 SPA 路由
 - **刷新 404 问题**: 前端使用 BrowserHistory，后端必须配置 SPA 回退路由，将非 API 路径的 404 请求返回 `index.html`。
+- **Vite 代理**: 开发环境配置 3 个代理规则（`/assess`、`^/rag/`（正则）、`/api`），均转发到后端 API。
 
 ### 6. 统一响应与异常处理
 - **禁止 HTTPException**: 所有业务异常必须使用 `AppException` 或其子类，通过全局异常处理器统一格式化。
@@ -345,10 +466,24 @@ frontend/src/
 - **路由懒加载**: 提示词管理页面 (`/prompt-management/*`) 使用 `lazy()` + `Suspense` 按需加载；RAG 评估页面为 eager 加载。
 - **状态管理**: 使用 Zustand 5 管理复杂业务状态
   - **RAG 评估状态**: `features/rag-eval/stores/` 包含草稿生成、测试运行、报告进度等状态
+  - **知识问答状态**: `features/knowledge-qa/stores/knowledgeQAStore.ts` 管理 SSE 生命周期 + localStorage 恢复
+  - **知识管理状态**: `features/curation/stores/curationStore.ts` 管理书籍/草稿/图谱/队列/生成进度
   - **状态持久化**: 支持状态持久化和恢复
 - **API 客户端**: `api/` 目录按业务模块组织 API 客户端
   - **RAG 评估 API**: `api/rag-eval/` 包含草稿、测试用例、测试运行、报告等 API
+  - **知识审核 API**: `features/curation/api/curationApi.ts` 包含书籍/草稿/图谱/自定义知识/跨书 API
   - **链路追踪 API**: `api/tracing.ts` 包含 Trace 和 Span 查询 API
+- **全局样式**: `shared/styles/tokens.css` 定义设计 Token（CSS 自定义属性），`shared/styles/global.scss` 定义全局样式
+
+### 10. 基础设施模块速查
+- **熔断器**: `core/circuit_breaker.py` — CLOSED/OPEN/HALF_OPEN 三态，保护 MySQL/Redis 调用
+- **分布式锁**: `core/distributed_lock.py` — Redis 分布式锁 + watchdog 续期，Redis 不可用降级 asyncio.Lock
+- **布隆过滤器**: `core/bloom_filter.py` — 快速判断 ID 是否存在
+- **事件总线**: `core/event_bus.py` — 基于 Redis Pub/Sub 的异步事件发布/订阅
+- **定时任务**: `core/scheduler.py` — APScheduler（02:00 清理过期报告/03:00 清理孤立草稿/04:00 清理过期追踪）
+- **注入防护**: `core/prompt_injection_guard.py` — 检测和清理潜在 Prompt 注入攻击
+- **内容审核**: `service/content_audit_service.py` — 导入和检索环节的敏感词检测
+- **灰度发布**: `service/grayscale_rollout.py` — 基于 question_id hash 决定是否使用 Neo4j
 
 ---
 

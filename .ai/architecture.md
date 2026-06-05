@@ -21,21 +21,25 @@ graph TB
             SystemConfigPage[系统配置页 /system-config]
             PromptManagementSuite[提示词管理 /prompt-management/*]
             LLMMonitoringPage[LLM监控页 /monitoring]
+            CurationSuite[知识审核套件 /curation/*<br>8个页面: 书籍/绑定/生成/编辑器<br>图谱/待提炼/自定义知识/跨书]
         end
         subgraph Features 业务特性层
-            KnowledgeQAFeature[知识问答特性]
+            KnowledgeQAFeature[知识问答特性<br>api/components/hooks/pages/stores/utils]
             DocumentsFeature[知识库特性]
             KnowledgeFeature[搜索特性]
             RagEvalFeature[RAG评估特性<br>pages/components/hooks/stores/utils]
             ConfigFeature[配置特性]
             PromptFeature[提示词特性]
             MonitoringFeature[监控特性<br>LLMMonitoringDashboard]
+            CurationFeature[知识审核特性<br>书籍绑定/草稿编辑/图谱可视化<br>自定义知识/跨书融合/D2G流水线]
         end
         subgraph Entities 业务实体层
             AssessmentEntity[评估实体]
             TestCaseEntity[测试用例实体]
             TracingEntity[链路追踪实体]
             RagEvalEntity[RAG评估实体<br>types/enums/mappers/constants]
+            CurationEntity[知识审核实体<br>书籍/草稿/图谱/自定义知识类型]
+            KnowledgeQAEntity[知识问答实体<br>请求/响应/状态类型]
         end
         subgraph Shared 共享层
             ApiClient[统一API客户端]
@@ -47,6 +51,8 @@ graph TB
             DraftStore[DraftGenerationStore<br>草稿生成状态]
             RunStore[RunProgressStore<br>测试运行状态]
             ReportStore[ReportProgressStore<br>报告生成状态]
+            KnowledgeQAStore[KnowledgeQAStore<br>SSE生命周期+localStorage恢复]
+            CurationStore[CurationStore<br>书籍/草稿/图谱/队列/生成进度]
         end
     end
     
@@ -55,10 +61,14 @@ graph TB
         TraceMW[TraceMiddleware<br>TRACE_ID注入]
         RespWrap[ResponseWrapperMiddleware<br>响应包装]
         CORS[CORS 中间件]
-        TaskCtrl[TaskController]
+        TaskCtrl[TaskController<br>统一任务API]
         RagCtrl[RagController]
         RagEvalCtrl[RagEvalControllerRegistry<br>7个子控制器]
+        CurationCtrl[CurationController<br>知识审核 /api/v2/curation]
+        KnowledgeQACtrl[KnowledgeQAController<br>知识问答]
+        CustomKnowledgeCtrl[CustomKnowledgeController<br>自定义知识管理]
         ConfigCtrl[ConfigController]
+        ConfigMgmtCtrl[ConfigManagementController]
         ConfigHealthCtrl[ConfigHealthController]
         PromptCtrl[PromptManagementController]
         MonitorCtrl[MonitoringController]
@@ -70,7 +80,7 @@ graph TB
             DocIngestion[DocumentIngestionFacade<br>文档导入门面服务]
             DocParser[DocumentParser<br>文档解析器]
             ChunkIndex[ChunkingIndexing<br>分块索引服务]
-            TaskState[TaskStateManager<br>任务状态管理]
+            DocMgr[DocumentManager<br>文档跟踪管理]
         end
         subgraph RAG 服务簇 RAG
             RagSvc[RagService<br>RAG 门面服务]
@@ -78,6 +88,11 @@ graph TB
             QueryRewriter[QueryRewriter<br>查询重写服务]
             ResultProcessor[ResultProcessor<br>结果处理服务]
             IndexMgr[IndexManagerFacade<br>索引管理门面服务]
+        end
+        subgraph 知识问答服务簇 Knowledge QA
+            KnowledgeQASvc[KnowledgeQAService<br>并发限制/LangGraph/SSE/超时降级/导出]
+            CustomKnowledgeSvc[CustomKnowledgeService<br>三通道匹配+上传+LLM关键词生成]
+            GrayscaleRollout[GrayscaleRollout<br>Neo4j灰度上线/hash路由]
         end
         subgraph 缓存服务簇 Cache
             CacheSvc[CacheService<br>三级缓存门面服务]
@@ -94,9 +109,25 @@ graph TB
             ReportEngine[ReportEngine<br>报告生成/趋势/导出]
             TuningEngine[TuningEngine<br>调优建议/冲突检测]
         end
-        MonitorSvc[MonitoringService<br>监控服务]
-        AlertSvc[AlertService<br>告警服务]
-        TuningSvc[TuningService<br>智能调优建议服务]
+        subgraph 任务基础设施簇 Task Infrastructure
+            TaskStateSvc[TaskStateService<br>Redis Hash + Lua 原子更新]
+            TaskSSEPub[TaskSSEPublisher<br>统一SSE事件发布]
+            TestRunAdapter[TestRunTaskAdapter<br>Redis + MySQL 双写]
+            ExportNotif[ExportNotification<br>导出SSE独立通道]
+        end
+        subgraph 配置与合规服务簇 Config & Compliance
+            ConfigConflictDet[ConfigConflictDetector<br>10条冲突检测规则]
+            ConfigValidEngine[ConfigValidationEngine<br>类型/范围/推荐值校验]
+            ConfigHealthSvc[ConfigHealthService<br>LLM+本地规则健康诊断]
+            AuditLogSvc[AuditLogService<br>操作审计日志]
+            PromptImpact[PromptImpactAnalyzer<br>提示词变更影响分析]
+        end
+        MonitorSvc[MonitoringService<br>监控服务/Prometheus集成]
+        AlertSvc[AlertService<br>LLM监控告警/规则+阈值]
+        TraceSvc[TraceService<br>Trace/Span查询与统计]
+        ContentAuditSvc[ContentAuditService<br>敏感词匹配/导入+检索]
+        DraftDedup[DraftDeduplicator<br>difflib相似度去重]
+        IntentAnnotSvc[IntentAnnotationService<br>意图标注]
     end
     
     subgraph 核心配置与状态层
@@ -132,17 +163,21 @@ graph TB
         AsyncMgr[AsyncTaskManager<br>异步任务/SSE分发]
         Cache[CacheService 三级缓存<br>Memory + Redis + Disk]
         Memory[MemoryManager 记忆管理]
-        Security[PromptInjectionGuard<br>ContentAuditService]
+        Security[PromptInjectionGuard<br>Prompt注入检测+防护]
+        DistributedLock[DistributedLock<br>Redis锁+watchdog续期]
+        CircuitBreaker[CircuitBreaker<br>CLOSED/OPEN/HALF_OPEN三态]
+        Scheduler[APScheduler<br>定时任务调度<br>清理报告/草稿/追踪]
         ABTest[ABTestFramework]
         Repo[Repository 数据访问层<br>BaseRepository + 专属Repository]
         DB[SQLAlchemy 数据库<br>异步连接池]
-        Redis[Redis 客户端<br>分布式锁/会话/SSE心跳]
+        Redis[Redis 客户端<br>分布式锁/会话/SSE心跳/事件总线]
         Bloom[BloomFilter 布隆过滤器]
     end
     
     subgraph 数据层 Data
         MySQL[(MySQL 5.7<br>唯一持久化数据源<br>配置/测试/文档/监控/提示词)]
         RedisDB[(Redis 7.0<br>三级缓存/消息队列/锁/会话)]
+        Neo4jDB[(Neo4j 知识图谱<br>27种实体/30+种关系<br>D2G流水线/跨书融合)]
         Chroma[(Chroma 向量库<br>本地持久化<br>相对路径: app_data/storage/vector_store)]
         Files[(文件存储<br>PDF/EPUB<br>相对路径: app_data/storage)]
         Logs[(Loguru 日志系统)]
@@ -155,6 +190,8 @@ graph TB
     UI --> SysConfig
     UI --> PromptUI
     UI --> LLMMonitorUI
+    UI --> CurationUI
+    UI --> KnowledgeQAUI
     
     Assessment --> FastAPI
     Documents --> FastAPI
@@ -163,12 +200,18 @@ graph TB
     SysConfig --> FastAPI
     PromptUI --> FastAPI
     LLMMonitorUI --> FastAPI
+    CurationUI --> FastAPI
+    KnowledgeQAUI --> FastAPI
     
     FastAPI --> CORS
     CORS --> TaskCtrl
     CORS --> RagCtrl
     CORS --> RagEvalCtrl
+    CORS --> CurationCtrl
+    CORS --> KnowledgeQACtrl
+    CORS --> CustomKnowledgeCtrl
     CORS --> ConfigCtrl
+    CORS --> ConfigMgmtCtrl
     CORS --> ConfigHealthCtrl
     CORS --> PromptCtrl
     CORS --> MonitorCtrl
@@ -177,7 +220,11 @@ graph TB
     RagCtrl --> DocIngestion
     RagCtrl --> RagSvc
     RagEvalCtrl --> EvalOrchestrator
+    CurationCtrl --> KnowledgeQASvc
+    KnowledgeQACtrl --> KnowledgeQASvc
+    CustomKnowledgeCtrl --> CustomKnowledgeSvc
     ConfigCtrl --> ConfigMgr
+    ConfigMgmtCtrl --> ConfigMgr
     PromptCtrl --> PromptMgr
     MonitorCtrl --> MonitorSvc
     MonitorSvc --> LLMMonitor
@@ -198,6 +245,8 @@ graph TB
     Graph --> Cache
     Graph --> Memory
     Graph --> Security
+    Graph --> DistributedLock
+    Graph --> CircuitBreaker
     Graph --> ABTest
     Graph --> Repo
     
@@ -212,11 +261,19 @@ graph TB
     DocIngestion --> MySQL
     RetrievNode --> Chroma
     RetrievNode --> Cache
+    KnowledgeQASvc --> Neo4jDB
+    KnowledgeQASvc --> Chroma
+    CustomKnowledgeSvc --> Neo4jDB
+    CustomKnowledgeSvc --> MySQL
     ConfigMgr --> Repo
     PromptMgr --> Repo
     LLMMonitor --> Repo
     RagSvc --> Files
     CacheSvc --> RedisDB
+    TaskStateSvc --> RedisDB
+    TaskStateSvc --> MySQL
+    DistributedLock --> RedisDB
+    Scheduler --> DB
     Repo --> DB
     Repo --> RedisDB
 ```
@@ -349,4 +406,3 @@ graph LR
 - Phase 5a 失败自动重试 3 次（指数退避 30s/60s/120s）
 - 书籍删除或重新生成后，自动清理其他书籍 JSON 和 Redis 中的陈旧引用
 - Phase 5b 包含幂等检查：合并前先检查实体是否已被合并
-5. **SSE实时推送**: 测试执行进度、校验结果、报告生成过程实时推送到前端

@@ -98,6 +98,10 @@
 | **知识检索流水线** | 混合检索与重排序 | 基于 `rag_pipeline.yaml` 驱动。执行查询重写 -> 同义词扩展 -> 年龄过滤 -> BM25+向量混合检索 -> CrossEncoder重排序。 | `backend/src/service/retrieval/facade.py`<br>`backend/src/service/retrieval_service.py` |
 | **知识检索器** | 底层检索执行 | BM25+向量混合检索、A/B 测试权重、缓存、KnowledgeItem 转换 | `backend/src/service/retrieval/knowledge_retriever.py` |
 | **索引管理服务** | 向量索引生命周期 | 管理向量库的创建、加载、持久化、重建，支持快照备份和恢复。 | `backend/src/service/index_manager/facade.py`<br>`backend/src/service/index_manager_service.py` |
+| **检索器管理器** | BM25/向量/Reranker 统一管理 | 管理 BM25（jieba 分词）、向量检索器、Reranker 的创建与调度。 | `backend/src/service/retrieval/retriever_manager.py` |
+| **书籍导入器** | 断点续传书籍导入 | 书籍导入器，支持断点续传，处理大批量书籍文档的解析与入库。 | `backend/src/service/document_ingestion/book_ingestor.py` |
+| **磁盘缓存** | 磁盘层缓存 | 磁盘缓存实现，三级缓存的最底层，用于持久化高频检索结果。 | `backend/src/service/cache/disk_cache.py` |
+| **Redis 缓存** | Redis 层缓存（熔断器保护） | Redis 缓存实现，带熔断器保护，三级缓存的中间层。 | `backend/src/service/cache/redis_cache.py` |
 
 ---
 
@@ -114,6 +118,16 @@
 | **全链路追踪** | Span 追踪与成本分析 | 实现全链路 Span 追踪，异步队列写入，支持耗时与成本分析。 | `backend/src/core/tracing/writer.py`<br>`backend/src/core/tracing/context.py` |
 | **中间件层** | 请求处理与异常处理 | 全局异常处理、响应包装、追踪中间件，统一请求处理流程。 | `backend/src/middleware/exception_handler.py`<br>`backend/src/middleware/response_wrapper.py`<br>`backend/src/middleware/trace_middleware.py` |
 | **LLM 适配器** | 多框架适配 | LangChain/LlamaIndex/DashScope 适配器，统一 LLM 调用接口。 | `backend/src/core/llm/adapters/langchain.py`<br>`backend/src/core/llm/adapters/llamaindex.py`<br>`backend/src/core/llm/adapters/dashscope_multimodal.py` |
+| **布隆过滤器** | 快速存在性判断 | BloomFilterService，用于快速判断 ID 是否存在，避免无效数据库查询。 | `backend/src/core/bloom_filter.py` |
+| **熔断器** | 服务降级保护 | CLOSED/OPEN/HALF_OPEN 三态熔断器，保护 MySQL/Redis 等外部依赖调用。 | `backend/src/core/circuit_breaker.py` |
+| **分布式锁** | 并发控制 | Redis 分布式锁 + watchdog 自动续期，Redis 不可用时降级为 asyncio.Lock。 | `backend/src/core/distributed_lock.py` |
+| **事件总线** | 异步事件发布/订阅 | 基于 Redis Pub/Sub 的事件总线，支持跨模块异步事件通信。 | `backend/src/core/event_bus.py` |
+| **事件基类** | 事件定义 | BaseEvent 事件基类，所有业务事件的父类。 | `backend/src/core/events.py` |
+| **分层内容生成器** | LLM 驱动内容生成 | 分层内容生成器，LLM 驱动，支持 SSE 实时进度推送。 | `backend/src/core/layered_content_generator.py` |
+| **Prompt 注入防护** | 安全检测 | PromptInjectionGuard，检测和清理潜在 Prompt 注入攻击。 | `backend/src/core/prompt_injection_guard.py` |
+| **提示词降级备用** | 降级兜底 | 提示词降级备用方案，当主提示词不可用时自动切换。 | `backend/src/core/prompts_fallback.py` |
+| **RAG 评估任务管理** | 评估专用异步任务 | RAG 评估专用任务管理器，处理评估任务的异步执行与状态追踪。 | `backend/src/core/rag_eval_task_manager.py` |
+| **定时任务调度器** | 周期任务执行 | APScheduler 定时任务调度器（02:00 清理过期报告/03:00 清理孤立草稿/04:00 清理过期追踪）。 | `backend/src/core/scheduler.py` |
 
 ---
 
@@ -160,10 +174,7 @@
 | **PendingQueuePage** | 待处理队列管理 | `frontend/src/features/curation/pages/PendingQueuePage.tsx` |
 | **CustomKnowledgePage** | 自定义知识管理（上传/列表/匹配测试） | `frontend/src/features/curation/pages/CustomKnowledgePage.tsx` |
 | **CrossBookPage** | 跨书关系管理（冲突/共识/互补） | `frontend/src/features/curation/pages/CrossBookPage.tsx` |
-| **GraphCanvas** | Cytoscape.js 图谱画布组件 | `frontend/src/features/curation/components/GraphCanvas.tsx` |
-| **NodeDetail** | 图谱节点详情面板 | `frontend/src/features/curation/components/NodeDetail.tsx` |
-| **CrossBookPanel** | 跨书关系面板 | `frontend/src/features/curation/components/CrossBookPanel.tsx` |
-| **EntityNav** | 实体导航组件 | `frontend/src/features/curation/components/EntityNav.tsx` |
+| **业务组件** | 15 个组件: ChapterRow/ConflictInline/CrossBookBadge/CrossBookPanel/DropZone/EmptyState/EntityNav/GraphCanvas/InfoPanel/NodeDetail/ProgressBar/QueueItem/RelationshipCards/StatsGrid/StatusBadge | `frontend/src/features/curation/components/` |
 
 ### 7.3 知识库文档管理 (`features/documents/`)
 | 模块 | 业务逻辑 | 代码入口 |
@@ -184,6 +195,7 @@
 
 | 模块 | 业务逻辑 | 代码入口 |
 |---|---|---|
+| **主页面布局** | RAG 评估工作台 Tabs 布局（含子路由），共 13 个页面 | `frontend/src/features/rag-eval/pages/RagEvalMainPage.tsx` |
 | **草稿管理** | 测试草稿生成、审核、批量导入 | `frontend/src/features/rag-eval/pages/DraftPage.tsx` |
 | **测试用例** | 测试用例和测试集管理 | `frontend/src/features/rag-eval/pages/TestCasePage.tsx`<br>`frontend/src/features/rag-eval/pages/TestSetPage.tsx` |
 | **测试运行** | 批量测试执行、进度监控、对比 | `frontend/src/features/rag-eval/pages/RunPage.tsx` |
@@ -191,7 +203,7 @@
 | **调优建议** | 调优建议管理、一键采纳 | `frontend/src/features/rag-eval/pages/TuningPage.tsx` |
 | **提示词管理** | 提示词列表/编辑/版本对比/测试沙箱 | `frontend/src/features/rag-eval/pages/PromptListPage.tsx`<br>`PromptEditPage.tsx`<br>`PromptVersionComparisonPage.tsx`<br>`PromptTestSandboxPage.tsx` |
 | **状态管理** | 3 个 Zustand Store | `frontend/src/features/rag-eval/stores/` |
-| **业务 Hooks** | 13 个 Hooks（useDrafts/useTestCases/useTestRuns/useReports/useMetrics/usePrompts/useTuning/useSnapshots/useDraftGenerationProgress/useSSEProgress 等） | `frontend/src/features/rag-eval/hooks/` |
+| **业务 Hooks** | 12 个 Hooks + index + 2 个测试文件（useDrafts/useTestCases/useTestRuns/useTestSets/useReports/useMetrics/usePrompts/useTuning/useSnapshots/useDraftGenerationProgress/useSSEProgress） | `frontend/src/features/rag-eval/hooks/` |
 | **业务组件** | 16 个组件（7 个子目录: common/diagnosis/draft/metrics/report/test-set/tuning） | `frontend/src/features/rag-eval/components/` |
 
 ### 7.6 其他前端模块
@@ -204,6 +216,8 @@
 | **API 客户端层** | 按业务模块组织（assessment/config/documents/knowledge/monitoring/rag-eval/tracing） | `frontend/src/api/` |
 | **实体层** | 类型定义、枚举、映射器、常量 | `frontend/src/entities/`（assessment/rag-eval/tracing） |
 | **共享层** | 通用 API client / Hooks / 库 / 类型 / UI | `frontend/src/shared/` |
+| **全局样式** | 设计 Token + 全局样式 | `frontend/src/shared/styles/tokens.css`（设计 Token CSS 自定义属性）<br>`frontend/src/shared/styles/global.scss`（全局样式） |
+| **Markdown 工具** | Markdown 处理与关系映射 | stripFrontmatter + preprocessCurationMarkdown + 50+ 种关系类型中文映射 | `frontend/src/lib/markdown.ts` |
 | **路由配置** | BrowserHistory + 路由懒加载（提示词管理页面） | `frontend/src/router/index.tsx` |
 
 ---
@@ -219,7 +233,7 @@
 | **快照管理服务** | 知识库版本管理 | 生成和管理知识库快照，支持快照恢复和对比，保证测试环境一致性和可复现。 | `backend/src/service/rag_eval/run/snapshot_manager.py` |
 | **6层校验编排器** | 全链路诊断编排 | 协调6层校验引擎的执行顺序，收集各层诊断结果，生成结构化的校验报告。 | `backend/src/service/rag_eval/metrics/diagnosis/orchestrator.py` |
 | **6层校验引擎** | 智能调参建议生成 | 包含规则引擎、历史对比、LLM诊断、质量校验、效果校验、回归校验6层逻辑，自动生成调优建议。 | `backend/src/service/rag_eval/metrics/diagnosis/layer1_rules.py` ~ `layer6_regression.py` |
-| **指标评分引擎** | 多维度量化评分 | 计算 Precision@K、Recall、MRR、NDCG、Faithfulness、AnswerRelevancy、Groundedness 等指标。 | `backend/src/service/rag_eval/metrics/scoring/facade.py`<br>`backend/src/service/rag_eval/metrics/scoring/calculators/` |
+| **指标评分引擎** | 多维度量化评分 | 计算 Precision@K、Recall、MRR、NDCG、Faithfulness、AnswerRelevancy、Groundedness 等指标。含 5 个计算器: answer_relevancy_calc/faithfulness_calc/groundedness_calc/mrr_ndcg/precision_recall | `backend/src/service/rag_eval/metrics/scoring/facade.py`<br>`backend/src/service/rag_eval/metrics/scoring/calculators/` |
 | **报告生成引擎** | 可视化评估报告 | 生成多维度指标统计报告，支持趋势分析、版本对比、调优建议展示，可导出为PDF/CSV/JSON。 | `backend/src/service/rag_eval/report/facade.py`<br>`backend/src/service/rag_eval/report/builder.py` |
 | **调优引擎** | 智能调参建议 | 基于诊断结果生成调优建议，支持一键采纳、冲突检测、配置变更管理。 | `backend/src/service/rag_eval/tuning/facade.py`<br>`backend/src/service/rag_eval/tuning/advisor.py` |
 | **规范驱动** | SDD 业务契约 | 所有的复杂逻辑修改必须先在 `specs/` 下写明机器可读的契约与验收标准。 | `docs/specs/` |
